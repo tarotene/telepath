@@ -154,8 +154,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             cmd_id,
             args,
         };
-        let serialized =
-            postcard::to_allocvec(&req).map_err(|_| HostError::SerdeError)?;
+        let serialized = postcard::to_allocvec(&req).map_err(|_| HostError::SerdeError)?;
 
         // COBS encode + 0x00 delimiter.
         let encoded_cap = cobs::max_encoding_length(serialized.len()) + 1;
@@ -183,8 +182,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
 
         // COBS decode.
         let mut decoded = vec![0u8; raw_frame.len()];
-        let m = cobs::decode(&raw_frame, &mut decoded)
-            .map_err(|_| HostError::FramingError)?;
+        let m = cobs::decode(&raw_frame, &mut decoded).map_err(|_| HostError::FramingError)?;
         decoded.truncate(m);
 
         // Deserialize Response.
@@ -283,13 +281,12 @@ mod tests {
     /// Full round-trip test: encode a request, server processes it, decode response.
     #[test]
     fn call_raw_ping_roundtrip() {
-        use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
         use telepath_firmware::transport::Transport as FwTransport;
+        use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
 
         fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
             let val: u32 = 0xDEAD_BEEF;
-            let s = postcard::to_slice(&val, output)
-                .map_err(|_| DispatchError::SerializeError)?;
+            let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
             Ok(s.len())
         }
 
@@ -353,8 +350,8 @@ mod tests {
         // Client sends ping; server processes synchronously.
         // We need to interleave: client writes, server polls, client reads.
         // Encode the request manually and have server poll before client reads.
-        use telepath_wire::{PacketType, Request};
         use telepath_wire::framing::cobs_encode;
+        use telepath_wire::{PacketType, Request};
 
         let req = Request {
             kind: PacketType::Request,
@@ -385,10 +382,9 @@ mod tests {
             .position(|&b| b == 0x00)
             .expect("no delimiter");
         let mut decoded = [0u8; 256];
-        let m = telepath_wire::framing::cobs_decode(&response_bytes[..delim], &mut decoded)
-            .unwrap();
-        let resp: telepath_wire::Response<'_> =
-            postcard::from_bytes(&decoded[..m]).unwrap();
+        let m =
+            telepath_wire::framing::cobs_decode(&response_bytes[..delim], &mut decoded).unwrap();
+        let resp: telepath_wire::Response<'_> = postcard::from_bytes(&decoded[..m]).unwrap();
         assert_eq!(resp.status, telepath_wire::ResponseStatus::Ok);
         let val: u32 = postcard::from_bytes(resp.payload).unwrap();
         assert_eq!(val, 0xDEAD_BEEF);

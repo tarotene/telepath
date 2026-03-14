@@ -30,12 +30,12 @@
 pub mod transport;
 
 pub use telepath_macros::command;
-pub use telepath_wire::{
-    PacketType, ResponseStatus, WireError, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE,
-};
 use telepath_wire::{
     framing::{cobs_decode, cobs_encode, FrameAccumulator},
     Request, Response,
+};
+pub use telepath_wire::{
+    PacketType, ResponseStatus, WireError, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -335,7 +335,10 @@ mod tests {
         assert!(!tx.is_empty(), "server must have written a response");
 
         // Find the 0x00 delimiter.
-        let delim = tx.iter().position(|&b| b == 0x00).expect("no frame delimiter");
+        let delim = tx
+            .iter()
+            .position(|&b| b == 0x00)
+            .expect("no frame delimiter");
         let mut decoded = [0u8; 512];
         let m = telepath_wire::framing::cobs_decode(&tx[..delim], &mut decoded).unwrap();
 
