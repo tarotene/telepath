@@ -13,7 +13,7 @@
 //! let result = client.call_raw(0x0001, &args_bytes).unwrap();
 //! ```
 
-use telepath_wire::{CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE};
+use telepath_wire::{framing::MAX_FRAME_SIZE, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE};
 
 // ---------------------------------------------------------------------------
 // HostError
@@ -32,8 +32,12 @@ pub enum HostError {
     AppError(Vec<u8>),
     /// postcard serialization or deserialization failed.
     SerdeError,
+    /// The request args exceeded [`MAX_PAYLOAD_SIZE`].
+    RequestPayloadTooLarge,
     /// The response payload exceeded [`MAX_PAYLOAD_SIZE`].
-    PayloadTooLarge,
+    ResponsePayloadTooLarge,
+    /// The received frame exceeded [`MAX_FRAME_SIZE`].
+    FrameTooLarge,
     /// COBS framing error (malformed frame received from target).
     FramingError,
 }
@@ -143,7 +147,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     /// success.
     pub fn call_raw(&mut self, cmd_id: u16, args: &[u8]) -> Result<Vec<u8>, HostError> {
         if args.len() > MAX_PAYLOAD_SIZE {
-            return Err(HostError::PayloadTooLarge);
+            return Err(HostError::RequestPayloadTooLarge);
         }
         let seq = self.next_seq();
 
@@ -177,6 +181,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             if byte[0] == 0x00 {
                 break;
             }
+            if raw_frame.len() >= MAX_FRAME_SIZE {
+                return Err(HostError::FrameTooLarge);
+            }
             raw_frame.push(byte[0]);
         }
 
@@ -188,6 +195,14 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         // Deserialize Response.
         let resp: telepath_wire::Response<'_> =
             postcard::from_bytes(&decoded).map_err(|_| HostError::SerdeError)?;
+
+        // Validate packet kind and payload size.
+        if resp.kind != telepath_wire::PacketType::Response {
+            return Err(HostError::FramingError);
+        }
+        if resp.payload.len() > MAX_PAYLOAD_SIZE {
+            return Err(HostError::ResponsePayloadTooLarge);
+        }
 
         // Validate sequence number.
         if resp.seq_no != seq {
@@ -274,7 +289,7 @@ mod tests {
         let oversized = vec![0u8; MAX_PAYLOAD_SIZE + 1];
         assert!(matches!(
             client.call_raw(0x0001, &oversized),
-            Err(HostError::PayloadTooLarge)
+            Err(HostError::RequestPayloadTooLarge)
         ));
     }
 

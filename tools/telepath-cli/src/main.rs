@@ -142,6 +142,9 @@ fn cmd_ping(
                 frame_done = true;
                 break;
             }
+            if raw_frame.len() >= MAX_FRAME_SIZE {
+                bail!("Received frame exceeds MAX_FRAME_SIZE ({MAX_FRAME_SIZE} bytes)");
+            }
             raw_frame.push(b);
         }
 
