@@ -184,13 +184,24 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
             Err(_) => return,
         };
 
+        // Reject packets that are not properly typed as Request.
+        if req.kind != PacketType::Request {
+            return;
+        }
+
+        // Reject oversized argument payloads before dispatch.
+        if req.args.len() > MAX_PAYLOAD_SIZE {
+            return;
+        }
+
         let seq_no = req.seq_no;
         let cmd_id = req.cmd_id;
         let args = req.args;
 
-        // Dispatch.
+        // Dispatch; clamp oversized return payloads to SystemError.
         let mut payload_buf = [0u8; N];
         let (status, payload_len) = match self.dispatch(cmd_id, args, &mut payload_buf) {
+            Ok(n) if n > MAX_PAYLOAD_SIZE => (ResponseStatus::SystemError, 0),
             Ok(n) => (ResponseStatus::Ok, n),
             Err(_) => (ResponseStatus::SystemError, 0),
         };
