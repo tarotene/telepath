@@ -1,43 +1,55 @@
-//! Telepath example for nRF52840-DK.
+//! Telepath RTT example for nRF52840-DK.
 //!
-//! Demonstrates a minimal embassy application that initialises a
-//! [`TelepathServer`] and spins waiting for RPC requests over RTT.
+//! Demonstrates a minimal Embassy application that:
+//! 1. Initialises RTT with two channels (channel 0 for debug prints, channel 1
+//!    for Telepath RPC traffic).
+//! 2. Registers the `ping` command (CmdID `0x0001`), which returns
+//!    `0xDEADBEEF: u32`.
+//! 3. Spins in a loop calling `server.poll()` to handle incoming RPC requests.
 //!
 //! # Building
 //!
 //! ```
-//! cargo build --manifest-path examples/nrf52840-dk/Cargo.toml --release
+//! cd examples/nrf52840-dk
+//! cargo build --release
 //! ```
 //!
 //! # Flashing
 //!
 //! ```
-//! cargo run --manifest-path examples/nrf52840-dk/Cargo.toml --release
+//! cd examples/nrf52840-dk
+//! cargo run --release
 //! ```
 #![no_std]
 #![no_main]
 
-use defmt::info;
-use defmt_rtt as _;
+mod rtt_transport;
+
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use panic_probe as _;
+use panic_halt as _;
+use rtt_target::{rprintln, rtt_init};
 use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
 
+use rtt_transport::RttTransport;
+
 // ---------------------------------------------------------------------------
-// Example command: toggle LED 1
+// Commands
 // ---------------------------------------------------------------------------
 
-fn led_toggle_shim(_input: &[u8], _output: &mut [u8]) -> Result<usize, DispatchError> {
-    // Actual LED toggling happens via the shared mutable state in a real app.
-    // This stub demonstrates the shim signature.
-    Ok(0)
+/// Ping command: no arguments, returns `0xDEADBEEF: u32`.
+///
+/// CmdID `0x0001` — the simplest possible sanity-check command.
+fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+    let val: u32 = 0xDEAD_BEEF;
+    let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
+    Ok(s.len())
 }
 
 static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
-    name: "led_toggle",
+    name: "ping",
     id: 0x0001,
-    invoke: led_toggle_shim,
+    invoke: ping_shim,
 }];
 
 // ---------------------------------------------------------------------------
@@ -48,31 +60,43 @@ static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
 async fn main(_spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
 
+    // Initialise RTT.
+    // Channel 0 (up only): debug prints via rprintln!
+    // Channel 1 (up + down): Telepath RPC transport
+    let channels = rtt_init! {
+        up: {
+            0: { size: 1024, name: "print" }
+            1: { size: 512,  name: "telepath" }
+        }
+        down: {
+            1: { size: 512, name: "telepath" }
+        }
+    };
+    rtt_target::set_print_channel(channels.up.0);
+    // channels.down.0 is the first (only) down channel — RTT channel 1.
+    let rtt_transport = RttTransport::new(channels.up.1, channels.down.0);
+
+    rprintln!("Telepath nRF52840-DK started");
+
     // LED 1 on nRF52840-DK is P0.13, active low.
     let mut led = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
 
-    info!("Telepath nRF52840-DK example started");
-
-    // In a full implementation, pass an RTT or UART transport here.
-    // For now we use a zero-sized placeholder.
-    struct NoopTransport;
-    let mut server = TelepathServer::<NoopTransport, 512>::new(NoopTransport, &COMMANDS);
+    let mut server = TelepathServer::<RttTransport, 512>::new(rtt_transport, &COMMANDS);
 
     let mut tick: u32 = 0;
     loop {
-        // Blink LED to show liveness while waiting for RPC traffic.
-        if tick % 2 == 0 {
+        // Process any pending RPC requests.
+        server.poll();
+
+        // Blink LED to show liveness; short delay keeps the poll loop responsive.
+        if tick % 20 == 0 {
             led.set_low();
-        } else {
+        } else if tick % 20 == 10 {
             led.set_high();
         }
         tick = tick.wrapping_add(1);
 
-        // TODO: feed bytes from transport into server.dispatch() once
-        // the framing layer is wired up.
-        let _ = &mut server;
-
-        // Simple spin-delay; replace with embassy_time::Timer in production.
-        cortex_m::asm::delay(8_000_000); // ~1 s at 8 MHz
+        // ~10 ms delay at 64 MHz.
+        cortex_m::asm::delay(640_000);
     }
 }

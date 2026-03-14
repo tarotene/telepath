@@ -6,7 +6,7 @@ members = [
     "crates/telepath-firmware",
     "crates/telepath-host",
 ]
-exclude = ["examples/nrf52840-dk"]
+exclude = ["examples/nrf52840-dk", "tools/telepath-cli"]
 
 [workspace.package]
 version = "0.1.0"

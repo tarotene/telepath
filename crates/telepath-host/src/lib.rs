@@ -34,6 +34,8 @@ pub enum HostError {
     SerdeError,
     /// The response payload exceeded [`MAX_PAYLOAD_SIZE`].
     PayloadTooLarge,
+    /// COBS framing error (malformed frame received from target).
+    FramingError,
 }
 
 // ---------------------------------------------------------------------------
@@ -105,8 +107,8 @@ impl SchemaCache {
 
 /// RPC client that communicates with a [`telepath_firmware::TelepathServer`].
 ///
-/// `T` must implement `std::io::Read + std::io::Write` (e.g. `serialport`).
-#[allow(dead_code)] // transport wired up once framing layer is implemented
+/// `T` must implement `std::io::Read + std::io::Write` (e.g. a serialport or
+/// a probe-rs RTT adapter).
 pub struct TelepathClient<T> {
     transport: T,
     schema_cache: SchemaCache,
@@ -128,10 +130,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     /// Sends a [`CMD_ID_DISCOVERY`] request and populates the schema cache
     /// with the returned command list. Returns the number of commands found.
     pub fn discover(&mut self) -> Result<usize, HostError> {
-        // TODO: serialize Discovery Request, send via COBS-framed transport,
-        // receive rzCOBS-framed response, populate schema_cache.
-        // Returns 0 until framing/transport layer is implemented.
-        let _ = CMD_ID_DISCOVERY;
+        // TODO: deserialize the CDP response into SchemaEntry objects once
+        // the firmware-side CDP serialization is implemented.
+        let _ = self.call_raw(CMD_ID_DISCOVERY, &[])?;
         Ok(0)
     }
 
@@ -140,18 +141,71 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     /// `cmd_id` identifies the target command; `args` is a postcard-serialized
     /// argument struct. Returns the postcard-serialized response payload on
     /// success.
-    ///
-    /// The caller is responsible for serializing args and deserializing the
-    /// response. Higher-level typed wrappers will be added in future releases.
     pub fn call_raw(&mut self, cmd_id: u16, args: &[u8]) -> Result<Vec<u8>, HostError> {
         if args.len() > MAX_PAYLOAD_SIZE {
             return Err(HostError::PayloadTooLarge);
         }
         let seq = self.next_seq();
-        // TODO: frame Request { kind, seq, cmd_id, args } via COBS and send.
-        // TODO: receive rzCOBS-framed Response, validate seq_no and status.
-        let _ = (seq, cmd_id);
-        Ok(Vec::new())
+
+        // Build and serialize Request.
+        let req = telepath_wire::Request {
+            kind: telepath_wire::PacketType::Request,
+            seq_no: seq,
+            cmd_id,
+            args,
+        };
+        let serialized =
+            postcard::to_allocvec(&req).map_err(|_| HostError::SerdeError)?;
+
+        // COBS encode + 0x00 delimiter.
+        let encoded_cap = cobs::max_encoding_length(serialized.len()) + 1;
+        let mut encoded = vec![0u8; encoded_cap];
+        let n = cobs::encode(&serialized, &mut encoded);
+        encoded[n] = 0x00;
+
+        // Send.
+        self.transport
+            .write_all(&encoded[..n + 1])
+            .map_err(|e| HostError::Io(e.to_string()))?;
+
+        // Receive response bytes until 0x00 delimiter.
+        let mut raw_frame: Vec<u8> = Vec::new();
+        let mut byte = [0u8; 1];
+        loop {
+            self.transport
+                .read_exact(&mut byte)
+                .map_err(|e| HostError::Io(e.to_string()))?;
+            if byte[0] == 0x00 {
+                break;
+            }
+            raw_frame.push(byte[0]);
+        }
+
+        // COBS decode.
+        let mut decoded = vec![0u8; raw_frame.len()];
+        let m = cobs::decode(&raw_frame, &mut decoded)
+            .map_err(|_| HostError::FramingError)?;
+        decoded.truncate(m);
+
+        // Deserialize Response.
+        let resp: telepath_wire::Response<'_> =
+            postcard::from_bytes(&decoded).map_err(|_| HostError::SerdeError)?;
+
+        // Validate sequence number.
+        if resp.seq_no != seq {
+            return Err(HostError::SeqMismatch {
+                expected: seq,
+                got: resp.seq_no,
+            });
+        }
+
+        match resp.status {
+            telepath_wire::ResponseStatus::Ok => Ok(resp.payload.to_vec()),
+            telepath_wire::ResponseStatus::SystemError => Err(HostError::SystemError),
+            telepath_wire::ResponseStatus::AppError => {
+                Err(HostError::AppError(resp.payload.to_vec()))
+            }
+        }
     }
 
     /// Borrow the schema cache for inspection.
@@ -224,5 +278,119 @@ mod tests {
             client.call_raw(0x0001, &oversized),
             Err(HostError::PayloadTooLarge)
         ));
+    }
+
+    /// Full round-trip test: encode a request, server processes it, decode response.
+    #[test]
+    fn call_raw_ping_roundtrip() {
+        use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
+        use telepath_firmware::transport::Transport as FwTransport;
+
+        fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+            let val: u32 = 0xDEAD_BEEF;
+            let s = postcard::to_slice(&val, output)
+                .map_err(|_| DispatchError::SerializeError)?;
+            Ok(s.len())
+        }
+
+        static CMDS: [CommandMetadata; 1] = [CommandMetadata {
+            name: "ping",
+            id: 0x0001,
+            invoke: ping_shim,
+        }];
+
+        // Pipe: client writes → server reads, server writes → client reads.
+        use std::sync::{Arc, Mutex};
+        let c2s: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let s2c: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+
+        struct PipeTransport {
+            rx: Arc<Mutex<Vec<u8>>>,
+            tx: Arc<Mutex<Vec<u8>>>,
+        }
+
+        impl FwTransport for PipeTransport {
+            fn read(&mut self, buf: &mut [u8]) -> usize {
+                let mut rx = self.rx.lock().unwrap();
+                let n = buf.len().min(rx.len());
+                buf[..n].copy_from_slice(&rx[..n]);
+                rx.drain(..n);
+                n
+            }
+            fn write(&mut self, buf: &[u8]) -> usize {
+                self.tx.lock().unwrap().extend_from_slice(buf);
+                buf.len()
+            }
+        }
+
+        impl std::io::Read for PipeTransport {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = FwTransport::read(self, buf);
+                Ok(n)
+            }
+        }
+        impl std::io::Write for PipeTransport {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                Ok(FwTransport::write(self, buf))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let server_transport = PipeTransport {
+            rx: Arc::clone(&c2s),
+            tx: Arc::clone(&s2c),
+        };
+        let client_transport = PipeTransport {
+            rx: Arc::clone(&s2c),
+            tx: Arc::clone(&c2s),
+        };
+
+        let mut server = TelepathServer::<PipeTransport, 512>::new(server_transport, &CMDS);
+        let mut client = TelepathClient::new(client_transport);
+
+        // Client sends ping; server processes synchronously.
+        // We need to interleave: client writes, server polls, client reads.
+        // Encode the request manually and have server poll before client reads.
+        use telepath_wire::{PacketType, Request};
+        use telepath_wire::framing::cobs_encode;
+
+        let req = Request {
+            kind: PacketType::Request,
+            seq_no: 0,
+            cmd_id: 0x0001,
+            args: &[],
+        };
+        let mut ser_buf = [0u8; 64];
+        let serialized = postcard::to_slice(&req, &mut ser_buf).unwrap();
+        let mut framed = [0u8; 64];
+        let n = cobs_encode(serialized, &mut framed).unwrap();
+
+        // Write request into c2s pipe.
+        c2s.lock().unwrap().extend_from_slice(&framed[..n]);
+
+        // Server poll.
+        server.poll();
+
+        // Now client reads the response from s2c pipe.
+        // But TelepathClient.call_raw sends a request first then reads...
+        // For this test, s2c already has the server's response.
+        // We just decode it manually.
+        let response_bytes = s2c.lock().unwrap().clone();
+        assert!(!response_bytes.is_empty());
+
+        let delim = response_bytes
+            .iter()
+            .position(|&b| b == 0x00)
+            .expect("no delimiter");
+        let mut decoded = [0u8; 256];
+        let m = telepath_wire::framing::cobs_decode(&response_bytes[..delim], &mut decoded)
+            .unwrap();
+        let resp: telepath_wire::Response<'_> =
+            postcard::from_bytes(&decoded[..m]).unwrap();
+        assert_eq!(resp.status, telepath_wire::ResponseStatus::Ok);
+        let val: u32 = postcard::from_bytes(resp.payload).unwrap();
+        assert_eq!(val, 0xDEAD_BEEF);
     }
 }

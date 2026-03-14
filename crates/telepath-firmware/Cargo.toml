@@ -8,6 +8,8 @@ description = "Target-side Telepath library (no_std)"
 [dependencies]
 telepath-wire = { workspace = true }
 telepath-macros = { workspace = true }
+serde = { workspace = true }
+postcard = { workspace = true }
 
 [features]
 default = []
