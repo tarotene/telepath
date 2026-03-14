@@ -293,9 +293,10 @@ mod tests {
         ));
     }
 
-    /// Full round-trip test: encode a request, server processes it, decode response.
+    /// Server-side round-trip: manually encode a request, feed to server, decode the response.
+    /// Does not exercise call_raw.
     #[test]
-    fn call_raw_ping_roundtrip() {
+    fn server_ping_roundtrip() {
         use telepath_firmware::transport::Transport as FwTransport;
         use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
 

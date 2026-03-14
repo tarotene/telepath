@@ -96,7 +96,13 @@ async fn main(_spawner: Spawner) {
         }
         tick = tick.wrapping_add(1);
 
-        // ~10 ms delay at 64 MHz.
+        // NOTE: cortex_m::asm::delay is a busy-wait that blocks the Embassy
+        // executor. This is acceptable here because this is a single-task
+        // demo — server.poll() is synchronous and there are no other Embassy
+        // tasks to starve. For multi-task applications, use
+        // `embassy_time::Timer::after(Duration::from_millis(10)).await`.
+        //
+        // ~10 ms at 64 MHz (64_000_000 Hz / 100 Hz = 640_000 cycles).
         cortex_m::asm::delay(640_000);
     }
 }
