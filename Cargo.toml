@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/telepath-wire",
+    "crates/telepath-macros",
+    "crates/telepath-firmware",
+    "crates/telepath-host",
+]
+exclude = ["examples/nrf52840-dk"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/example/telepath"
+
+[workspace.dependencies]
+telepath-wire = { path = "crates/telepath-wire" }
+telepath-macros = { path = "crates/telepath-macros" }
+telepath-firmware = { path = "crates/telepath-firmware" }
+serde = { version = "1", default-features = false, features = ["derive"] }
+postcard = { version = "1", default-features = false }
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"

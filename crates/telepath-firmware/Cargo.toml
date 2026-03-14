@@ -1,0 +1,13 @@
+[package]
+name = "telepath-firmware"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Target-side Telepath library (no_std)"
+
+[dependencies]
+telepath-wire = { workspace = true }
+telepath-macros = { workspace = true }
+
+[features]
+default = []

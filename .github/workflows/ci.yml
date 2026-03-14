@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job 1: host — format, clippy, test on native target
+  # -------------------------------------------------------------------------
+  host:
+    name: Host (fmt + clippy + test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings as errors)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  # -------------------------------------------------------------------------
+  # Job 2: firmware — cross-compile check + release build for nRF52840-DK
+  # -------------------------------------------------------------------------
+  firmware:
+    name: Firmware (cross-compile nRF52840-DK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain with embedded target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabi
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check firmware (no linking)
+        working-directory: examples/nrf52840-dk
+        run: cargo check
+
+      - name: Build firmware (release)
+        working-directory: examples/nrf52840-dk
+        run: cargo build --release
