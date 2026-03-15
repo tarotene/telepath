@@ -12,7 +12,7 @@ target = "thumbv7em-none-eabi"
 # unlock the device before programming. Safe to keep; has no effect once unlocked.
 #
 # To target a specific probe: probe-rs run --chip nRF52840_xxAA --probe 1366:1061
-runner = "probe-rs run --chip nRF52840_xxAA --allow-erase-all"
+runner = "probe-rs download --chip nRF52840_xxAA --allow-erase-all"
 rustflags = [
     "-C", "link-arg=-Tlink.x",
     # -Tdefmt.x removed: we use rtt-target directly instead of defmt-rtt

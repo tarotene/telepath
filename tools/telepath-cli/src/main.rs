@@ -1,18 +1,23 @@
 //! Telepath host-side CLI.
 //!
-//! Connects to an nRF52840-DK (or any target running `telepath-firmware`) via
-//! a J-Link / CMSIS-DAP probe using probe-rs, attaches to RTT channel 1, and
-//! issues Telepath RPC calls.
+//! Connects to a target running `telepath-firmware` via a J-Link / CMSIS-DAP
+//! probe using probe-rs, attaches to RTT, and issues Telepath RPC calls.
 //!
-//! # Usage
+//! RTT channel 0 (up) carries firmware debug prints and is forwarded to stderr.
+//! RTT channel 1 (up/down) carries Telepath RPC traffic.
 //!
+//! # Modes
+//!
+//! **1-shot** — pass a subcommand:
 //! ```
 //! telepath-cli ping
+//! telepath-cli --chip STM32F411RETx ping
 //! ```
 //!
-//! Expected output:
+//! **Interactive REPL** — no subcommand:
 //! ```
-//! ping -> 0xDEADBEEF
+//! telepath-cli
+//! telepath-cli --chip nRF52840_xxAA
 //! ```
 
 use anyhow::{bail, Context};
@@ -39,7 +44,7 @@ struct Cli {
     chip: String,
 
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -80,9 +85,75 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     match cli.command {
-        Command::Ping => cmd_ping(&mut rtt, &mut core)?,
+        Some(Command::Ping) => {
+            drain_debug_logs(&mut rtt, &mut core);
+            cmd_ping(&mut rtt, &mut core)?;
+        }
+        None => {
+            run_repl(&mut rtt, &mut core)?;
+        }
     }
 
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// RTT channel 0 passthrough
+// ---------------------------------------------------------------------------
+
+/// Drain all pending bytes from RTT channel 0 (firmware debug prints) to stderr.
+///
+/// Non-blocking: returns when no more bytes are available. Used in 1-shot mode
+/// before issuing the RPC command, and in REPL mode before each prompt.
+fn drain_debug_logs(rtt: &mut Rtt, core: &mut probe_rs::Core<'_>) {
+    let mut buf = [0u8; 1024];
+    if let Some(ch0) = rtt.up_channel(0) {
+        loop {
+            let n = ch0.read(core, &mut buf).unwrap_or(0);
+            if n == 0 {
+                break;
+            }
+            eprint!("{}", String::from_utf8_lossy(&buf[..n]));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive REPL
+// ---------------------------------------------------------------------------
+
+/// Run the interactive REPL.
+///
+/// Drains RTT ch0 before each prompt (cooperative log passthrough — `Core` is
+/// not `Send`, so a background thread is not possible). Accepts `ping`, `help`,
+/// `quit`, and `exit`. Exits on Ctrl-C / Ctrl-D (EOF).
+fn run_repl(rtt: &mut Rtt, core: &mut probe_rs::Core<'_>) -> anyhow::Result<()> {
+    let mut rl = rustyline::DefaultEditor::new()?;
+    loop {
+        // Forward any pending debug output before showing the prompt.
+        drain_debug_logs(rtt, core);
+
+        match rl.readline("telepath> ") {
+            Ok(line) => {
+                let line = line.trim().to_string();
+                if line.is_empty() {
+                    continue;
+                }
+                let _ = rl.add_history_entry(&line);
+                match line.as_str() {
+                    "ping" => cmd_ping(rtt, core)?,
+                    "help" => println!("Commands: ping, help, quit"),
+                    "quit" | "exit" => break,
+                    other => eprintln!("Unknown command: {other}  (try 'help')"),
+                }
+            }
+            Err(
+                rustyline::error::ReadlineError::Interrupted
+                | rustyline::error::ReadlineError::Eof,
+            ) => break,
+            Err(e) => bail!(e),
+        }
+    }
     Ok(())
 }
 

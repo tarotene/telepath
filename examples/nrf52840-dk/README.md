@@ -31,16 +31,17 @@ cd examples/nrf52840-dk
 cargo build --release
 ```
 
-## Flash and run
+## Flash
 
 ```
 cd examples/nrf52840-dk
 cargo run --release
 ```
 
-`cargo run` invokes probe-rs via the runner configured in
-`.cargo/config.toml`. The firmware starts immediately after flashing.
-RTT output appears in the terminal.
+`cargo run` invokes `probe-rs download` via the runner configured in
+`.cargo/config.toml`. The firmware is written to flash, the chip resets,
+and the probe session is released immediately. The terminal returns to the
+shell prompt — the probe is free for `telepath-cli` to attach.
 
 ## RTT channel layout
 
@@ -56,14 +57,19 @@ postcard-serialized Telepath frames and is consumed by `telepath-cli`.
 
 ## Verify with telepath-cli
 
-With the firmware running, open a second terminal:
+With the firmware flashed (probe released), run:
 
 ```
-cargo build -p telepath-cli
-./target/debug/telepath-cli ping
+cd tools/telepath-cli && cargo run -- ping
 ```
 
-Expected output:
+Or enter interactive mode:
+
+```
+cd tools/telepath-cli && cargo run
+```
+
+Expected output for `ping`:
 
 ```
 ping -> 0xDEADBEEF
