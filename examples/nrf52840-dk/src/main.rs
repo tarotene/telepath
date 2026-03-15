@@ -61,20 +61,25 @@ async fn main(_spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
 
     // Initialise RTT.
-    // Channel 0 (up only): debug prints via rprintln!
-    // Channel 1 (up + down): Telepath RPC transport
+    // Up 0 / Down 0: reserved (debug prints up, placeholder down)
+    // Up 1 / Down 1: Telepath RPC transport
+    //
+    // Down channel indices MUST be contiguous starting at 0; omitting index 0
+    // would cause rtt_init! to write to channels.down[1] in a 1-element array
+    // (out-of-bounds UB) and advertise num_down_channels=1 so the host's
+    // down_channel(1) call returns None.
     let channels = rtt_init! {
         up: {
             0: { size: 1024, name: "print" }
             1: { size: 512,  name: "telepath" }
         }
         down: {
+            0: { size: 1,   name: "reserved" }
             1: { size: 512, name: "telepath" }
         }
     };
     rtt_target::set_print_channel(channels.up.0);
-    // channels.down.0 is the first (only) down channel — RTT channel 1.
-    let rtt_transport = RttTransport::new(channels.up.1, channels.down.0);
+    let rtt_transport = RttTransport::new(channels.up.1, channels.down.1);
 
     rprintln!("Telepath nRF52840-DK started");
 
