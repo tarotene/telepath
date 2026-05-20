@@ -355,13 +355,7 @@ mod tests {
             rx: Arc::clone(&c2s),
             tx: Arc::clone(&s2c),
         };
-        let client_transport = PipeTransport {
-            rx: Arc::clone(&s2c),
-            tx: Arc::clone(&c2s),
-        };
-
         let mut server = TelepathServer::<PipeTransport, 512>::new(server_transport, &CMDS);
-        let mut client = TelepathClient::new(client_transport);
 
         // Client sends ping; server processes synchronously.
         // We need to interleave: client writes, server polls, client reads.
