@@ -38,7 +38,9 @@ jobs:
         run: cargo test --workspace
 
       - name: Smoke test host-emulator
-        run: timeout 30 cargo run -p host-emulator
+        run: |
+          timeout 30 cargo run -p host-emulator | tee /tmp/host-emulator.out
+          grep -qF "ping -> 0xDEADBEEF" /tmp/host-emulator.out
 
   # -------------------------------------------------------------------------
   # Job 2: firmware — cross-compile check + release build for nRF52840-DK
