@@ -94,7 +94,7 @@ async fn main(_spawner: Spawner) {
         server.poll();
 
         // Blink LED to show liveness; short delay keeps the poll loop responsive.
-        if tick % 20 == 0 {
+        if tick.is_multiple_of(20) {
             led.set_low();
         } else if tick % 20 == 10 {
             led.set_high();
