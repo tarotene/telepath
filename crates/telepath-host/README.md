@@ -57,3 +57,13 @@ println!("ping -> 0x{:08X}", val);  // ping -> 0xDEADBEEF
 cargo build -p telepath-host
 cargo test -p telepath-host
 ```
+
+## Limitations
+
+- `discover()` returns `Ok(0)` and does not populate `SchemaCache`. The
+  CDP wire format is being finalised (roadmap [B5](https://github.com/tarotene/telepath/issues/3)).
+- No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
+  (roadmap C1).
+- Upstream rzCOBS is not yet supported; both framing directions are COBS.
+- `HostError::SerdeError` is opaque — the original `postcard::Error` is
+  discarded (roadmap C3).

@@ -5,6 +5,7 @@ members = [
     "crates/telepath-macros",
     "crates/telepath-firmware",
     "crates/telepath-host",
+    "examples/host-emulator",
 ]
 exclude = ["examples/nrf52840-dk", "tools/telepath-cli"]
 

@@ -45,5 +45,9 @@ firmware-ping: firmware-flash
 # Build everything: workspace + firmware + CLI
 check-all: build firmware-build cli-build
 
-# Full CI gate: fmt-check + clippy + test
-ci: fmt-check clippy test
+# Run the in-process emulator end-to-end (no hardware required)
+emulator:
+    cargo run -p host-emulator
+
+# Full CI gate: fmt-check + clippy + test + emulator smoke
+ci: fmt-check clippy test emulator

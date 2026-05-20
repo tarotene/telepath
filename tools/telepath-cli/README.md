@@ -84,3 +84,12 @@ ping -> 0xDEADBEEF
 | 0 (up) | Target→Host | Debug prints (`rprintln!`) — forwarded to stderr |
 | 1 (up) | Target→Host | Telepath responses |
 | 1 (down) | Host→Target | Telepath requests |
+
+## Limitations
+
+- The CLI inlines its own COBS + postcard logic instead of using
+  `TelepathClient` directly (see
+  [Issue #2](https://github.com/tarotene/telepath/issues/2)). Wire
+  protocol fixes must currently be applied in two places.
+- Only `ping` is implemented; `discover` and arbitrary command dispatch
+  await the typed-API milestone (roadmap C1).
