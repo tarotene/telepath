@@ -22,11 +22,7 @@
 
 use anyhow::{bail, Context};
 use clap::{Parser, Subcommand};
-use probe_rs::{
-    probe::list::Lister,
-    rtt::Rtt,
-    Permissions,
-};
+use probe_rs::{probe::list::Lister, rtt::Rtt, Permissions};
 use telepath_wire::{
     framing::{cobs_decode, MAX_FRAME_SIZE},
     PacketType, Request, Response, ResponseStatus,
@@ -80,9 +76,8 @@ fn main() -> anyhow::Result<()> {
     let mut core = session.core(0).context("Failed to access core 0")?;
 
     // Attach to the RTT control block in target RAM.
-    let mut rtt = Rtt::attach(&mut core).context(
-        "Failed to attach to RTT. Is the firmware running and RTT initialized?",
-    )?;
+    let mut rtt = Rtt::attach(&mut core)
+        .context("Failed to attach to RTT. Is the firmware running and RTT initialized?")?;
 
     match cli.command {
         Some(Command::Ping) => {
@@ -148,8 +143,7 @@ fn run_repl(rtt: &mut Rtt, core: &mut probe_rs::Core<'_>) -> anyhow::Result<()> 
                 }
             }
             Err(
-                rustyline::error::ReadlineError::Interrupted
-                | rustyline::error::ReadlineError::Eof,
+                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
             ) => break,
             Err(e) => bail!(e),
         }
@@ -162,10 +156,7 @@ fn run_repl(rtt: &mut Rtt, core: &mut probe_rs::Core<'_>) -> anyhow::Result<()> 
 // ---------------------------------------------------------------------------
 
 /// Send a ping request (CmdID 0x0001) and display the response.
-fn cmd_ping(
-    rtt: &mut Rtt,
-    core: &mut probe_rs::Core<'_>,
-) -> anyhow::Result<()> {
+fn cmd_ping(rtt: &mut Rtt, core: &mut probe_rs::Core<'_>) -> anyhow::Result<()> {
     const SEQ: u16 = 0;
     const CMD_PING: u16 = 0x0001;
 
@@ -201,9 +192,7 @@ fn cmd_ping(
         }
 
         let count = {
-            let up = rtt
-                .up_channel(1)
-                .context("RTT up channel 1 not found")?;
+            let up = rtt.up_channel(1).context("RTT up channel 1 not found")?;
             up.read(core, &mut buf)?
         };
 
