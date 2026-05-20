@@ -60,12 +60,16 @@ impl Transport for FwSideTransport {
     }
 
     fn write(&mut self, buf: &[u8]) -> usize {
+        use std::sync::mpsc::TrySendError;
+        let mut n = 0;
         for &b in buf {
-            if self.tx.send(b).is_err() {
-                return 0;
+            match self.tx.try_send(b) {
+                Ok(()) => n += 1,
+                Err(TrySendError::Full(_)) => break,
+                Err(TrySendError::Disconnected(_)) => return n,
             }
         }
-        buf.len()
+        n
     }
 }
 
