@@ -88,3 +88,13 @@ cargo test -p telepath-firmware
 rustup target add thumbv7em-none-eabi
 cargo build -p telepath-firmware --target thumbv7em-none-eabi
 ```
+
+## Limitations
+
+- `handle_discovery` is a TODO stub. Calling `cmd_id = 0x0000` succeeds
+  with an empty payload but does not enumerate registered commands yet
+  (roadmap [B4](https://github.com/tarotene/telepath/issues/3)).
+- Command registry is a manually-passed `&'static [CommandMetadata]`.
+  Distributed-slice auto-collection via `linkme` is planned (roadmap B3).
+- The `#[command]` attribute is a passthrough stub; shims and metadata
+  must be hand-written for now.

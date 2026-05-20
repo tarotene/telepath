@@ -37,6 +37,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Smoke test host-emulator
+        run: timeout 30 cargo run -p host-emulator
+
   # -------------------------------------------------------------------------
   # Job 2: firmware — cross-compile check + release build for nRF52840-DK
   # -------------------------------------------------------------------------

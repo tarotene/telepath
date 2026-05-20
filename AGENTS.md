@@ -11,14 +11,18 @@
 | `crates/telepath-macros` | `#[command]` proc-macro | host (build time only) |
 | `crates/telepath-firmware` | Target-side RPC server | `thumbv7em-none-eabi` |
 | `crates/telepath-host` | Host-side RPC client | native (`std`) |
+| `examples/host-emulator` | In-process server+client emulator | native (`std`) |
 | `examples/nrf52840-dk` | Standalone firmware example | `thumbv7em-none-eabi` |
 | `tools/telepath-cli` | Host-side CLI over RTT | native (`std`) |
 
 ## Build Commands
 
 ```
-# Host workspace (all 4 crates)
+# Host workspace (all 5 members including host-emulator)
 cargo build --workspace
+
+# Run the in-process emulator end-to-end (no hardware required)
+cargo run -p host-emulator
 
 # Host tests
 cargo test --workspace
@@ -57,6 +61,12 @@ just ci
 - Cross-compilation REQUIRES `rustup target add thumbv7em-none-eabi`.
 - `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-cli` can attach.
 
+### `examples/host-emulator`
+- IS a workspace member (`std` target, no cross-compile). Build with `cargo build --workspace`.
+- MUST exercise the full wire path including COBS framing — it is the primary hardware-free regression for `telepath-firmware` and `telepath-host`.
+- MUST use only public APIs of the dependent crates; it MUST NOT poke internal state to aid the round-trip.
+- CI runs `timeout 30 cargo run -p host-emulator` as a smoke test on every push.
+
 ### `tools/telepath-cli`
 - MUST be built separately; it is excluded from the workspace.
 - MUST NOT be built with `cargo build -p telepath-cli` from the workspace root (not a workspace member).
@@ -71,7 +81,7 @@ just ci
 | Property | Specification |
 |----------|---------------|
 | Downstream framing (Host→Target) | COBS; delimiter `0x00`; MCU decoder is a simple `read_until(0x00)` state machine |
-| Upstream framing (Target→Host) | rzCOBS; no `0x00` in encoded output; `0x00` used as frame delimiter |
+| Upstream framing (Target→Host) | COBS in current MVP; `0x00` delimiter. rzCOBS planned for Stage C2 (see [Issue #3](https://github.com/tarotene/telepath/issues/3)) |
 | Serialization | postcard (little-endian, varint-compressed) |
 | Packet type | 2-valued: `Request` (0x01) / `Response` (0x02); follows ONC RPC RFC 5531 CALL/REPLY model |
 | Error representation | `ResponseStatus` field inside `Response`; NOT a separate packet type |
