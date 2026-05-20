@@ -111,12 +111,6 @@ cd tools/telepath-cli && cargo run
 
 ## Real hardware: nRF52840-DK
 
-> **Experimental — not yet verified end-to-end.** The wire layer is exercised
-> by `host-emulator` (CI smoke test), but the RTT-backed hardware path has not
-> been re-verified since the CLI refactor in PR #6 and currently returns no
-> response on `ping`. Tracked in [#9](https://github.com/tarotene/telepath/issues/9).
-> Use the hardware-free [Quickstart](#quickstart) for a working demo.
-
 See [`examples/nrf52840-dk/README.md`](examples/nrf52840-dk/README.md) for the
 full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
 
@@ -124,7 +118,7 @@ full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
 # Flash firmware (downloads and exits; probe is released)
 cd examples/nrf52840-dk && cargo run --release
 
-# Ping over RTT — currently times out; see issue #9
+# Ping over RTT (RPC traffic on channel 1)
 cd tools/telepath-cli && cargo run -- ping
 ```
 

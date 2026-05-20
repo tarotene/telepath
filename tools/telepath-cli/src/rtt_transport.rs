@@ -1,7 +1,11 @@
 use anyhow::Context;
-use probe_rs::{rtt::Rtt, Session};
+use probe_rs::{
+    rtt::{Rtt, ScanRegion},
+    Session,
+};
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
+
 
 /// RTT adapter implementing `std::io::Read + Write` for use with `TelepathClient`.
 ///
@@ -30,11 +34,17 @@ impl RttTransport {
         core_index: usize,
         up_channel: usize,
         down_channel: usize,
+        control_block_addr: u64,
     ) -> anyhow::Result<Self> {
         let rtt = {
             let mut core = session.core(core_index).context("Failed to access core")?;
-            Rtt::attach(&mut core)
-                .context("Failed to attach to RTT. Is the firmware running and RTT initialized?")?
+            Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
+                .with_context(|| {
+                    format!(
+                        "Failed to attach to RTT at {:#010x}. Is the firmware running?",
+                        control_block_addr
+                    )
+                })?
         };
         Ok(Self {
             session,
