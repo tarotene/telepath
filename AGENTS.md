@@ -65,7 +65,7 @@ just ci
 - IS a workspace member (`std` target, no cross-compile). Build with `cargo build --workspace`.
 - MUST exercise the full wire path including COBS framing — it is the primary hardware-free regression for `telepath-firmware` and `telepath-host`.
 - MUST use only public APIs of the dependent crates; it MUST NOT poke internal state to aid the round-trip.
-- CI runs `timeout 30 cargo run -p host-emulator` as a smoke test on every push.
+- CI runs `timeout 30 cargo run -p host-emulator` and grep-asserts the `ping -> 0xDEADBEEF` output on every push.
 
 ### `tools/telepath-cli`
 - MUST be built separately; it is excluded from the workspace.
