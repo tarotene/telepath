@@ -40,8 +40,23 @@ struct Cli {
     #[arg(long, default_value = "nRF52840_xxAA")]
     chip: String,
 
+    /// SEGGER RTT control block address in hex (e.g. 0x20000000).
+    /// Falls back to env var TELEPATH_RTT_CONTROL_BLOCK_ADDR, then 0x20000000.
+    #[arg(
+        long,
+        value_parser = parse_hex_u64,
+        env = "TELEPATH_RTT_CONTROL_BLOCK_ADDR",
+        default_value = "0x20000000"
+    )]
+    rtt_control_block_addr: u64,
+
     #[command(subcommand)]
     command: Option<Command>,
+}
+
+fn parse_hex_u64(s: &str) -> Result<u64, String> {
+    let digits = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    u64::from_str_radix(digits, 16).map_err(|e| format!("invalid hex u64 '{s}': {e}"))
 }
 
 #[derive(Subcommand)]
@@ -75,7 +90,7 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("Failed to attach to target '{}'", cli.chip))?;
 
     // RTT channels: up 1 / down 1 for RPC, up 0 for debug logs.
-    let transport = RttTransport::new(session, 0, 1, 1)?;
+    let transport = RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr)?;
     let mut client = TelepathClient::new(transport);
 
     match cli.command {

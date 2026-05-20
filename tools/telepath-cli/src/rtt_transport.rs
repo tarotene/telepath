@@ -6,11 +6,6 @@ use probe_rs::{
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
-/// Fixed address of the SEGGER RTT control block on nRF52840-DK.
-///
-/// Must match `RTT_CTRL ORIGIN` in `examples/nrf52840-dk/memory.x` and the
-/// `section_cb: ".segger_rtt"` placement in `examples/nrf52840-dk/src/main.rs`.
-const RTT_CONTROL_BLOCK_ADDR: u64 = 0x2000_0000;
 
 /// RTT adapter implementing `std::io::Read + Write` for use with `TelepathClient`.
 ///
@@ -39,11 +34,17 @@ impl RttTransport {
         core_index: usize,
         up_channel: usize,
         down_channel: usize,
+        control_block_addr: u64,
     ) -> anyhow::Result<Self> {
         let rtt = {
             let mut core = session.core(core_index).context("Failed to access core")?;
-            Rtt::attach_region(&mut core, &ScanRegion::Exact(RTT_CONTROL_BLOCK_ADDR))
-                .context("Failed to attach to RTT at 0x20000000. Is the firmware running?")?
+            Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
+                .with_context(|| {
+                    format!(
+                        "Failed to attach to RTT at {:#010x}. Is the firmware running?",
+                        control_block_addr
+                    )
+                })?
         };
         Ok(Self {
             session,
