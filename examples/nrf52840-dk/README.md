@@ -1,5 +1,10 @@
 # nrf52840-dk example
 
+> **Experimental — not yet verified end-to-end.** The hardware RTT path has
+> not been re-validated since the CLI refactor in PR #6. `telepath-cli -- ping`
+> currently returns no response. Tracked in
+> [#9](https://github.com/tarotene/telepath/issues/9).
+
 Minimal Embassy firmware for the [nRF52840-DK](https://www.nordicsemi.com/Products/Development-hardware/nRF52840-DK)
 that demonstrates the Telepath RPC stack over RTT.
 
@@ -74,3 +79,7 @@ Expected output for `ping`:
 ```
 ping -> 0xDEADBEEF
 ```
+
+> **Note:** The expected output is currently not received. See
+> [issue #9](https://github.com/tarotene/telepath/issues/9) for tracking
+> and investigation notes.
