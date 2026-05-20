@@ -46,9 +46,22 @@ impl RttTransport {
         })
     }
 
-    /// Arm a read deadline: the next `Read::read` call returns `TimedOut` after `timeout`.
+    /// Arm an absolute read deadline at `Instant::now() + timeout`.
+    ///
+    /// Once armed, **every** subsequent `Read::read` call returns
+    /// `ErrorKind::TimedOut` as soon as the deadline elapses, until the deadline
+    /// is overwritten via another `set_read_deadline` call or cleared via
+    /// `clear_read_deadline`. The deadline applies to the whole `call_raw`
+    /// multi-chunk read, not per-chunk.
     pub fn set_read_deadline(&mut self, timeout: Duration) {
         self.read_deadline = Some(Instant::now() + timeout);
+    }
+
+    /// Disarm any previously-set read deadline. `Read::read` will then block
+    /// indefinitely (subject to the underlying probe-rs timing).
+    #[allow(dead_code)]
+    pub fn clear_read_deadline(&mut self) {
+        self.read_deadline = None;
     }
 
     /// Drain RTT channel 0 (firmware debug output) to stderr. Non-blocking.
@@ -72,6 +85,9 @@ impl RttTransport {
 
 impl Read for RttTransport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         // probe-rs RTT `read` is non-blocking and returns Ok(0) when no data is
         // available. Busy-loop with a 1ms sleep so that `read_exact` in
         // `TelepathClient::call_raw` does not mistake an empty read for EOF.
@@ -80,7 +96,7 @@ impl Read for RttTransport {
                 if Instant::now() > deadline {
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
-                        "RTT read timeout after 5s",
+                        "RTT read deadline exceeded",
                     ));
                 }
             }
