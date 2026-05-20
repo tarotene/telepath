@@ -81,7 +81,7 @@ just ci
 | Property | Specification |
 |----------|---------------|
 | Downstream framing (Host→Target) | COBS; delimiter `0x00`; MCU decoder is a simple `read_until(0x00)` state machine |
-| Upstream framing (Target→Host) | rzCOBS; no `0x00` in encoded output; `0x00` used as frame delimiter |
+| Upstream framing (Target→Host) | COBS in current MVP; `0x00` delimiter. rzCOBS planned for Stage C2 (see [Issue #3](https://github.com/tarotene/telepath/issues/3)) |
 | Serialization | postcard (little-endian, varint-compressed) |
 | Packet type | 2-valued: `Request` (0x01) / `Response` (0x02); follows ONC RPC RFC 5531 CALL/REPLY model |
 | Error representation | `ResponseStatus` field inside `Response`; NOT a separate packet type |

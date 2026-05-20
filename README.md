@@ -44,7 +44,7 @@ sequenceDiagram
 | Direction | Method | Rationale |
 |-----------|--------|-----------|
 | Host → Target | COBS | Minimal decoder on MCU: `read_until(0x00)` |
-| Target → Host | COBS (rzCOBS planned) | rzCOBS improves throughput for sparse sensor data — see [B2 roadmap](https://github.com/tarotene/telepath/issues/3) |
+| Target → Host | COBS (rzCOBS planned) | rzCOBS improves throughput for sparse sensor data — see [C2 in the MVP roadmap](https://github.com/tarotene/telepath/issues/3) |
 
 Both directions use `0x00` as the frame delimiter.
 
