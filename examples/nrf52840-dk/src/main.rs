@@ -77,6 +77,10 @@ async fn main(_spawner: Spawner) {
             0: { size: 1,   name: "reserved" }
             1: { size: 512, name: "telepath" }
         }
+        // Pin the control block to .segger_rtt so _SEGGER_RTT lands at
+        // 0x20000000 (RTT_CTRL in memory.x). The host CLI attaches there
+        // directly via ScanRegion::Exact — see tools/telepath-cli/src/rtt_transport.rs.
+        section_cb: ".segger_rtt"
     };
     rtt_target::set_print_channel(channels.up.0);
     let rtt_transport = RttTransport::new(channels.up.1, channels.down.1);
