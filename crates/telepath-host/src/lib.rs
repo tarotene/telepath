@@ -226,6 +226,12 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         &self.schema_cache
     }
 
+    /// Mutable access to the underlying transport (e.g. for side-channel operations
+    /// like draining debug logs on an RTT adapter).
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
+
     fn next_seq(&mut self) -> u16 {
         let s = self.seq_counter;
         self.seq_counter = self.seq_counter.wrapping_add(1);
