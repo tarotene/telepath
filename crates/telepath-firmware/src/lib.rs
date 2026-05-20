@@ -1,14 +1,15 @@
 //! Target-side Telepath library.
 //!
 //! Runs on the MCU in `no_std` mode. Provides:
-//! - [`TelepathServer`]: receive loop, COBS decode, dispatch, rzCOBS encode
+//! - [`TelepathServer`]: receive loop, COBS decode, dispatch, COBS encode
+//! - [`transport::Transport`]: non-blocking byte-stream I/O trait
 //! - Re-export of `#[command]` attribute macro
 //!
 //! # Architecture
 //!
 //! ```text
-//! Transport (embedded-io) -> CobsDecoder -> Dispatcher -> CommandRegistry
-//!                                                       -> rzCOBS encode -> Transport
+//! Transport → FrameAccumulator → cobs_decode → postcard::from_bytes → Dispatcher
+//!                                                                     → postcard::to_slice → cobs_encode → Transport
 //! ```
 //!
 //! # Usage
@@ -21,13 +22,18 @@
 //!     Ok(())
 //! }
 //!
-//! // In your embassy main:
-//! let mut server = TelepathServer::<_, 256>::new(transport);
+//! let mut server = TelepathServer::<_, 512>::new(transport, &COMMANDS);
 //! loop { server.poll(); }
 //! ```
 #![no_std]
 
+pub mod transport;
+
 pub use telepath_macros::command;
+use telepath_wire::{
+    framing::{cobs_decode, cobs_encode, FrameAccumulator},
+    Request, Response,
+};
 pub use telepath_wire::{
     PacketType, ResponseStatus, WireError, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE,
 };
@@ -80,20 +86,18 @@ pub enum DispatchError {
 
 /// RPC server that runs on the target MCU.
 ///
-/// `T` is the transport type implementing byte-stream I/O.
-/// `N` is the size of the internal receive and transmit buffers (bytes).
+/// `T` is the transport type implementing [`transport::Transport`].
+/// `N` is the size of the internal receive accumulator and transmit buffers.
 ///
 /// # Type parameter guidance
 ///
-/// Choose `N` to be at least `MAX_PAYLOAD_SIZE` plus framing overhead.
-/// A value of 512 is recommended for most use cases.
-#[allow(dead_code)] // fields wired up once framing layer is implemented
+/// Choose `N` ≥ 512 to accommodate a max-payload frame with COBS overhead.
 pub struct TelepathServer<T, const N: usize> {
     transport: T,
-    rx_buf: [u8; N],
+    rx_accum: FrameAccumulator<N>,
     tx_buf: [u8; N],
     /// Command registry slice. Populated via `linkme` once the macro is complete.
-    /// For now, users may pass a static slice manually.
+    /// For now, users pass a static slice manually.
     commands: &'static [CommandMetadata],
 }
 
@@ -102,7 +106,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
     pub fn new(transport: T, commands: &'static [CommandMetadata]) -> Self {
         Self {
             transport,
-            rx_buf: [0u8; N],
+            rx_accum: FrameAccumulator::new(),
             tx_buf: [0u8; N],
             commands,
         }
@@ -111,8 +115,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
     /// Look up a command by its ID using linear scan.
     ///
     /// Linear scan is intentional: embedded command counts are typically ≤ 64,
-    /// making hash-map overhead unjustified. At 64 entries and 64 MHz this
-    /// resolves in < 1 µs.
+    /// making hash-map overhead unjustified.
     pub fn find_command(&self, id: u16) -> Option<&CommandMetadata> {
         self.commands.iter().find(|cmd| cmd.id == id)
     }
@@ -136,13 +139,92 @@ impl<T, const N: usize> TelepathServer<T, N> {
     }
 
     /// Handle a Discovery request (CmdID 0x0000).
-    ///
-    /// Writes a minimal discovery response listing all registered command names
-    /// and IDs. Full schema transport is deferred to the Schema-on-Demand flow.
     fn handle_discovery(&self, _output: &mut [u8]) -> Result<usize, DispatchError> {
         // TODO: serialize CommandMetadata list via postcard into output buffer.
-        // Returns 0 bytes until CDP serialization is implemented.
         Ok(0)
+    }
+}
+
+impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
+    /// Process any pending bytes from the transport.
+    ///
+    /// Call this in a tight loop. Reads all available bytes, accumulates them
+    /// into COBS frames, and sends a response for each complete request.
+    pub fn poll(&mut self) {
+        let mut byte = [0u8; 1];
+        loop {
+            let n = self.transport.read(&mut byte);
+            if n == 0 {
+                break;
+            }
+            if self.rx_accum.feed(byte[0]) {
+                self.process_frame();
+                self.rx_accum.reset();
+            }
+        }
+    }
+
+    /// Decode and dispatch a complete COBS frame, then encode and send the response.
+    fn process_frame(&mut self) {
+        let frame = match self.rx_accum.frame() {
+            Some(f) => f,
+            None => return,
+        };
+
+        // COBS decode into a stack buffer.
+        let mut decoded = [0u8; N];
+        let decoded_len = match cobs_decode(frame, &mut decoded) {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+
+        // Deserialize Request (args borrows from decoded[]).
+        let req: Request<'_> = match postcard::from_bytes(&decoded[..decoded_len]) {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        // Reject packets that are not properly typed as Request.
+        if req.kind != PacketType::Request {
+            return;
+        }
+
+        // Reject oversized argument payloads before dispatch.
+        if req.args.len() > MAX_PAYLOAD_SIZE {
+            return;
+        }
+
+        let seq_no = req.seq_no;
+        let cmd_id = req.cmd_id;
+        let args = req.args;
+
+        // Dispatch; clamp oversized return payloads to SystemError.
+        let mut payload_buf = [0u8; N];
+        let (status, payload_len) = match self.dispatch(cmd_id, args, &mut payload_buf) {
+            Ok(n) if n > MAX_PAYLOAD_SIZE => (ResponseStatus::SystemError, 0),
+            Ok(n) => (ResponseStatus::Ok, n),
+            Err(_) => (ResponseStatus::SystemError, 0),
+        };
+
+        // Build and serialize Response.
+        let resp = Response {
+            kind: PacketType::Response,
+            seq_no,
+            status,
+            payload: &payload_buf[..payload_len],
+        };
+        let mut serialized = [0u8; N];
+        let serialized_len = match postcard::to_slice(&resp, &mut serialized) {
+            Ok(s) => s.len(),
+            Err(_) => return,
+        };
+
+        // COBS encode into tx_buf and write.
+        let n = match cobs_encode(&serialized[..serialized_len], &mut self.tx_buf) {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+        self.transport.write(&self.tx_buf[..n]);
     }
 }
 
@@ -152,6 +234,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
     use super::*;
 
     fn noop_shim(_input: &[u8], _output: &mut [u8]) -> Result<usize, DispatchError> {
@@ -186,5 +269,95 @@ mod tests {
             server.dispatch(0xFFFF, &[], &mut out),
             Err(DispatchError::UnknownCommand)
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // poll() integration test using a loopback transport
+    // ---------------------------------------------------------------------------
+
+    use telepath_wire::framing::cobs_encode;
+    use telepath_wire::{PacketType, Request, Response, ResponseStatus};
+
+    /// A ping shim that writes `0xDEADBEEFu32` as postcard to output.
+    fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+        let val: u32 = 0xDEAD_BEEF;
+        let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
+        Ok(s.len())
+    }
+
+    static PING_COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
+        name: "ping",
+        id: 0x0001,
+        invoke: ping_shim,
+    }];
+
+    /// Loopback transport: bytes written are available for reading.
+    struct LoopbackTransport {
+        rx: std::vec::Vec<u8>,
+        tx: std::vec::Vec<u8>,
+    }
+
+    impl LoopbackTransport {
+        fn new(rx: std::vec::Vec<u8>) -> Self {
+            Self {
+                rx,
+                tx: std::vec::Vec::new(),
+            }
+        }
+    }
+
+    impl transport::Transport for LoopbackTransport {
+        fn read(&mut self, buf: &mut [u8]) -> usize {
+            if self.rx.is_empty() {
+                return 0;
+            }
+            let n = buf.len().min(self.rx.len());
+            buf[..n].copy_from_slice(&self.rx[..n]);
+            self.rx.drain(..n);
+            n
+        }
+
+        fn write(&mut self, buf: &[u8]) -> usize {
+            self.tx.extend_from_slice(buf);
+            buf.len()
+        }
+    }
+
+    #[test]
+    fn poll_ping_roundtrip() {
+        // Build a COBS-framed ping request.
+        let req = Request {
+            kind: PacketType::Request,
+            seq_no: 42,
+            cmd_id: 0x0001,
+            args: &[],
+        };
+        let mut ser_buf = [0u8; 64];
+        let serialized = postcard::to_slice(&req, &mut ser_buf).unwrap();
+        let mut framed = [0u8; 64];
+        let n = cobs_encode(serialized, &mut framed).unwrap();
+
+        let transport = LoopbackTransport::new(framed[..n].to_vec());
+        let mut server = TelepathServer::<LoopbackTransport, 512>::new(transport, &PING_COMMANDS);
+        server.poll();
+
+        // Decode the response from tx buffer.
+        let tx = &server.transport.tx;
+        assert!(!tx.is_empty(), "server must have written a response");
+
+        // Find the 0x00 delimiter.
+        let delim = tx
+            .iter()
+            .position(|&b| b == 0x00)
+            .expect("no frame delimiter");
+        let mut decoded = [0u8; 512];
+        let m = telepath_wire::framing::cobs_decode(&tx[..delim], &mut decoded).unwrap();
+
+        let resp: Response<'_> = postcard::from_bytes(&decoded[..m]).unwrap();
+        assert_eq!(resp.seq_no, 42);
+        assert_eq!(resp.status, ResponseStatus::Ok);
+
+        let val: u32 = postcard::from_bytes(resp.payload).unwrap();
+        assert_eq!(val, 0xDEAD_BEEF);
     }
 }

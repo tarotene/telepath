@@ -1,5 +1,4 @@
-/target
-/examples/nrf52840-dk/target
+**/target/
 **/*.rs.bk
 Cargo.lock
 .DS_Store

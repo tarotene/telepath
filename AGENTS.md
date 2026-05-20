@@ -12,6 +12,7 @@
 | `crates/telepath-firmware` | Target-side RPC server | `thumbv7em-none-eabi` |
 | `crates/telepath-host` | Host-side RPC client | native (`std`) |
 | `examples/nrf52840-dk` | Standalone firmware example | `thumbv7em-none-eabi` |
+| `tools/telepath-cli` | Host-side CLI over RTT | native (`std`) |
 
 ## Build Commands
 
@@ -25,8 +26,13 @@ cargo test --workspace
 # Firmware example — cd required so .cargo/config.toml is discovered
 cd examples/nrf52840-dk && cargo build --release
 
-# Flash to nRF52840-DK (requires probe-rs)
+# Flash to nRF52840-DK (probe-rs download: flashes and exits, probe released)
 cd examples/nrf52840-dk && cargo run --release
+
+# CLI tool (excluded from workspace — requires cd)
+cd tools/telepath-cli && cargo build
+cd tools/telepath-cli && cargo run -- ping
+cd tools/telepath-cli && cargo run
 
 # Format check
 cargo fmt --all -- --check
@@ -49,6 +55,12 @@ just ci
 - MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
 - MUST NOT be added to the workspace `members` list; it has its own `target` directory and Cargo config.
 - Cross-compilation REQUIRES `rustup target add thumbv7em-none-eabi`.
+- `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-cli` can attach.
+
+### `tools/telepath-cli`
+- MUST be built separately; it is excluded from the workspace.
+- MUST NOT be built with `cargo build -p telepath-cli` from the workspace root (not a workspace member).
+- Firmware MUST be flashed (and probe released) before invoking the CLI.
 
 ### `telepath-firmware`
 - MUST remain `#![no_std]`.

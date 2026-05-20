@@ -1,0 +1,21 @@
+[package]
+name = "telepath-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Host-side CLI for Telepath RPC over RTT (probe-rs)"
+
+[[bin]]
+name = "telepath-cli"
+path = "src/main.rs"
+
+[dependencies]
+telepath-wire = { path = "../../crates/telepath-wire" }
+postcard = { version = "1", features = ["alloc"] }
+cobs = "0.2"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+rustyline = "15"
+# probe-rs 0.31 is the latest stable release (2026-01-17).
+# Pin to this minor to avoid unexpected API breaks.
+probe-rs = "0.31"

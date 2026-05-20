@@ -9,3 +9,7 @@ description = "Host-side Telepath library (std)"
 telepath-wire = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["alloc"] }
+cobs = "0.2"
+
+[dev-dependencies]
+telepath-firmware = { workspace = true }

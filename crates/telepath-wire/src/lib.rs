@@ -13,6 +13,8 @@
 //! - Discovery: reserved CmdID 0x0000 (CoAP Empty / ONC RPC convention)
 #![no_std]
 
+pub mod framing;
+
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------

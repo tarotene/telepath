@@ -26,12 +26,24 @@ clippy:
 firmware-build:
     cd examples/nrf52840-dk && cargo build --release
 
-# Flash firmware to nRF52840-DK via probe-rs
+# Flash firmware to nRF52840-DK (downloads and exits; probe is released)
 firmware-flash:
     cd examples/nrf52840-dk && cargo run --release
 
-# Build everything: workspace + firmware
-check-all: build firmware-build
+# Build telepath-cli
+cli-build:
+    cd tools/telepath-cli && cargo build
+
+# Run telepath-cli with arguments (firmware must already be flashed)
+cli *ARGS:
+    cd tools/telepath-cli && cargo run -- {{ARGS}}
+
+# End-to-end smoke test: flash then ping
+firmware-ping: firmware-flash
+    cd tools/telepath-cli && cargo run -- ping
+
+# Build everything: workspace + firmware + CLI
+check-all: build firmware-build cli-build
 
 # Full CI gate: fmt-check + clippy + test
 ci: fmt-check clippy test

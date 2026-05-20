@@ -36,6 +36,7 @@ sequenceDiagram
 | `crates/telepath-firmware` | Target-side RPC server — `no_std` |
 | `crates/telepath-host` | Host-side RPC client — `std` |
 | `examples/nrf52840-dk` | Standalone firmware example (workspace-excluded) |
+| `tools/telepath-cli` | Host-side CLI over RTT (workspace-excluded) |
 
 ### Framing
 
@@ -74,8 +75,17 @@ cargo test --workspace
 # Firmware example — must cd so .cargo/config.toml is discovered
 cd examples/nrf52840-dk && cargo build --release
 
-# Flash to hardware
+# Flash to hardware (downloads and exits; probe is released immediately)
 cd examples/nrf52840-dk && cargo run --release
+
+# CLI tool — must cd because it is workspace-excluded
+cd tools/telepath-cli && cargo build
+
+# 1-shot ping (firmware must already be flashed)
+cd tools/telepath-cli && cargo run -- ping
+
+# Interactive REPL
+cd tools/telepath-cli && cargo run
 ```
 
 ## CI / Quality gates
