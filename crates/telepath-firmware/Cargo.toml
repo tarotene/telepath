@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 description = "Target-side Telepath library (no_std)"
 build = "build.rs"
-include = ["src/**/*", "linkme.x", "build.rs", "Cargo.toml"]
 
 [dependencies]
 telepath-wire = { workspace = true }
