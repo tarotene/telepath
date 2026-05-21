@@ -13,7 +13,7 @@
 //! let result = client.call_raw(0x0001, &args_bytes).unwrap();
 //! ```
 
-use telepath_wire::{framing::MAX_FRAME_SIZE, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE};
+use telepath_wire::{framing::MAX_FRAME_SIZE, DiscoveryEntry, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE};
 
 // ---------------------------------------------------------------------------
 // HostError
@@ -131,13 +131,26 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
 
     /// Run the Command Discovery Protocol.
     ///
-    /// Sends a [`CMD_ID_DISCOVERY`] request and populates the schema cache
-    /// with the returned command list. Returns the number of commands found.
+    /// Sends a [`CMD_ID_DISCOVERY`] request and populates the schema cache with
+    /// the returned command list. Returns the number of commands discovered.
+    ///
+    /// The cache is fully reset at the start so repeated calls reflect the
+    /// latest firmware state. Schema fingerprints are not yet transmitted
+    /// (Issue #3 §B4b) — `args_schema` / `ret_schema` are empty for now.
     pub fn discover(&mut self) -> Result<usize, HostError> {
-        // TODO: deserialize the CDP response into SchemaEntry objects once
-        // the firmware-side CDP serialization is implemented.
-        let _ = self.call_raw(CMD_ID_DISCOVERY, &[])?;
-        Ok(0)
+        self.schema_cache = SchemaCache::new();
+        let payload = self.call_raw(CMD_ID_DISCOVERY, &[])?;
+        let entries: Vec<DiscoveryEntry<'_>> =
+            postcard::from_bytes(&payload).map_err(|_| HostError::SerdeError)?;
+        for entry in &entries {
+            self.schema_cache.insert(SchemaEntry {
+                name: entry.name.to_owned(),
+                cmd_id: entry.id,
+                args_schema: Vec::new(),
+                ret_schema: Vec::new(),
+            });
+        }
+        Ok(self.schema_cache.len())
     }
 
     /// Issue a raw RPC call.
@@ -297,6 +310,161 @@ mod tests {
             client.call_raw(0x0001, &oversized),
             Err(HostError::RequestPayloadTooLarge)
         ));
+    }
+
+    /// End-to-end discover() round-trip using an in-process blocking pipe.
+    ///
+    /// Spawns a `TelepathServer` on a background thread and calls
+    /// `client.discover()` from the test thread to verify that `SchemaCache`
+    /// is populated with the server's registered commands.
+    #[test]
+    fn discover_roundtrip() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+        use std::sync::Arc;
+        use std::thread;
+        use telepath_firmware::transport::Transport as FwTransport;
+        use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
+        use telepath_wire::framing::MAX_FRAME_SIZE;
+
+        fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+            let s = postcard::to_slice(&0xDEAD_BEEFu32, output)
+                .map_err(|_| DispatchError::SerializeError)?;
+            Ok(s.len())
+        }
+        static CMDS: [CommandMetadata; 1] = [CommandMetadata {
+            name: "ping",
+            id: 0x0001,
+            invoke: ping_shim,
+        }];
+
+        // --- Inline blocking pipe (mirrors host-emulator/src/loopback.rs) ---
+        struct FwSide {
+            rx: Receiver<u8>,
+            tx: SyncSender<u8>,
+        }
+        struct HostSide {
+            rx: Receiver<u8>,
+            tx: SyncSender<u8>,
+        }
+
+        fn make_pair() -> (FwSide, HostSide) {
+            let cap = MAX_FRAME_SIZE * 2;
+            let (h2f_tx, h2f_rx) = sync_channel::<u8>(cap);
+            let (f2h_tx, f2h_rx) = sync_channel::<u8>(cap);
+            (
+                FwSide {
+                    rx: h2f_rx,
+                    tx: f2h_tx,
+                },
+                HostSide {
+                    rx: f2h_rx,
+                    tx: h2f_tx,
+                },
+            )
+        }
+
+        impl FwTransport for FwSide {
+            fn read(&mut self, buf: &mut [u8]) -> usize {
+                let mut n = 0;
+                while n < buf.len() {
+                    match self.rx.try_recv() {
+                        Ok(b) => {
+                            buf[n] = b;
+                            n += 1;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                n
+            }
+            fn write(&mut self, buf: &[u8]) -> usize {
+                let mut n = 0;
+                for &b in buf {
+                    match self.tx.try_send(b) {
+                        Ok(()) => n += 1,
+                        Err(_) => return n,
+                    }
+                }
+                n
+            }
+        }
+
+        impl std::io::Read for HostSide {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if buf.is_empty() {
+                    return Ok(0);
+                }
+                let first = self.rx.recv().map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "fw disconnected")
+                })?;
+                buf[0] = first;
+                let mut n = 1;
+                while n < buf.len() {
+                    match self.rx.try_recv() {
+                        Ok(b) => {
+                            buf[n] = b;
+                            n += 1;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                Ok(n)
+            }
+        }
+        impl std::io::Write for HostSide {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                for &b in buf {
+                    self.tx.send(b).map_err(|_| {
+                        std::io::Error::new(std::io::ErrorKind::BrokenPipe, "fw disconnected")
+                    })?;
+                }
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        // --- End of inline pipe ---
+
+        // RAII guard: stops and joins the fw thread even if the test panics.
+        struct FwGuard {
+            running: Arc<AtomicBool>,
+            handle: Option<thread::JoinHandle<()>>,
+        }
+        impl Drop for FwGuard {
+            fn drop(&mut self) {
+                self.running.store(false, Ordering::Release);
+                if let Some(h) = self.handle.take() {
+                    let _ = h.join();
+                }
+            }
+        }
+
+        let (fw_t, host_t) = make_pair();
+        let running = Arc::new(AtomicBool::new(true));
+        let running_fw = Arc::clone(&running);
+        let fw_handle = thread::spawn(move || {
+            let mut server = TelepathServer::<_, 512>::new(fw_t, &CMDS);
+            while running_fw.load(Ordering::Acquire) {
+                server.poll();
+                thread::yield_now();
+            }
+        });
+        let _guard = FwGuard {
+            running: Arc::clone(&running),
+            handle: Some(fw_handle),
+        };
+
+        let mut client = TelepathClient::new(host_t);
+        let n = client.discover().expect("discover failed");
+        assert_eq!(n, 1, "expected exactly 1 registered command (ping)");
+        let entry = client
+            .schema_cache()
+            .get(0x0001)
+            .expect("ping not in SchemaCache");
+        assert_eq!(entry.name, "ping");
+        assert_eq!(entry.cmd_id, 0x0001);
     }
 
     /// Server-side round-trip: manually encode a request, feed to server, decode the response.

@@ -42,6 +42,14 @@ fn main() -> Result<(), HostError> {
     let val: u32 = postcard::from_bytes(&payload).expect("ping returned invalid u32");
     println!("ping -> 0x{:08X}", val);
 
+    let n = client.discover()?;
+    println!("discover -> {} command(s)", n);
+    let cached = client
+        .schema_cache()
+        .get(__TELEPATH_CMD_PING.id)
+        .expect("ping not present in SchemaCache after discover");
+    assert_eq!(cached.name, "ping");
+
     // Signal the firmware thread to exit and wait for it.
     running.store(false, Ordering::Release);
     fw_handle.join().expect("fw thread panicked");
