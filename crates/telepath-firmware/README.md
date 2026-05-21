@@ -50,27 +50,21 @@ pub struct CommandMetadata {
 ```
 
 Register commands by passing a `&'static [CommandMetadata]` to `new()`.
-The `#[command]` attribute macro (currently a passthrough stub) is
-intended to generate these entries automatically.
+Use `telepath_firmware::commands()` (linkme-collected at link time) to
+pass all `#[command]`-annotated functions automatically.
 
 ## Usage
 
 ```rust
-use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
+use telepath_firmware::{command, TelepathServer};
 
-fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
-    let val: u32 = 0xDEAD_BEEF;
-    let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-    Ok(s.len())
-}
+#[command]
+fn ping() -> u32 { 0xDEAD_BEEF }
 
-static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
-    name: "ping",
-    id: 0x0001,
-    invoke: ping_shim,
-}];
-
-let mut server = TelepathServer::<MyTransport, 512>::new(transport, &COMMANDS);
+let mut server = TelepathServer::<MyTransport, 512>::new(
+    transport,
+    telepath_firmware::commands(),
+);
 loop {
     server.poll();
 }
@@ -91,10 +85,10 @@ cargo build -p telepath-firmware --target thumbv7em-none-eabi
 
 ## Limitations
 
-- `handle_discovery` is a TODO stub. Calling `cmd_id = 0x0000` succeeds
-  with an empty payload but does not enumerate registered commands yet
-  (roadmap [B4](https://github.com/tarotene/telepath/issues/3)).
-- Command registry is a manually-passed `&'static [CommandMetadata]`.
-  Distributed-slice auto-collection via `linkme` is planned (roadmap B3).
-- The `#[command]` attribute is a passthrough stub; shims and metadata
-  must be hand-written for now.
+- `handle_discovery` (CmdID `0x0000`) returns the registered command list as a
+  postcard sequence of `(id, name)` pairs. Schema fingerprints (B4b) and
+  chunked responses for command lists exceeding 256 bytes (B4c) are deferred —
+  see [roadmap](https://github.com/tarotene/telepath/issues/3).
+- Upstream (target → host) framing uses COBS in this MVP. rzCOBS is planned
+  for Stage C (roadmap C2).
+- No typed `call::<Args, Ret>` on the firmware side yet (roadmap C1).

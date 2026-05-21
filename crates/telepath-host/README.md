@@ -60,8 +60,10 @@ cargo test -p telepath-host
 
 ## Limitations
 
-- `discover()` returns `Ok(0)` and does not populate `SchemaCache`. The
-  CDP wire format is being finalised (roadmap [B5](https://github.com/tarotene/telepath/issues/3)).
+- `discover()` runs CDP and populates `SchemaCache` with `(name, cmd_id)` pairs.
+  Schema fingerprints (`args_schema` / `ret_schema`) are empty for now — the
+  firmware does not yet transmit them (roadmap B4b,
+  [tracking issue #3](https://github.com/tarotene/telepath/issues/3)).
 - No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
   (roadmap C1).
 - Upstream rzCOBS is not yet supported; both framing directions are COBS.
