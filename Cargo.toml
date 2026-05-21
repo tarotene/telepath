@@ -24,3 +24,4 @@ postcard = { version = "1", default-features = false }
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+linkme = { version = "0.3", default-features = false }

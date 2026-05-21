@@ -28,7 +28,7 @@ use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use panic_halt as _;
 use rtt_target::{rprintln, rtt_init};
-use telepath_firmware::{command, CommandMetadata, TelepathServer};
+use telepath_firmware::{command, TelepathServer};
 
 use rtt_transport::RttTransport;
 
@@ -41,8 +41,6 @@ use rtt_transport::RttTransport;
 fn ping() -> u32 {
     0xDEAD_BEEF
 }
-
-static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
 
 // ---------------------------------------------------------------------------
 // Embassy main
@@ -82,7 +80,7 @@ async fn main(_spawner: Spawner) {
     // LED 1 on nRF52840-DK is P0.13, active low.
     let mut led = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
 
-    let mut server = TelepathServer::<RttTransport, 512>::new(rtt_transport, &COMMANDS);
+    let mut server = TelepathServer::<RttTransport, 512>::new(rtt_transport, telepath_firmware::COMMANDS());
 
     let mut tick: u32 = 0;
     loop {

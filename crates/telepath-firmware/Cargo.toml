@@ -10,6 +10,7 @@ telepath-wire = { workspace = true }
 telepath-macros = { workspace = true }
 serde = { workspace = true }
 postcard = { workspace = true }
+linkme = { workspace = true }
 
 [features]
 default = []

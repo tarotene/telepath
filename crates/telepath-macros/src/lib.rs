@@ -161,6 +161,7 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
 
     let shim_ident = format_ident!("__telepath_shim_{}", fn_name_str);
     let static_ident = format_ident!("__TELEPATH_CMD_{}", fn_name_str.to_uppercase());
+    let reg_ident = format_ident!("__TELEPATH_REG_{}", fn_name_str.to_uppercase());
 
     // --- Build shim body ---
 
@@ -232,6 +233,11 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                 ),
                 invoke: #shim_ident,
             };
+
+        #[allow(non_upper_case_globals, non_snake_case)]
+        #[::telepath_firmware::__linkme::distributed_slice(::telepath_firmware::TELEPATH_COMMANDS)]
+        #[linkme(crate = ::telepath_firmware::__linkme)]
+        static #reg_ident: ::telepath_firmware::CommandMetadata = #static_ident;
 
     })
 }
