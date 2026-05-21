@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
-use telepath_firmware::{command, CommandMetadata, TelepathServer};
+use telepath_firmware::{command, TelepathServer};
 use telepath_host::{HostError, TelepathClient};
 
 mod loopback;
@@ -20,8 +20,6 @@ fn ping() -> u32 {
     0xDEAD_BEEF
 }
 
-static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
-
 fn main() -> Result<(), HostError> {
     let (fw_transport, host_transport) = loopback::make_pair();
     let running = Arc::new(AtomicBool::new(true));
@@ -29,7 +27,7 @@ fn main() -> Result<(), HostError> {
     // Firmware thread: poll the server in a tight loop.
     let running_fw = Arc::clone(&running);
     let fw_handle = thread::spawn(move || {
-        let mut server = TelepathServer::<_, 512>::new(fw_transport, &COMMANDS);
+        let mut server = TelepathServer::<_, 512>::new(fw_transport, telepath_firmware::commands());
         while running_fw.load(Ordering::Acquire) {
             server.poll();
             // yield_now lets the OS schedule the host thread while the

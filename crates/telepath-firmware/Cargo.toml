@@ -4,12 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Target-side Telepath library (no_std)"
+build = "build.rs"
 
 [dependencies]
 telepath-wire = { workspace = true }
 telepath-macros = { workspace = true }
 serde = { workspace = true }
 postcard = { workspace = true }
+linkme = { workspace = true }
 
 [features]
 default = []
