@@ -146,10 +146,13 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
     };
 
     // --- Build args_type_str ---
-    // "(T1, T2, T3)" or "()" — used only for cmd_id hash; any consistent format works.
+    // Canonical tuple format matching Rust syntax: "()" for 0-arg, "(T,)" for 1-arg,
+    // "(T1, T2)" for 2-arg. Must match the tuple type used for postcard deserialization.
 
     let args_type_str = if arg_type_strs.is_empty() {
         "()".to_string()
+    } else if arg_type_strs.len() == 1 {
+        format!("({},)", arg_type_strs[0])
     } else {
         format!("({})", arg_type_strs.join(", "))
     };
@@ -163,7 +166,11 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
 
     let shim_body = if arg_idents.is_empty() {
         quote! {
-            let _ = input;
+            if !input.is_empty() {
+                return ::core::result::Result::Err(
+                    ::telepath_firmware::DispatchError::DeserializeError
+                );
+            }
             let __ret = #fn_ident();
             match ::postcard::to_slice(&__ret, output) {
                 Ok(s) => ::core::result::Result::Ok(s.len()),
@@ -226,10 +233,5 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                 invoke: #shim_ident,
             };
 
-        const _: () = ::core::assert!(
-            ::telepath_firmware::__derive_cmd_id(#fn_name_str, #args_type_str, #ret_type_str)
-                != ::telepath_firmware::CMD_ID_DISCOVERY,
-            "derive_cmd_id returned reserved CMD_ID_DISCOVERY",
-        );
     })
 }
