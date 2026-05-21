@@ -1,0 +1,93 @@
+use telepath_firmware::{command, CommandMetadata};
+
+// ---------------------------------------------------------------------------
+// Functions under test
+// ---------------------------------------------------------------------------
+
+#[command]
+fn nullary_ping() -> u32 {
+    0xDEAD_BEEF
+}
+
+#[command]
+fn add(a: u32, b: u32) -> u32 {
+    a + b
+}
+
+// ---------------------------------------------------------------------------
+// Metadata presence
+// ---------------------------------------------------------------------------
+
+#[test]
+fn nullary_metadata_name() {
+    assert_eq!(__TELEPATH_CMD_NULLARY_PING.name, "nullary_ping");
+}
+
+#[test]
+fn nullary_metadata_id_nonzero() {
+    assert_ne!(__TELEPATH_CMD_NULLARY_PING.id, 0x0000);
+}
+
+#[test]
+fn multiarg_metadata_name() {
+    assert_eq!(__TELEPATH_CMD_ADD.name, "add");
+}
+
+#[test]
+fn multiarg_metadata_id_nonzero() {
+    assert_ne!(__TELEPATH_CMD_ADD.id, 0x0000);
+}
+
+// ---------------------------------------------------------------------------
+// Determinism: macro-derived ID matches direct derive_cmd_id call
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cmd_id_deterministic() {
+    let expected = telepath_wire::cmd_id::derive_cmd_id("nullary_ping", "()", "u32");
+    assert_eq!(__TELEPATH_CMD_NULLARY_PING.id, expected);
+}
+
+// ---------------------------------------------------------------------------
+// Shim roundtrips
+// ---------------------------------------------------------------------------
+
+#[test]
+fn shim_nullary_roundtrip() {
+    let mut out = [0u8; 16];
+    let n = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[], &mut out).unwrap();
+    let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
+    assert_eq!(val, 0xDEAD_BEEF);
+}
+
+#[test]
+fn shim_multiarg_roundtrip() {
+    let mut input_buf = [0u8; 16];
+    let serialized = postcard::to_slice(&(3u32, 4u32), &mut input_buf).unwrap();
+    let mut out = [0u8; 16];
+    let n = (__TELEPATH_CMD_ADD.invoke)(serialized, &mut out).unwrap();
+    let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
+    assert_eq!(val, 7);
+}
+
+// ---------------------------------------------------------------------------
+// Original functions remain callable directly
+// ---------------------------------------------------------------------------
+
+#[test]
+fn original_fns_callable() {
+    assert_eq!(nullary_ping(), 0xDEAD_BEEF);
+    assert_eq!(add(2, 3), 5);
+}
+
+// ---------------------------------------------------------------------------
+// CommandMetadata usable in a static array (Copy / const check)
+// ---------------------------------------------------------------------------
+
+static COMMANDS: [CommandMetadata; 2] = [__TELEPATH_CMD_NULLARY_PING, __TELEPATH_CMD_ADD];
+
+#[test]
+fn commands_array_has_correct_names() {
+    assert_eq!(COMMANDS[0].name, "nullary_ping");
+    assert_eq!(COMMANDS[1].name, "add");
+}

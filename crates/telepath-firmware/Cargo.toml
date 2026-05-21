@@ -11,5 +11,9 @@ telepath-macros = { workspace = true }
 serde = { workspace = true }
 postcard = { workspace = true }
 
+[dev-dependencies]
+telepath-wire = { workspace = true }
+postcard = { workspace = true }
+
 [features]
 default = []

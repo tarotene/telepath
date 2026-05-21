@@ -1,44 +1,235 @@
 //! Proc-macro crate for Telepath.
 //!
-//! Currently provides a passthrough stub for `#[command]`. Future versions will
-//! generate:
-//! - A type-erased shim function (`__telepath_shim_<name>`)
-//! - A `CommandMetadata` static registered via `linkme` distributed slice
-//! - Argument / result struct definitions for postcard de/serialization
+//! Provides the `#[command]` attribute macro that generates a type-erased shim
+//! function and a `CommandMetadata` const from a plain Rust function definition.
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type};
 
 /// Marks a function as a Telepath RPC command.
 ///
-/// # Current behavior (stub)
+/// # What it generates
 ///
-/// The function is passed through unchanged. No code generation occurs yet.
+/// For every annotated function the macro emits three additional items:
 ///
-/// # Planned behavior
+/// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>`** —
+///    deserializes `input` via postcard, calls the original function, and serializes the result
+///    into `output`.
+/// 2. **`pub const __TELEPATH_CMD_<NAME>: CommandMetadata`** — a `CommandMetadata` const whose
+///    `id` is derived deterministically from the function's signature via
+///    `derive_cmd_id` at build time.
+/// 3. **`const _: () = assert!(...)`** — build-time assertion that the derived ID is not the
+///    reserved `CMD_ID_DISCOVERY` (0x0000).
 ///
-/// When fully implemented this macro will:
-/// 1. Derive `Serialize`/`Deserialize` argument and result wrapper structs.
-/// 2. Generate a type-erased shim: `fn __telepath_shim_<name>(&[u8], &mut [u8]) -> Result<usize, DispatchError>`.
-/// 3. Register a `CommandMetadata` static in the `.telepath_commands` linker section
-///    via `linkme::distributed_slice`.
+/// The original function body is preserved unchanged so it remains directly callable.
+///
+/// # Requirements on the calling crate
+///
+/// The calling crate must declare the following direct dependencies:
+/// - `telepath-firmware` — provides `CommandMetadata`, `DispatchError`
+/// - `postcard` — used in the generated shim for (de)serialization
+///
+/// # Restrictions
+///
+/// The macro rejects functions that are:
+/// - `async fn` (RPC dispatch is synchronous)
+/// - `unsafe fn`
+/// - Generic (`<T>` / `where` clauses)
+/// - Methods (`self` receiver)
+/// - Functions with reference arguments or reference return types
+/// - Functions with pattern-destructured arguments
 ///
 /// # Example
 ///
 /// ```rust,ignore
-/// use telepath_macros::command;
+/// use telepath_firmware::{command, CommandMetadata};
 ///
 /// #[command]
-/// fn set_led(id: u8, brightness: u16) -> Result<(), AppError> {
-///     // hardware control
-///     Ok(())
+/// fn ping() -> u32 {
+///     0xDEAD_BEEF
 /// }
+///
+/// static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
 /// ```
 #[proc_macro_attribute]
 pub fn command(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
-    // Passthrough: emit the original function unchanged.
-    // TODO: generate shim, metadata static, and linkme registration.
-    quote! { #input }.into()
+    match expand_command(input) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
+    let fn_ident = &func.sig.ident;
+    let fn_name_str = fn_ident.to_string();
+
+    // --- Validation ---
+
+    if let Some(tok) = &func.sig.asyncness {
+        return Err(syn::Error::new_spanned(
+            tok,
+            "#[command] does not support async fn",
+        ));
+    }
+    if let Some(tok) = &func.sig.unsafety {
+        return Err(syn::Error::new_spanned(
+            tok,
+            "#[command] does not support unsafe fn",
+        ));
+    }
+    if !func.sig.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &func.sig.generics,
+            "#[command] does not support generic functions",
+        ));
+    }
+    if let Some(wc) = &func.sig.generics.where_clause {
+        return Err(syn::Error::new_spanned(
+            wc,
+            "#[command] does not support where clauses",
+        ));
+    }
+
+    // --- Parse arguments ---
+
+    let mut arg_idents = Vec::new();
+    let mut arg_types: Vec<Box<Type>> = Vec::new();
+    let mut arg_type_strs = Vec::new();
+
+    for fn_arg in &func.sig.inputs {
+        match fn_arg {
+            FnArg::Receiver(recv) => {
+                return Err(syn::Error::new_spanned(
+                    recv,
+                    "#[command] cannot be applied to methods",
+                ));
+            }
+            FnArg::Typed(pat_type) => {
+                let ident = match pat_type.pat.as_ref() {
+                    Pat::Ident(pi) => pi.ident.clone(),
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "#[command] requires simple named arguments (patterns not supported)",
+                        ));
+                    }
+                };
+                if let Type::Reference(r) = pat_type.ty.as_ref() {
+                    return Err(syn::Error::new_spanned(
+                        r,
+                        "#[command] does not support reference arguments",
+                    ));
+                }
+                let ty = &*pat_type.ty;
+                arg_type_strs.push(quote! { #ty }.to_string());
+                arg_idents.push(ident);
+                arg_types.push(pat_type.ty.clone());
+            }
+        }
+    }
+
+    // --- Parse return type ---
+
+    let ret_type_str = match &func.sig.output {
+        ReturnType::Default => "()".to_string(),
+        ReturnType::Type(_, ty) => {
+            if let Type::Reference(r) = ty.as_ref() {
+                return Err(syn::Error::new_spanned(
+                    r,
+                    "#[command] does not support reference return types",
+                ));
+            }
+            quote! { #ty }.to_string()
+        }
+    };
+
+    // --- Build args_type_str ---
+    // "(T1, T2, T3)" or "()" — used only for cmd_id hash; any consistent format works.
+
+    let args_type_str = if arg_type_strs.is_empty() {
+        "()".to_string()
+    } else {
+        format!("({})", arg_type_strs.join(", "))
+    };
+
+    // --- Generated identifiers ---
+
+    let shim_ident = format_ident!("__telepath_shim_{}", fn_name_str);
+    let static_ident = format_ident!("__TELEPATH_CMD_{}", fn_name_str.to_uppercase());
+
+    // --- Build shim body ---
+
+    let shim_body = if arg_idents.is_empty() {
+        quote! {
+            let _ = input;
+            let __ret = #fn_ident();
+            match ::postcard::to_slice(&__ret, output) {
+                Ok(s) => ::core::result::Result::Ok(s.len()),
+                Err(_) => ::core::result::Result::Err(
+                    ::telepath_firmware::DispatchError::SerializeError
+                ),
+            }
+        }
+    } else {
+        // Tuple type for deserialization: (T,) for 1-element, (T1, T2) for multi.
+        let args_tuple_type = if arg_types.len() == 1 {
+            let t = &*arg_types[0];
+            quote! { (#t,) }
+        } else {
+            quote! { (#(#arg_types),*) }
+        };
+        // Destructuring pattern mirroring the tuple type.
+        let destructure_pat = if arg_idents.len() == 1 {
+            let id = &arg_idents[0];
+            quote! { (#id,) }
+        } else {
+            quote! { (#(#arg_idents),*) }
+        };
+        quote! {
+            let #destructure_pat: #args_tuple_type = match ::postcard::from_bytes(input) {
+                Ok(v) => v,
+                Err(_) => return ::core::result::Result::Err(
+                    ::telepath_firmware::DispatchError::DeserializeError
+                ),
+            };
+            let __ret = #fn_ident(#(#arg_idents),*);
+            match ::postcard::to_slice(&__ret, output) {
+                Ok(s) => ::core::result::Result::Ok(s.len()),
+                Err(_) => ::core::result::Result::Err(
+                    ::telepath_firmware::DispatchError::SerializeError
+                ),
+            }
+        }
+    };
+
+    Ok(quote! {
+        #func
+
+        #[allow(non_snake_case)]
+        fn #shim_ident(
+            input: &[u8],
+            output: &mut [u8],
+        ) -> ::core::result::Result<usize, ::telepath_firmware::DispatchError> {
+            #shim_body
+        }
+
+        pub const #static_ident: ::telepath_firmware::CommandMetadata =
+            ::telepath_firmware::CommandMetadata {
+                name: #fn_name_str,
+                id: ::telepath_firmware::__derive_cmd_id(
+                    #fn_name_str,
+                    #args_type_str,
+                    #ret_type_str,
+                ),
+                invoke: #shim_ident,
+            };
+
+        const _: () = ::core::assert!(
+            ::telepath_firmware::__derive_cmd_id(#fn_name_str, #args_type_str, #ret_type_str)
+                != ::telepath_firmware::CMD_ID_DISCOVERY,
+            "derive_cmd_id returned reserved CMD_ID_DISCOVERY",
+        );
+    })
 }
