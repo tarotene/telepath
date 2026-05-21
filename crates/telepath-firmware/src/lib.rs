@@ -158,9 +158,39 @@ impl<T, const N: usize> TelepathServer<T, N> {
     }
 
     /// Handle a Discovery request (CmdID 0x0000).
-    fn handle_discovery(&self, _output: &mut [u8]) -> Result<usize, DispatchError> {
-        // TODO: serialize CommandMetadata list via postcard into output buffer.
-        Ok(0)
+    ///
+    /// Serializes all registered commands as a postcard sequence of
+    /// [`telepath_wire::DiscoveryEntry`] into `output`.
+    ///
+    /// TODO: paging for command lists exceeding `MAX_PAYLOAD_SIZE` (Issue #3 §B4c).
+    fn handle_discovery(&self, output: &mut [u8]) -> Result<usize, DispatchError> {
+        use serde::ser::{Serialize, SerializeSeq, Serializer};
+
+        struct CommandSeq<'a>(&'a [CommandMetadata]);
+
+        impl Serialize for CommandSeq<'_> {
+            fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                // Exclude the reserved CDP ID (0x0000) so callers cannot
+                // accidentally advertise it as a callable command.
+                let entries = self
+                    .0
+                    .iter()
+                    .filter(|cmd| cmd.id != telepath_wire::CMD_ID_DISCOVERY);
+                let count = entries.clone().count();
+                let mut seq = s.serialize_seq(Some(count))?;
+                for cmd in entries {
+                    seq.serialize_element(&telepath_wire::DiscoveryEntry {
+                        id: cmd.id,
+                        name: cmd.name,
+                    })?;
+                }
+                seq.end()
+            }
+        }
+
+        let written = postcard::to_slice(&CommandSeq(self.commands), output)
+            .map_err(|_| DispatchError::SerializeError)?;
+        Ok(written.len())
     }
 }
 
