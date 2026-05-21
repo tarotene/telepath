@@ -427,6 +427,20 @@ mod tests {
         }
         // --- End of inline pipe ---
 
+        // RAII guard: stops and joins the fw thread even if the test panics.
+        struct FwGuard {
+            running: Arc<AtomicBool>,
+            handle: Option<thread::JoinHandle<()>>,
+        }
+        impl Drop for FwGuard {
+            fn drop(&mut self) {
+                self.running.store(false, Ordering::Release);
+                if let Some(h) = self.handle.take() {
+                    let _ = h.join();
+                }
+            }
+        }
+
         let (fw_t, host_t) = make_pair();
         let running = Arc::new(AtomicBool::new(true));
         let running_fw = Arc::clone(&running);
@@ -437,6 +451,10 @@ mod tests {
                 thread::yield_now();
             }
         });
+        let _guard = FwGuard {
+            running: Arc::clone(&running),
+            handle: Some(fw_handle),
+        };
 
         let mut client = TelepathClient::new(host_t);
         let n = client.discover().expect("discover failed");
@@ -447,9 +465,6 @@ mod tests {
             .expect("ping not in SchemaCache");
         assert_eq!(entry.name, "ping");
         assert_eq!(entry.cmd_id, 0x0001);
-
-        running.store(false, Ordering::Release);
-        fw_handle.join().unwrap();
     }
 
     /// Server-side round-trip: manually encode a request, feed to server, decode the response.
