@@ -28,6 +28,7 @@ use probe_rs::{probe::list::Lister, Permissions};
 use rtt_transport::RttTransport;
 use std::time::Duration;
 use telepath_host::TelepathClient;
+use telepath_wire::cmd_id::derive_cmd_id;
 
 // ---------------------------------------------------------------------------
 // CLI definition
@@ -61,7 +62,7 @@ fn parse_hex_u64(s: &str) -> Result<u64, String> {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Send a ping (CmdID 0x0001) and print the returned u32.
+    /// Send a ping and print the returned u32.
     Ping,
 }
 
@@ -144,7 +145,7 @@ fn run_repl(client: &mut TelepathClient<RttTransport>) -> anyhow::Result<()> {
 // ---------------------------------------------------------------------------
 
 fn cmd_ping(client: &mut TelepathClient<RttTransport>) -> anyhow::Result<()> {
-    const CMD_PING: u16 = 0x0001;
+    const CMD_PING: u16 = derive_cmd_id("ping", "()", "u32");
 
     client
         .transport_mut()
