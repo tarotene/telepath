@@ -109,6 +109,24 @@ pub struct Response<'a> {
 }
 
 // ---------------------------------------------------------------------------
+// DiscoveryEntry
+// ---------------------------------------------------------------------------
+
+/// A single entry returned by the Command Discovery Protocol (CmdID 0x0000).
+///
+/// The firmware serializes all registered commands as a postcard sequence of
+/// these entries in response to a CDP request. Schema fingerprints
+/// (`args_schema` / `ret_schema`) are deferred to Issue #3 §B4b.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveryEntry<'a> {
+    /// 16-bit command ID derived by [`telepath_wire::cmd_id::derive_cmd_id`].
+    pub id: u16,
+    /// Rust function name of the registered command.
+    #[serde(borrow)]
+    pub name: &'a str,
+}
+
+// ---------------------------------------------------------------------------
 // WireError
 // ---------------------------------------------------------------------------
 
