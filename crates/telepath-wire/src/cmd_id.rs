@@ -88,22 +88,27 @@ pub const fn fnv1a_16(bytes: &[u8]) -> u16 {
 /// function is safe to call from `no_std` firmware and `const` proc-macro contexts.
 ///
 /// If the result would equal [`CMD_ID_DISCOVERY`] (0x0000), the function
-/// rehashes with a `0xFF` salt byte appended — ensuring the reserved discovery
-/// ID is never returned.
+/// loops over descending salt bytes (`0xFF`, `0xFE`, …) until the result is
+/// non-zero — guaranteeing that `CMD_ID_DISCOVERY` is never returned.
 pub const fn derive_cmd_id(name: &str, args_type: &str, ret_type: &str) -> u16 {
     let h = fnv1a_32_continue(FNV_OFFSET_BASIS, name.as_bytes());
     let h = fnv1a_32_continue(h, &[CMD_ID_FIELD_SEP]);
     let h = fnv1a_32_continue(h, args_type.as_bytes());
     let h = fnv1a_32_continue(h, &[CMD_ID_FIELD_SEP]);
     let h = fnv1a_32_continue(h, ret_type.as_bytes());
-    let id = xor_fold(h);
-    if id == CMD_ID_DISCOVERY {
-        // Salt rehash: P(second round == 0x0000) ≈ 2.3e-10.
-        // TODO: if this is ever reported, increment the salt byte to 0xFE, etc.
-        xor_fold(fnv1a_32_continue(h, &[0xFF]))
-    } else {
-        id
+    let mut id = xor_fold(h);
+    let mut h = h;
+    let mut salt = 0xFFu8;
+    while id == CMD_ID_DISCOVERY {
+        h = fnv1a_32_continue(h, &[salt]);
+        id = xor_fold(h);
+        if salt > 0 {
+            salt -= 1;
+        } else {
+            return 0x0001;
+        }
     }
+    id
 }
 
 // ---------------------------------------------------------------------------

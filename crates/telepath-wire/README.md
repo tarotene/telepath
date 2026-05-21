@@ -74,9 +74,9 @@ Migration to a real `postcard-schema` fingerprint is planned once
 ### 0x0000 reservation
 
 `CMD_ID_DISCOVERY` (`0x0000`) is reserved for the Command Discovery Protocol.
-If the raw hash collides with it, `derive_cmd_id` rehashes with a `0xFF` salt
-byte appended, producing a deterministic non-zero fallback
-(P(second collision) ≈ 2.3 × 10⁻¹⁰).
+If the raw hash collides with it, `derive_cmd_id` loops over descending salt
+bytes (`0xFF`, `0xFE`, …) until the result is non-zero — guaranteeing that
+`CMD_ID_DISCOVERY` is never returned.
 
 ### Collision risk
 
