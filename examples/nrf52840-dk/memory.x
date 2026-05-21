@@ -18,3 +18,8 @@ SECTIONS
     KEEP(*(.segger_rtt .segger_rtt.*))
   } > RTT_CTRL
 } INSERT BEFORE .bss;
+
+/* linkme distributed-slice placement: coerces linkme_* / linkm2_* orphan
+   sections into FLASH so cortex-m-rt's .data init does not corrupt them.
+   linkme.x is provided by telepath-firmware via its build.rs OUT_DIR. */
+INCLUDE linkme.x;
