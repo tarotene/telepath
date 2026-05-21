@@ -27,7 +27,7 @@ fn main() -> Result<(), HostError> {
     // Firmware thread: poll the server in a tight loop.
     let running_fw = Arc::clone(&running);
     let fw_handle = thread::spawn(move || {
-        let mut server = TelepathServer::<_, 512>::new(fw_transport, telepath_firmware::COMMANDS());
+        let mut server = TelepathServer::<_, 512>::new(fw_transport, telepath_firmware::commands());
         while running_fw.load(Ordering::Acquire) {
             server.poll();
             // yield_now lets the OS schedule the host thread while the

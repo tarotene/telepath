@@ -22,7 +22,7 @@
 //!     Ok(())
 //! }
 //!
-//! let mut server = TelepathServer::<_, 512>::new(transport, &COMMANDS);
+//! let mut server = TelepathServer::<_, 512>::new(transport, telepath_firmware::commands());
 //! loop { server.poll(); }
 //! ```
 #![no_std]
@@ -73,13 +73,12 @@ pub struct CommandMetadata {
 
 /// All commands registered via `#[command]`, collected at link time.
 ///
-/// Use [`COMMANDS()`] to access this as a `&'static [CommandMetadata]`.
+/// Use [`commands()`] to access this as a `&'static [CommandMetadata]`.
 #[linkme::distributed_slice]
 pub static TELEPATH_COMMANDS: [CommandMetadata] = [..];
 
 /// Returns the complete set of commands registered by `#[command]`.
-#[allow(non_snake_case)]
-pub fn COMMANDS() -> &'static [CommandMetadata] {
+pub fn commands() -> &'static [CommandMetadata] {
     &TELEPATH_COMMANDS
 }
 
@@ -116,7 +115,7 @@ pub struct TelepathServer<T, const N: usize> {
     transport: T,
     rx_accum: FrameAccumulator<N>,
     tx_buf: [u8; N],
-    /// Command registry slice. Pass `telepath_firmware::COMMANDS()` for the
+    /// Command registry slice. Pass `telepath_firmware::commands()` for the
     /// full linkme-populated registry, or a manual slice for testing.
     commands: &'static [CommandMetadata],
 }

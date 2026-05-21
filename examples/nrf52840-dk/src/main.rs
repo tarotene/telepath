@@ -80,7 +80,7 @@ async fn main(_spawner: Spawner) {
     // LED 1 on nRF52840-DK is P0.13, active low.
     let mut led = Output::new(p.P0_13, Level::High, OutputDrive::Standard);
 
-    let mut server = TelepathServer::<RttTransport, 512>::new(rtt_transport, telepath_firmware::COMMANDS());
+    let mut server = TelepathServer::<RttTransport, 512>::new(rtt_transport, telepath_firmware::commands());
 
     let mut tick: u32 = 0;
     loop {
