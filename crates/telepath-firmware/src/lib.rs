@@ -170,8 +170,15 @@ impl<T, const N: usize> TelepathServer<T, N> {
 
         impl Serialize for CommandSeq<'_> {
             fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-                let mut seq = s.serialize_seq(Some(self.0.len()))?;
-                for cmd in self.0 {
+                // Exclude the reserved CDP ID (0x0000) so callers cannot
+                // accidentally advertise it as a callable command.
+                let entries = self
+                    .0
+                    .iter()
+                    .filter(|cmd| cmd.id != telepath_wire::CMD_ID_DISCOVERY);
+                let count = entries.clone().count();
+                let mut seq = s.serialize_seq(Some(count))?;
+                for cmd in entries {
                     seq.serialize_element(&telepath_wire::DiscoveryEntry {
                         id: cmd.id,
                         name: cmd.name,
