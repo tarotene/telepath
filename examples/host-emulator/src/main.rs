@@ -10,28 +10,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
-use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
+use telepath_firmware::{command, CommandMetadata, TelepathServer};
 use telepath_host::{HostError, TelepathClient};
 
 mod loopback;
 
-const CMD_PING: u16 = 0x0001;
-
-/// Ping handler: returns the fixed sentinel value `0xDEAD_BEEF` as a `u32`.
-///
-/// `ShimFn` signature: `fn(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>`
-/// Write serialized bytes into `output` and return the number of bytes written.
-fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
-    let val: u32 = 0xDEAD_BEEF;
-    let written = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-    Ok(written.len())
+#[command]
+fn ping() -> u32 {
+    0xDEAD_BEEF
 }
 
-static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
-    name: "ping",
-    id: CMD_PING,
-    invoke: ping_shim,
-}];
+static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
 
 fn main() -> Result<(), HostError> {
     let (fw_transport, host_transport) = loopback::make_pair();
@@ -51,7 +40,7 @@ fn main() -> Result<(), HostError> {
 
     // Host thread (main): send one request, decode the response, print it.
     let mut client = TelepathClient::new(host_transport);
-    let payload = client.call_raw(CMD_PING, &[])?;
+    let payload = client.call_raw(__TELEPATH_CMD_PING.id, &[])?;
     let val: u32 = postcard::from_bytes(&payload).expect("ping returned invalid u32");
     println!("ping -> 0x{:08X}", val);
 

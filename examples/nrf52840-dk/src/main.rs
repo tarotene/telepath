@@ -3,8 +3,7 @@
 //! Demonstrates a minimal Embassy application that:
 //! 1. Initialises RTT with two channels (channel 0 for debug prints, channel 1
 //!    for Telepath RPC traffic).
-//! 2. Registers the `ping` command (CmdID `0x0001`), which returns
-//!    `0xDEADBEEF: u32`.
+//! 2. Registers the `ping` command, which returns `0xDEADBEEF: u32`.
 //! 3. Spins in a loop calling `server.poll()` to handle incoming RPC requests.
 //!
 //! # Building
@@ -29,7 +28,7 @@ use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use panic_halt as _;
 use rtt_target::{rprintln, rtt_init};
-use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
+use telepath_firmware::{command, CommandMetadata, TelepathServer};
 
 use rtt_transport::RttTransport;
 
@@ -38,19 +37,12 @@ use rtt_transport::RttTransport;
 // ---------------------------------------------------------------------------
 
 /// Ping command: no arguments, returns `0xDEADBEEF: u32`.
-///
-/// CmdID `0x0001` — the simplest possible sanity-check command.
-fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
-    let val: u32 = 0xDEAD_BEEF;
-    let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-    Ok(s.len())
+#[command]
+fn ping() -> u32 {
+    0xDEAD_BEEF
 }
 
-static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
-    name: "ping",
-    id: 0x0001,
-    invoke: ping_shim,
-}];
+static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
 
 // ---------------------------------------------------------------------------
 // Embassy main
