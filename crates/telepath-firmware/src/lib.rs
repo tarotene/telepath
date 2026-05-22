@@ -174,7 +174,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
     /// Handle a Discovery request (CmdID 0x0000).
     ///
     /// Writes a postcard sequence `varint(count) ++ DiscoveryEntry × count`
-    /// into `output`. Each entry includes postcard-encoded schema fingerprints
+    /// into `output`. Each entry includes postcard-serialized schema bytes
     /// for the argument tuple and return type.
     ///
     /// The sequence is written entry-by-entry rather than via `serialize_seq`
@@ -193,9 +193,15 @@ impl<T, const N: usize> TelepathServer<T, N> {
             .map_err(|_| DispatchError::SerializeError)?;
         let mut cursor = cnt_bytes.len();
 
+        // Upper bound on postcard_schema::schema::NamedType bytes for a single
+        // command schema. Measured empirically: typical primitive schemas are
+        // 20–60 bytes. 128 bytes gives ~2× headroom for deeply nested types.
+        // Exceeding this limit returns SerializeError at discovery time.
+        const SCHEMA_SCRATCH_LEN: usize = 128;
+
         // Scratch buffers for schema serialization; reused on each iteration.
-        let mut args_scratch = [0u8; 128];
-        let mut ret_scratch = [0u8; 128];
+        let mut args_scratch = [0u8; SCHEMA_SCRATCH_LEN];
+        let mut ret_scratch = [0u8; SCHEMA_SCRATCH_LEN];
 
         for cmd in self
             .commands
