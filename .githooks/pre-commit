@@ -1,19 +1,11 @@
 #!/usr/bin/env sh
-# pre-commit hook: enforce formatting and clippy before every commit.
 set -eu
 
-echo "[pre-commit] Checking formatting..."
-cargo fmt --all -- --check || {
+echo "[pre-commit] Running format check via just..."
+just fmt-check || {
     echo ""
-    echo "  Formatting check failed. Run 'cargo fmt --all' to fix, then re-stage."
+    echo "  Format check failed. Run 'just fmt' to fix, then re-stage."
     exit 1
 }
 
-echo "[pre-commit] Running clippy..."
-cargo clippy --workspace -- -D warnings || {
-    echo ""
-    echo "  Clippy check failed. Fix the warnings above, then re-stage."
-    exit 1
-}
-
-echo "[pre-commit] All checks passed."
+echo "[pre-commit] OK"

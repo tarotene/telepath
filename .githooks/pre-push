@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "[pre-push] Running clippy..."
+just clippy || {
+    echo ""
+    echo "  Clippy failed. Fix the warnings above, then re-push."
+    exit 1
+}
+
+echo "[pre-push] Running tests..."
+just test || {
+    echo ""
+    echo "  Tests failed. Fix and re-push."
+    exit 1
+}
+
+echo "[pre-push] OK"
