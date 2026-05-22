@@ -174,7 +174,8 @@ impl<T, const N: usize> TelepathServer<T, N> {
     /// Handle a Discovery request (CmdID 0x0000).
     ///
     /// Writes a postcard sequence `varint(count) ++ DiscoveryEntry × count`
-    /// into `output`. Each entry includes postcard-serialized schema bytes
+<<<<<<< HEAD
+    /// into `output`. Each entry includes postcard-encoded schema fingerprints
     /// for the argument tuple and return type.
     ///
     /// The sequence is written entry-by-entry rather than via `serialize_seq`
