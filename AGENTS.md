@@ -112,7 +112,7 @@ just ci
 After cloning, contributors MUST run:
 
 ```
-git config core.hooksPath .githooks
+git config --local core.hooksPath .githooks
 ```
 
 - `pre-commit` → `just fmt-check` (sub-second; runs on every commit)

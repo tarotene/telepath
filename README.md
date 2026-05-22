@@ -93,7 +93,7 @@ commit and push time. They are **not active by default** — Git reads hooks fro
 Run once per clone to wire them up:
 
 ```sh
-git config core.hooksPath .githooks
+git config --local core.hooksPath .githooks
 ```
 
 | Hook | Runs on | Action | Typical wall time |
