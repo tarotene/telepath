@@ -46,6 +46,9 @@ pub enum HostError {
     /// A discovery page returned zero entries while `offset < total`, indicating
     /// a buggy or misbehaving firmware to prevent an infinite pagination loop.
     DiscoveryStalled,
+    /// A discovery page returned unexpected metadata (wrong echoed offset or
+    /// inconsistent total), indicating a misbehaving firmware.
+    DiscoveryProtocolError,
 }
 
 // ---------------------------------------------------------------------------
@@ -150,12 +153,25 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     pub fn discover(&mut self) -> Result<usize, HostError> {
         self.schema_cache = SchemaCache::new();
         let mut offset = 0u16;
+        let mut expected_total: Option<u16> = None;
         loop {
             let req_payload = postcard::to_allocvec(&DiscoveryRequest { offset })
                 .map_err(|_| HostError::SerdeError)?;
             let raw = self.call_raw(CMD_ID_DISCOVERY, &req_payload)?;
             let page: DiscoveryPage<'_> =
                 postcard::from_bytes(&raw).map_err(|_| HostError::SerdeError)?;
+
+            // Validate that the firmware echoed the offset we requested.
+            if page.offset != offset {
+                return Err(HostError::DiscoveryProtocolError);
+            }
+            // Validate that page.total is consistent across all pages.
+            match expected_total {
+                None => expected_total = Some(page.total),
+                Some(t) if t != page.total => return Err(HostError::DiscoveryProtocolError),
+                _ => {}
+            }
+
             let (count, mut rest): (u32, &[u8]) =
                 postcard::take_from_bytes(page.entries).map_err(|_| HostError::SerdeError)?;
             for _ in 0..count {

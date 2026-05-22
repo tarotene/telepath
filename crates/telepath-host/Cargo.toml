@@ -10,7 +10,6 @@ telepath-wire = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["alloc"] }
 cobs = "0.2"
-postcard-schema = { workspace = true, features = ["use-std"] }
 
 [dev-dependencies]
 telepath-firmware = { workspace = true }

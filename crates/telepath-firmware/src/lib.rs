@@ -175,7 +175,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
     ///
     /// Builds a [`telepath_wire::DiscoveryPage`] containing entries starting at
     /// `request.offset`, limited by `MAX_PAYLOAD_SIZE`. Each entry includes
-    /// postcard-encoded schema fingerprints for the argument tuple and return type.
+    /// postcard-serialized schema bytes for the argument tuple and return type.
     ///
     /// Empty `input` is treated as `offset=0` for backward compatibility with
     /// hosts that send raw discovery requests without a `DiscoveryRequest` payload.
@@ -196,9 +196,13 @@ impl<T, const N: usize> TelepathServer<T, N> {
             .filter(|c| c.id != telepath_wire::CMD_ID_DISCOVERY)
             .count() as u16;
 
-        // Raw entry bytes accumulated here (without the count prefix).
-        // 240 bytes leaves budget for the DiscoveryPage header when serialized.
-        const ENTRIES_RAW_MAX: usize = 240;
+        // DiscoveryPage header overhead: ≤3 B for total (u16 varint) +
+        // ≤3 B for offset (u16 varint) + ≤5 B for the entries-slice length
+        // varint. 16 B is a conservative bound; derived from MAX_PAYLOAD_SIZE
+        // so the entries budget updates automatically if the limit changes.
+        const PAGE_HEADER_BUDGET: usize = 16;
+        const ENTRIES_RAW_MAX: usize = MAX_PAYLOAD_SIZE - PAGE_HEADER_BUDGET;
+
         let mut raw_entries = [0u8; ENTRIES_RAW_MAX];
         let mut raw_cursor = 0usize;
         let mut page_count = 0u32;
@@ -209,7 +213,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
         // Exceeding this limit returns SerializeError at discovery time.
         const SCHEMA_SCRATCH_LEN: usize = 128;
 
-        // Scratch buffers for schema serialization; reused on each iteration.
+        // Per-entry scratch buffers; reused each iteration.
         let mut args_scratch = [0u8; SCHEMA_SCRATCH_LEN];
         let mut ret_scratch = [0u8; SCHEMA_SCRATCH_LEN];
 
@@ -237,7 +241,13 @@ impl<T, const N: usize> TelepathServer<T, N> {
             let entry_size = entry_bytes.len();
 
             if raw_cursor + entry_size > ENTRIES_RAW_MAX {
-                break; // page is full
+                if raw_cursor == 0 {
+                    // This entry alone exceeds the page budget; it can never
+                    // fit regardless of paging. Signal a hard error so the host
+                    // receives a SystemError instead of an infinite stall.
+                    return Err(DispatchError::SerializeError);
+                }
+                break; // page is full — more entries on next page
             }
             raw_entries[raw_cursor..raw_cursor + entry_size].copy_from_slice(entry_bytes);
             raw_cursor += entry_size;
