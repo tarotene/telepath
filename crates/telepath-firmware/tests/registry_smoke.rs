@@ -1,9 +1,12 @@
 // Integration test: verify that #[command]-annotated functions appear in the
 // linkme-collected commands() slice.
 //
-// Each tests/*.rs compiles to a separate binary, so only the #[command] items
-// defined here (alpha, beta) land in TELEPATH_COMMANDS for this binary.
-// That isolation makes exact-count assertions safe.
+// `#[linkme::distributed_slice]` collects entries from every crate linked into
+// the binary, not only items defined in this file.  The exact-count assertions
+// below are safe because (a) each tests/*.rs is compiled as its own binary so
+// no other integration-test crate contributes entries, and (b) the
+// telepath-firmware library itself registers no commands — only the two
+// `#[command]` items defined here (alpha, beta) are linked in.
 
 use telepath_firmware::{command, commands};
 
@@ -37,8 +40,8 @@ fn registry_has_exactly_two_commands() {
     assert_eq!(
         commands().len(),
         2,
-        "this binary defines exactly alpha + beta; \
-         a linker-section regression would change the count"
+        "expected exactly alpha + beta; \
+         a new #[command] in the library or a linker-section regression would change the count"
     );
 }
 
