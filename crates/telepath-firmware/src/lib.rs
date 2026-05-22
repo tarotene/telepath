@@ -163,7 +163,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
         output: &mut [u8],
     ) -> Result<usize, DispatchError> {
         if cmd_id == telepath_wire::CMD_ID_DISCOVERY {
-            return self.handle_discovery(output);
+            return self.handle_discovery(input, output);
         }
         let cmd = self
             .find_command(cmd_id)
@@ -171,27 +171,41 @@ impl<T, const N: usize> TelepathServer<T, N> {
         (cmd.invoke)(input, output)
     }
 
-    /// Handle a Discovery request (CmdID 0x0000).
+    /// Handle a Discovery request (CmdID 0x0000) with offset-based pagination.
     ///
-    /// Writes a postcard sequence `varint(count) ++ DiscoveryEntry × count`
-    /// into `output`. Each entry includes postcard-serialized schema bytes
-    /// for the argument tuple and return type.
+    /// Builds a [`telepath_wire::DiscoveryPage`] containing entries starting at
+    /// `request.offset`, limited by `MAX_PAYLOAD_SIZE`. Each entry includes
+    /// postcard-serialized schema bytes for the argument tuple and return type.
     ///
-    /// The sequence is written entry-by-entry rather than via `serialize_seq`
-    /// because schema bytes are held in per-iteration stack scratch buffers
-    /// whose lifetimes cannot span `SerializeSeq::serialize_element` calls.
-    fn handle_discovery(&self, output: &mut [u8]) -> Result<usize, DispatchError> {
-        let count = self
+    /// Empty `input` is treated as `offset=0` for backward compatibility with
+    /// hosts that send raw discovery requests without a `DiscoveryRequest` payload.
+    fn handle_discovery(&self, input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+        use telepath_wire::{DiscoveryPage, DiscoveryRequest};
+
+        let offset = if input.is_empty() {
+            0u16
+        } else {
+            postcard::from_bytes::<DiscoveryRequest>(input)
+                .map_err(|_| DispatchError::DeserializeError)?
+                .offset
+        };
+
+        let total = self
             .commands
             .iter()
             .filter(|c| c.id != telepath_wire::CMD_ID_DISCOVERY)
-            .count();
+            .count() as u16;
 
-        // Write sequence length prefix as postcard varint(u32), matching the
-        // encoding that postcard uses for sequence lengths.
-        let cnt_bytes = postcard::to_slice(&(count as u32), output)
-            .map_err(|_| DispatchError::SerializeError)?;
-        let mut cursor = cnt_bytes.len();
+        // DiscoveryPage header overhead: ≤3 B for total (u16 varint) +
+        // ≤3 B for offset (u16 varint) + ≤5 B for the entries-slice length
+        // varint. 16 B is a conservative bound; derived from MAX_PAYLOAD_SIZE
+        // so the entries budget updates automatically if the limit changes.
+        const PAGE_HEADER_BUDGET: usize = 16;
+        const ENTRIES_RAW_MAX: usize = MAX_PAYLOAD_SIZE - PAGE_HEADER_BUDGET;
+
+        let mut raw_entries = [0u8; ENTRIES_RAW_MAX];
+        let mut raw_cursor = 0usize;
+        let mut page_count = 0u32;
 
         // Upper bound on postcard_schema::schema::NamedType bytes for a single
         // command schema. Measured empirically: typical primitive schemas are
@@ -199,15 +213,17 @@ impl<T, const N: usize> TelepathServer<T, N> {
         // Exceeding this limit returns SerializeError at discovery time.
         const SCHEMA_SCRATCH_LEN: usize = 128;
 
-        // Scratch buffers for schema serialization; reused on each iteration.
+        // Per-entry scratch buffers; reused each iteration.
         let mut args_scratch = [0u8; SCHEMA_SCRATCH_LEN];
         let mut ret_scratch = [0u8; SCHEMA_SCRATCH_LEN];
 
-        for cmd in self
+        let iter = self
             .commands
             .iter()
             .filter(|c| c.id != telepath_wire::CMD_ID_DISCOVERY)
-        {
+            .skip(offset as usize);
+
+        for cmd in iter {
             let n_args =
                 (cmd.args_schema)(&mut args_scratch).map_err(|_| DispatchError::SerializeError)?;
             let n_ret =
@@ -218,15 +234,42 @@ impl<T, const N: usize> TelepathServer<T, N> {
                 args_schema: &args_scratch[..n_args],
                 ret_schema: &ret_scratch[..n_ret],
             };
-            // Each to_slice call borrows `entry` (which borrows the scratch
-            // buffers) only until the call returns, so scratches can be reused
-            // on the next iteration.
-            let entry_bytes = postcard::to_slice(&entry, &mut output[cursor..])
+            // Pre-measure the entry by serializing into a temp scratch.
+            let mut entry_tmp = [0u8; 300];
+            let entry_bytes = postcard::to_slice(&entry, &mut entry_tmp)
                 .map_err(|_| DispatchError::SerializeError)?;
-            cursor += entry_bytes.len();
+            let entry_size = entry_bytes.len();
+
+            if raw_cursor + entry_size > ENTRIES_RAW_MAX {
+                if raw_cursor == 0 {
+                    // This entry alone exceeds the page budget; it can never
+                    // fit regardless of paging. Signal a hard error so the host
+                    // receives a SystemError instead of an infinite stall.
+                    return Err(DispatchError::SerializeError);
+                }
+                break; // page is full — more entries on next page
+            }
+            raw_entries[raw_cursor..raw_cursor + entry_size].copy_from_slice(entry_bytes);
+            raw_cursor += entry_size;
+            page_count += 1;
         }
 
-        Ok(cursor)
+        // Build the entries field: varint(count) ++ raw_entries[..raw_cursor].
+        let mut entries_combined = [0u8; ENTRIES_RAW_MAX + 5];
+        let cnt_bytes = postcard::to_slice(&page_count, &mut entries_combined)
+            .map_err(|_| DispatchError::SerializeError)?;
+        let cnt_len = cnt_bytes.len();
+        entries_combined[cnt_len..cnt_len + raw_cursor].copy_from_slice(&raw_entries[..raw_cursor]);
+        let entries_len = cnt_len + raw_cursor;
+
+        let page = DiscoveryPage {
+            total,
+            offset,
+            entries: &entries_combined[..entries_len],
+        };
+        let written =
+            postcard::to_slice(&page, output).map_err(|_| DispatchError::SerializeError)?;
+        Ok(written.len())
     }
 }
 

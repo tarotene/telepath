@@ -7,7 +7,7 @@ use std::vec::Vec;
 use telepath_firmware::{command, commands, transport, TelepathServer};
 use telepath_wire::framing::{cobs_decode, cobs_encode};
 use telepath_wire::{
-    DiscoveryEntry, PacketType, Request, Response, ResponseStatus, CMD_ID_DISCOVERY,
+    DiscoveryEntry, DiscoveryPage, PacketType, Request, Response, ResponseStatus, CMD_ID_DISCOVERY,
 };
 
 // ---------------------------------------------------------------------------
@@ -91,13 +91,20 @@ fn discovery_returns_registered_commands() {
     assert_eq!(resp.seq_no, 7);
     assert_eq!(resp.status, ResponseStatus::Ok, "CDP must succeed");
 
-    // ── Decode postcard sequence: varint(count) ++ DiscoveryEntry × count ─
-    let (count, mut rest): (u32, &[u8]) = postcard::take_from_bytes(resp.payload).unwrap();
+    // ── Decode DiscoveryPage and its embedded entry sequence ──────────────
+    let page: DiscoveryPage<'_> = postcard::from_bytes(resp.payload).unwrap();
+    assert_eq!(
+        page.total as usize,
+        commands().len(),
+        "page.total must equal the total registered command count"
+    );
+    assert_eq!(page.offset, 0, "first page must start at offset 0");
 
+    let (count, mut rest): (u32, &[u8]) = postcard::take_from_bytes(page.entries).unwrap();
     assert_eq!(
         count as usize,
         commands().len(),
-        "discovery must report all registered commands"
+        "entry count must match total for single-page registration"
     );
     assert!(count >= 2, "expected at least foo + bar");
 

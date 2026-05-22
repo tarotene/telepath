@@ -134,6 +134,37 @@ pub struct DiscoveryEntry<'a> {
 }
 
 // ---------------------------------------------------------------------------
+// Discovery paging types (CmdID 0x0000 with offset-based pagination)
+// ---------------------------------------------------------------------------
+
+/// Request payload for the Command Discovery Protocol when pagination is needed.
+///
+/// Empty `args` (legacy) is treated as `DiscoveryRequest { offset: 0 }` by
+/// the firmware for backward compatibility. Non-empty args must deserialize
+/// to this type.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct DiscoveryRequest {
+    /// Index of the first entry to include in this response page.
+    pub offset: u16,
+}
+
+/// Response payload for a paged Command Discovery Protocol response.
+///
+/// `entries` carries a raw postcard sequence: `varint(count) ++ DiscoveryEntry × count`.
+/// The host iterates pages until `offset + count_this_page >= total`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveryPage<'a> {
+    /// Total number of registered commands (across all pages).
+    pub total: u16,
+    /// Offset this page starts at (echoes the request's `offset` field).
+    pub offset: u16,
+    /// Serialized `varint(count) ++ DiscoveryEntry × count` for entries in
+    /// this page. Opaque to this crate; parse with `postcard::take_from_bytes`.
+    #[serde(borrow)]
+    pub entries: &'a [u8],
+}
+
+// ---------------------------------------------------------------------------
 // WireError
 // ---------------------------------------------------------------------------
 

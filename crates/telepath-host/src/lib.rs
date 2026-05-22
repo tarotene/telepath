@@ -13,7 +13,10 @@
 //! let result = client.call_raw(0x0001, &args_bytes).unwrap();
 //! ```
 
-use telepath_wire::{framing::MAX_FRAME_SIZE, DiscoveryEntry, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE};
+use telepath_wire::{
+    framing::MAX_FRAME_SIZE, DiscoveryEntry, DiscoveryPage, DiscoveryRequest, CMD_ID_DISCOVERY,
+    MAX_PAYLOAD_SIZE,
+};
 
 // ---------------------------------------------------------------------------
 // HostError
@@ -40,6 +43,12 @@ pub enum HostError {
     FrameTooLarge,
     /// COBS framing error (malformed frame received from target).
     FramingError,
+    /// A discovery page returned zero entries while `offset < total`, indicating
+    /// a buggy or misbehaving firmware to prevent an infinite pagination loop.
+    DiscoveryStalled,
+    /// A discovery page returned unexpected metadata (wrong echoed offset or
+    /// inconsistent total), indicating a misbehaving firmware.
+    DiscoveryProtocolError,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,26 +138,60 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         }
     }
 
-    /// Run the Command Discovery Protocol.
+    /// Run the Command Discovery Protocol, paginating until all commands are cached.
     ///
-    /// Sends a [`CMD_ID_DISCOVERY`] request and populates the schema cache with
-    /// the returned command list. Returns the number of commands discovered.
+    /// Issues [`CMD_ID_DISCOVERY`] requests with successive `offset` values until
+    /// `offset >= total`. Populates the schema cache from all pages. Returns the
+    /// total number of commands discovered across all pages.
     ///
     /// The cache is fully reset at the start so repeated calls reflect the
     /// latest firmware state. `args_schema` and `ret_schema` are populated as
     /// opaque postcard-encoded `postcard_schema::schema::NamedType` bytes.
+    ///
+    /// Returns [`HostError::DiscoveryStalled`] if a page returns zero entries
+    /// while `offset < total`, guarding against infinite loops on buggy firmware.
     pub fn discover(&mut self) -> Result<usize, HostError> {
         self.schema_cache = SchemaCache::new();
-        let payload = self.call_raw(CMD_ID_DISCOVERY, &[])?;
-        let entries: Vec<DiscoveryEntry<'_>> =
-            postcard::from_bytes(&payload).map_err(|_| HostError::SerdeError)?;
-        for entry in &entries {
-            self.schema_cache.insert(SchemaEntry {
-                name: entry.name.to_owned(),
-                cmd_id: entry.id,
-                args_schema: entry.args_schema.to_vec(),
-                ret_schema: entry.ret_schema.to_vec(),
-            });
+        let mut offset = 0u16;
+        let mut expected_total: Option<u16> = None;
+        loop {
+            let req_payload = postcard::to_allocvec(&DiscoveryRequest { offset })
+                .map_err(|_| HostError::SerdeError)?;
+            let raw = self.call_raw(CMD_ID_DISCOVERY, &req_payload)?;
+            let page: DiscoveryPage<'_> =
+                postcard::from_bytes(&raw).map_err(|_| HostError::SerdeError)?;
+
+            // Validate that the firmware echoed the offset we requested.
+            if page.offset != offset {
+                return Err(HostError::DiscoveryProtocolError);
+            }
+            // Validate that page.total is consistent across all pages.
+            match expected_total {
+                None => expected_total = Some(page.total),
+                Some(t) if t != page.total => return Err(HostError::DiscoveryProtocolError),
+                _ => {}
+            }
+
+            let (count, mut rest): (u32, &[u8]) =
+                postcard::take_from_bytes(page.entries).map_err(|_| HostError::SerdeError)?;
+            for _ in 0..count {
+                let (entry, next): (DiscoveryEntry<'_>, &[u8]) =
+                    postcard::take_from_bytes(rest).map_err(|_| HostError::SerdeError)?;
+                self.schema_cache.insert(SchemaEntry {
+                    name: entry.name.to_owned(),
+                    cmd_id: entry.id,
+                    args_schema: entry.args_schema.to_vec(),
+                    ret_schema: entry.ret_schema.to_vec(),
+                });
+                rest = next;
+            }
+            offset = offset.saturating_add(count as u16);
+            if offset >= page.total {
+                break;
+            }
+            if count == 0 {
+                return Err(HostError::DiscoveryStalled);
+            }
         }
         Ok(self.schema_cache.len())
     }
