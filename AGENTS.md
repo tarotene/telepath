@@ -106,3 +106,15 @@ just ci
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
+
+## Git Hooks
+
+After cloning, contributors MUST run:
+
+```
+git config --local core.hooksPath .githooks
+```
+
+- `pre-commit` → `just fmt-check` (sub-second; runs on every commit)
+- `pre-push` → `just clippy` + `just test` (~30 s; runs before every push)
+- `just ci` (fmt-check + clippy + test + emulator) SHOULD be run before opening a PR.

@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v just >/dev/null 2>&1; then
+    echo "[pre-push] 'just' not found on PATH."
+    echo "  Install via 'cargo install just' (see README.md -> Prerequisites)."
+    echo "  Then re-run the failing git command."
+    exit 1
+fi
+
+echo "[pre-push] Running clippy..."
+just clippy || {
+    echo ""
+    echo "  Clippy failed. Fix the warnings above, then re-push."
+    exit 1
+}
+
+echo "[pre-push] Running tests..."
+just test || {
+    echo ""
+    echo "  Tests failed. Fix and re-push."
+    exit 1
+}
+
+echo "[pre-push] OK"

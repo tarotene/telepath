@@ -84,6 +84,41 @@ Switching to an MCU is purely a transport swap.
 | `probe-rs` | Flash and run firmware on nRF52840-DK |
 | `just` | Task runner (optional but recommended) |
 
+## Git hooks setup
+
+The repository ships hooks under `.githooks/` that enforce quality gates at
+commit and push time. They are **not active by default** — Git reads hooks from
+`.git/hooks/` unless told otherwise.
+
+Run once per clone to wire them up:
+
+```sh
+git config --local core.hooksPath .githooks
+```
+
+| Hook | Runs on | Action | Typical wall time |
+|------|---------|--------|-------------------|
+| `pre-commit` | every `git commit` | `just fmt-check` | < 1 s |
+| `pre-push` | every `git push` | `just clippy` + `just test` | ~30 s |
+
+**Why this split?** Commits happen frequently, so `pre-commit` runs only the
+instant format check. Pushes are less frequent and signal intent to share code,
+so `pre-push` runs the slower static analysis and test suite. The full CI gate
+(`just ci`) additionally runs the in-process emulator and is intentionally left
+to CI — see [CI / Quality gates](#ci--quality-gates).
+
+### Troubleshooting
+
+**Hook does not run.** Check `git config core.hooksPath`. If it prints a path
+other than `.githooks` (e.g. `~/.config/git/hooks` set globally), the
+repo-local setting above overrides it once you run the command.
+
+**`just: command not found`.** Install via `cargo install just` or your OS
+package manager.
+
+**Bypass in an emergency.** Pass `--no-verify` to skip hooks:
+`git commit --no-verify`. The CI gate still applies on every PR.
+
 ## Build
 
 ```
