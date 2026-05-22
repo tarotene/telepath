@@ -135,8 +135,8 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     /// the returned command list. Returns the number of commands discovered.
     ///
     /// The cache is fully reset at the start so repeated calls reflect the
-    /// latest firmware state. Schema fingerprints are not yet transmitted
-    /// (Issue #3 §B4b) — `args_schema` / `ret_schema` are empty for now.
+    /// latest firmware state. `args_schema` and `ret_schema` are populated as
+    /// opaque postcard-encoded `postcard_schema::schema::NamedType` bytes.
     pub fn discover(&mut self) -> Result<usize, HostError> {
         self.schema_cache = SchemaCache::new();
         let payload = self.call_raw(CMD_ID_DISCOVERY, &[])?;
@@ -146,8 +146,8 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             self.schema_cache.insert(SchemaEntry {
                 name: entry.name.to_owned(),
                 cmd_id: entry.id,
-                args_schema: Vec::new(),
-                ret_schema: Vec::new(),
+                args_schema: entry.args_schema.to_vec(),
+                ret_schema: entry.ret_schema.to_vec(),
             });
         }
         Ok(self.schema_cache.len())
@@ -332,10 +332,15 @@ mod tests {
                 .map_err(|_| DispatchError::SerializeError)?;
             Ok(s.len())
         }
+        fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {
+            Ok(0)
+        }
         static CMDS: [CommandMetadata; 1] = [CommandMetadata {
             name: "ping",
             id: 0x0001,
             invoke: ping_shim,
+            args_schema: noop_schema,
+            ret_schema: noop_schema,
         }];
 
         // --- Inline blocking pipe (mirrors host-emulator/src/loopback.rs) ---
@@ -465,6 +470,11 @@ mod tests {
             .expect("ping not in SchemaCache");
         assert_eq!(entry.name, "ping");
         assert_eq!(entry.cmd_id, 0x0001);
+        // CMDS uses noop_schema so schema bytes are empty — that's expected for
+        // hand-written fixtures; real #[command] functions produce non-empty bytes.
+        // Verify the host faithfully stored whatever the server sent.
+        assert_eq!(entry.args_schema, Vec::<u8>::new());
+        assert_eq!(entry.ret_schema, Vec::<u8>::new());
     }
 
     /// Server-side round-trip: manually encode a request, feed to server, decode the response.
@@ -480,10 +490,15 @@ mod tests {
             Ok(s.len())
         }
 
+        fn noop_schema_sp(_out: &mut [u8]) -> Result<usize, ()> {
+            Ok(0)
+        }
         static CMDS: [CommandMetadata; 1] = [CommandMetadata {
             name: "ping",
             id: 0x0001,
             invoke: ping_shim,
+            args_schema: noop_schema_sp,
+            ret_schema: noop_schema_sp,
         }];
 
         // Pipe: client writes → server reads, server writes → client reads.

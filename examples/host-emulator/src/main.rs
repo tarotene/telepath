@@ -49,6 +49,14 @@ fn main() -> Result<(), HostError> {
         .get(__TELEPATH_CMD_PING.id)
         .expect("ping not present in SchemaCache after discover");
     assert_eq!(cached.name, "ping");
+    assert!(
+        !cached.args_schema.is_empty(),
+        "ping args_schema must be populated by #[command]"
+    );
+    assert!(
+        !cached.ret_schema.is_empty(),
+        "ping ret_schema must be populated by #[command]"
+    );
 
     // Signal the firmware thread to exit and wait for it.
     running.store(false, Ordering::Release);

@@ -22,8 +22,8 @@
 //! - Renaming `struct Foo { x: u8 }` to `struct Bar { x: u8 }` **changes** the ID.
 //! - Reordering fields inside `Foo` does **not** change the ID.
 //!
-//! TODO: migrate to a real `postcard-schema` fingerprint once `postcard >= 1.2`
-//! is adopted in this workspace (see telepath issue #3).
+//! The ID encodes textual type names, not a structural postcard-schema digest.
+//! A future cmd_id v2 could incorporate a real schema hash (see issue #3).
 //!
 //! ## 0x0000 reservation
 //!

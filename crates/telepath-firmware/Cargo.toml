@@ -12,6 +12,7 @@ telepath-macros = { workspace = true }
 serde = { workspace = true }
 postcard = { workspace = true }
 linkme = { workspace = true }
+postcard-schema = { workspace = true }
 
 [features]
 default = []

@@ -13,3 +13,4 @@ cobs = "0.2"
 
 [dev-dependencies]
 telepath-firmware = { workspace = true }
+postcard-schema = { workspace = true, features = ["use-std"] }

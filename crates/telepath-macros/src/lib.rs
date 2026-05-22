@@ -11,24 +11,35 @@ use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type};
 ///
 /// # What it generates
 ///
-/// For every annotated function the macro emits three additional items:
+/// For every annotated function the macro emits five additional items:
 ///
 /// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>`** —
 ///    deserializes `input` via postcard, calls the original function, and serializes the result
 ///    into `output`.
-/// 2. **`pub const __TELEPATH_CMD_<NAME>: CommandMetadata`** — a `CommandMetadata` const whose
+/// 2. **`fn __telepath_args_schema_<name>(out: &mut [u8]) -> Result<usize, ()>`** —
+///    writes a postcard-encoded `postcard_schema::schema::NamedType` for the argument tuple
+///    into `out` and returns the byte count.
+/// 3. **`fn __telepath_ret_schema_<name>(out: &mut [u8]) -> Result<usize, ()>`** —
+///    same for the return type.
+/// 4. **`pub const __TELEPATH_CMD_<NAME>: CommandMetadata`** — a `CommandMetadata` const whose
 ///    `id` is derived deterministically from the function's signature via
 ///    `derive_cmd_id` at build time.
-/// 3. **`const _: () = assert!(...)`** — build-time assertion that the derived ID is not the
-///    reserved `CMD_ID_DISCOVERY` (0x0000).
+/// 5. **`#[linkme] static __TELEPATH_REG_<NAME>`** — registers the metadata in
+///    [`telepath_firmware::TELEPATH_COMMANDS`] at link time.
 ///
 /// The original function body is preserved unchanged so it remains directly callable.
 ///
 /// # Requirements on the calling crate
 ///
 /// The calling crate must declare the following direct dependencies:
-/// - `telepath-firmware` — provides `CommandMetadata`, `DispatchError`
+/// - `telepath-firmware` — provides `CommandMetadata`, `DispatchError`, and re-exports
+///   `postcard_schema` and `linkme` for use in generated code.
 /// - `postcard` — used in the generated shim for (de)serialization
+///
+/// All argument types and the return type must implement
+/// `postcard_schema::Schema`. Built-in primitives (`u8`, `u32`, `()`,
+/// standard tuples, etc.) already implement it. For user-defined types,
+/// add `#[derive(postcard_schema::Schema)]`.
 ///
 /// # Restrictions
 ///
@@ -160,8 +171,26 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
     // --- Generated identifiers ---
 
     let shim_ident = format_ident!("__telepath_shim_{}", fn_name_str);
+    let args_schema_ident = format_ident!("__telepath_args_schema_{}", fn_name_str);
+    let ret_schema_ident = format_ident!("__telepath_ret_schema_{}", fn_name_str);
     let static_ident = format_ident!("__TELEPATH_CMD_{}", fn_name_str.to_uppercase());
     let reg_ident = format_ident!("__TELEPATH_REG_{}", fn_name_str.to_uppercase());
+
+    // --- Compute args tuple type and ret type tokens for schema writers ---
+
+    let args_schema_type = if arg_types.is_empty() {
+        quote! { () }
+    } else if arg_types.len() == 1 {
+        let t = &*arg_types[0];
+        quote! { (#t,) }
+    } else {
+        quote! { (#(#arg_types),*) }
+    };
+
+    let ret_schema_type = match &func.sig.output {
+        ReturnType::Default => quote! { () },
+        ReturnType::Type(_, ty) => quote! { #ty },
+    };
 
     // --- Build shim body ---
 
@@ -223,6 +252,26 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
             #shim_body
         }
 
+        #[allow(non_snake_case)]
+        fn #args_schema_ident(out: &mut [u8]) -> ::core::result::Result<usize, ()> {
+            ::postcard::to_slice(
+                <#args_schema_type as ::telepath_firmware::__postcard_schema::Schema>::SCHEMA,
+                out,
+            )
+            .map(|s| s.len())
+            .map_err(|_| ())
+        }
+
+        #[allow(non_snake_case)]
+        fn #ret_schema_ident(out: &mut [u8]) -> ::core::result::Result<usize, ()> {
+            ::postcard::to_slice(
+                <#ret_schema_type as ::telepath_firmware::__postcard_schema::Schema>::SCHEMA,
+                out,
+            )
+            .map(|s| s.len())
+            .map_err(|_| ())
+        }
+
         pub const #static_ident: ::telepath_firmware::CommandMetadata =
             ::telepath_firmware::CommandMetadata {
                 name: #fn_name_str,
@@ -232,6 +281,8 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                     #ret_type_str,
                 ),
                 invoke: #shim_ident,
+                args_schema: #args_schema_ident,
+                ret_schema: #ret_schema_ident,
             };
 
         #[allow(non_upper_case_globals, non_snake_case)]
