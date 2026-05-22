@@ -87,9 +87,6 @@ ping -> 0xDEADBEEF
 
 ## Limitations
 
-- The CLI inlines its own COBS + postcard logic instead of using
-  `TelepathClient` directly (see
-  [Issue #2](https://github.com/tarotene/telepath/issues/2)). Wire
-  protocol fixes must currently be applied in two places.
-- Only `ping` is implemented; `discover` and arbitrary command dispatch
-  await the typed-API milestone (roadmap C1).
+- Only `ping` is implemented. `discover` and arbitrary command dispatch
+  await the typed-API milestone (roadmap C1,
+  [tracking issue #3](https://github.com/tarotene/telepath/issues/3)).

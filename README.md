@@ -134,30 +134,23 @@ postcard          = { version = "1", default-features = false }
 ```
 
 ```rust
-use telepath_firmware::{CommandMetadata, DispatchError, TelepathServer};
-use telepath_firmware::transport::Transport;
+use telepath_firmware::{command, TelepathServer};
 
-// 1. Define a shim by hand (until `#[command]` is fully implemented).
-fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
-    let v: u32 = 0xDEAD_BEEF;
-    Ok(postcard::to_slice(&v, output).map_err(|_| DispatchError::SerializeError)?.len())
-}
+// 1. Annotate commands with #[command]. The macro generates a type-erased shim,
+//    a CommandMetadata const, and a linkme registration — no boilerplate required.
+#[command]
+fn ping() -> u32 { 0xDEAD_BEEF }
 
-static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
-    name: "ping", id: 0x0001, invoke: ping_shim,
-}];
-
-// 2. Implement `Transport` for your byte-stream peripheral (UART, RTT, USB …).
+// 2. Implement `transport::Transport` for your byte-stream peripheral
+//    (UART, RTT, USB …).
 //    Non-blocking: `fn read(&mut self, &mut [u8]) -> usize` / `fn write(&mut self, &[u8]) -> usize`.
 
-let mut server = TelepathServer::<MyTransport, 512>::new(transport, &COMMANDS);
+let mut server = TelepathServer::<MyTransport, 512>::new(
+    transport,
+    telepath_firmware::commands(), // linkme-collected at link time
+);
 loop { server.poll(); }
 ```
-
-> ⚠️ **`#[command]` is currently a passthrough stub.** Code generation for shims
-> and metadata registration is planned for Stage B of the
-> [MVP roadmap](https://github.com/tarotene/telepath/issues/3). Until then,
-> define `CommandMetadata` and the shim function manually as shown above.
 
 ### Host side
 

@@ -16,6 +16,7 @@ cargo run -p host-emulator
 
 ```
 ping -> 0xDEADBEEF
+discover -> 1 command(s)
 ```
 
 ## What this demonstrates
@@ -53,6 +54,3 @@ a `std::io::Read` transport.
 - Realtime latency, RTT-control-block contention, and partial-write
   behaviour on embedded hardware are not modelled. Use
   `examples/nrf52840-dk` for those scenarios.
-- Command Discovery (`cmd_id = 0x0000`) returns an empty payload —
-  `handle_discovery` is still a TODO stub. See the
-  [tracking issue](https://github.com/tarotene/telepath/issues/3) for B4.
