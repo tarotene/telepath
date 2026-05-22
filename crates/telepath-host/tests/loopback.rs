@@ -118,10 +118,16 @@ fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
     Ok(written.len())
 }
 
+fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {
+    Ok(0)
+}
+
 static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
     name: "ping",
     id: 0x0001,
     invoke: ping_shim,
+    args_schema: noop_schema,
+    ret_schema: noop_schema,
 }];
 
 #[test]

@@ -43,6 +43,8 @@ pub use telepath_wire::{
 #[doc(hidden)]
 pub use linkme as __linkme;
 #[doc(hidden)]
+pub use postcard_schema as __postcard_schema;
+#[doc(hidden)]
 pub use telepath_wire::cmd_id::derive_cmd_id as __derive_cmd_id;
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,12 @@ pub use telepath_wire::cmd_id::derive_cmd_id as __derive_cmd_id;
 /// Receives a postcard-serialized argument slice, writes a postcard-serialized
 /// result into `output`, and returns the number of bytes written.
 pub type ShimFn = fn(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>;
+
+/// Type alias for schema-writer function pointers.
+///
+/// Writes a postcard-serialized `postcard_schema::schema::NamedType` into `out`
+/// and returns the number of bytes written.
+pub type SchemaFn = fn(out: &mut [u8]) -> Result<usize, ()>;
 
 /// Static metadata for a single registered RPC command.
 ///
@@ -69,6 +77,12 @@ pub struct CommandMetadata {
     /// Type-erased shim that deserializes args, calls the function, and
     /// serializes the result.
     pub invoke: ShimFn,
+    /// Writes the postcard-encoded args-tuple `NamedType` schema into the
+    /// provided buffer. Returns the byte count written.
+    pub args_schema: SchemaFn,
+    /// Writes the postcard-encoded return-type `NamedType` schema into the
+    /// provided buffer. Returns the byte count written.
+    pub ret_schema: SchemaFn,
 }
 
 /// All commands registered via `#[command]`, collected at link time.
@@ -159,38 +173,54 @@ impl<T, const N: usize> TelepathServer<T, N> {
 
     /// Handle a Discovery request (CmdID 0x0000).
     ///
-    /// Serializes all registered commands as a postcard sequence of
-    /// [`telepath_wire::DiscoveryEntry`] into `output`.
+    /// Writes a postcard sequence `varint(count) ++ DiscoveryEntry × count`
+    /// into `output`. Each entry includes postcard-encoded schema fingerprints
+    /// for the argument tuple and return type.
     ///
-    /// TODO: paging for command lists exceeding `MAX_PAYLOAD_SIZE` (Issue #3 §B4c).
+    /// The sequence is written entry-by-entry rather than via `serialize_seq`
+    /// because schema bytes are held in per-iteration stack scratch buffers
+    /// whose lifetimes cannot span `SerializeSeq::serialize_element` calls.
     fn handle_discovery(&self, output: &mut [u8]) -> Result<usize, DispatchError> {
-        use serde::ser::{Serialize, SerializeSeq, Serializer};
+        let count = self
+            .commands
+            .iter()
+            .filter(|c| c.id != telepath_wire::CMD_ID_DISCOVERY)
+            .count();
 
-        struct CommandSeq<'a>(&'a [CommandMetadata]);
+        // Write sequence length prefix as postcard varint(u32), matching the
+        // encoding that postcard uses for sequence lengths.
+        let cnt_bytes = postcard::to_slice(&(count as u32), output)
+            .map_err(|_| DispatchError::SerializeError)?;
+        let mut cursor = cnt_bytes.len();
 
-        impl Serialize for CommandSeq<'_> {
-            fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-                // Exclude the reserved CDP ID (0x0000) so callers cannot
-                // accidentally advertise it as a callable command.
-                let entries = self
-                    .0
-                    .iter()
-                    .filter(|cmd| cmd.id != telepath_wire::CMD_ID_DISCOVERY);
-                let count = entries.clone().count();
-                let mut seq = s.serialize_seq(Some(count))?;
-                for cmd in entries {
-                    seq.serialize_element(&telepath_wire::DiscoveryEntry {
-                        id: cmd.id,
-                        name: cmd.name,
-                    })?;
-                }
-                seq.end()
-            }
+        // Scratch buffers for schema serialization; reused on each iteration.
+        let mut args_scratch = [0u8; 128];
+        let mut ret_scratch = [0u8; 128];
+
+        for cmd in self
+            .commands
+            .iter()
+            .filter(|c| c.id != telepath_wire::CMD_ID_DISCOVERY)
+        {
+            let n_args =
+                (cmd.args_schema)(&mut args_scratch).map_err(|_| DispatchError::SerializeError)?;
+            let n_ret =
+                (cmd.ret_schema)(&mut ret_scratch).map_err(|_| DispatchError::SerializeError)?;
+            let entry = telepath_wire::DiscoveryEntry {
+                id: cmd.id,
+                name: cmd.name,
+                args_schema: &args_scratch[..n_args],
+                ret_schema: &ret_scratch[..n_ret],
+            };
+            // Each to_slice call borrows `entry` (which borrows the scratch
+            // buffers) only until the call returns, so scratches can be reused
+            // on the next iteration.
+            let entry_bytes = postcard::to_slice(&entry, &mut output[cursor..])
+                .map_err(|_| DispatchError::SerializeError)?;
+            cursor += entry_bytes.len();
         }
 
-        let written = postcard::to_slice(&CommandSeq(self.commands), output)
-            .map_err(|_| DispatchError::SerializeError)?;
-        Ok(written.len())
+        Ok(cursor)
     }
 }
 
@@ -290,10 +320,16 @@ mod tests {
         Ok(0)
     }
 
+    fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {
+        Ok(0)
+    }
+
     static TEST_COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
         name: "ping",
         id: 0x0001,
         invoke: noop_shim,
+        args_schema: noop_schema,
+        ret_schema: noop_schema,
     }];
 
     struct FakeTransport;
@@ -338,6 +374,8 @@ mod tests {
         name: "ping",
         id: 0x0001,
         invoke: ping_shim,
+        args_schema: noop_schema,
+        ret_schema: noop_schema,
     }];
 
     /// Loopback transport: bytes written are available for reading.

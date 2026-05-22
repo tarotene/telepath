@@ -105,6 +105,17 @@ fn discovery_returns_registered_commands() {
     let mut ids: Vec<u16> = Vec::new();
     for _ in 0..count {
         let (entry, next): (DiscoveryEntry<'_>, &[u8]) = postcard::take_from_bytes(rest).unwrap();
+        // Schema fingerprints must be populated by the #[command] macro.
+        assert!(
+            !entry.args_schema.is_empty(),
+            "{} args_schema must be non-empty",
+            entry.name
+        );
+        assert!(
+            !entry.ret_schema.is_empty(),
+            "{} ret_schema must be non-empty",
+            entry.name
+        );
         names.push(entry.name);
         ids.push(entry.id);
         rest = next;
