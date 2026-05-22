@@ -16,6 +16,7 @@ cargo run -p host-emulator
 
 ```
 ping -> 0xDEADBEEF
+discover -> 1 command(s)
 ```
 
 ## What this demonstrates
@@ -53,6 +54,3 @@ a `std::io::Read` transport.
 - Realtime latency, RTT-control-block contention, and partial-write
   behaviour on embedded hardware are not modelled. Use
   `examples/nrf52840-dk` for those scenarios.
-- This example only exercises `ping`; it does not call `discover()`.
-  The full discovery path is exercised in
-  `crates/telepath-firmware/tests/discovery_smoke.rs`.

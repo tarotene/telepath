@@ -70,6 +70,11 @@ loop {
 }
 ```
 
+> **Note:** The `#[command]` macro generates a shim that calls
+> `postcard::from_bytes` / `postcard::to_slice` directly. Your firmware
+> crate must add `postcard` as a direct dependency in its `Cargo.toml`
+> in addition to `telepath-firmware`.
+
 ## Build
 
 This crate targets both native (for tests) and `thumbv7em-none-eabi` (for firmware).
