@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
+if ! command -v just >/dev/null 2>&1; then
+    echo "[pre-commit] 'just' not found on PATH."
+    echo "  Install via 'cargo install just' (see README.md -> Prerequisites)."
+    echo "  Then re-run the failing git command."
+    exit 1
+fi
+
 echo "[pre-commit] Running format check via just..."
 just fmt-check || {
     echo ""
