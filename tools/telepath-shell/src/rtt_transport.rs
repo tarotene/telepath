@@ -87,7 +87,9 @@ impl RttTransport {
                 if n == 0 {
                     break;
                 }
-                let _ = sink.write_all(&buf[..n]);
+                if sink.write_all(&buf[..n]).is_err() {
+                    break;
+                }
             }
         }
     }

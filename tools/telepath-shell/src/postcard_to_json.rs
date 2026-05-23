@@ -3,6 +3,7 @@ use postcard_schema::schema::owned::{OwnedDataModelType, OwnedDataModelVariant, 
 use serde_json::{json, Map as JsonMap, Value};
 
 const MAX_DEPTH: usize = 8;
+const MAX_DECODE_COUNT: usize = 65_536;
 
 pub fn postcard_to_json(schema: &OwnedNamedType, bytes: &[u8]) -> Result<Value, ConvertError> {
     let (val, remaining) = decode_value(&schema.ty, bytes, "$", 0)?;
@@ -133,10 +134,9 @@ fn decode_value<'a>(
             let count = usize::try_from(count_u64).map_err(|_| {
                 ConvertError::Postcard(format!("seq count {count_u64} exceeds usize at {path}"))
             })?;
-            if count > rest_after_count.len() {
+            if count > MAX_DECODE_COUNT {
                 return Err(ConvertError::Postcard(format!(
-                    "seq count {count} exceeds remaining bytes {} at {path}",
-                    rest_after_count.len()
+                    "seq count {count} exceeds limit {MAX_DECODE_COUNT} at {path}"
                 )));
             }
             let mut rest = rest_after_count;
@@ -165,10 +165,9 @@ fn decode_value<'a>(
             let count = usize::try_from(count_u64).map_err(|_| {
                 ConvertError::Postcard(format!("map count {count_u64} exceeds usize at {path}"))
             })?;
-            if count > rest_after_count.len() {
+            if count > MAX_DECODE_COUNT {
                 return Err(ConvertError::Postcard(format!(
-                    "map count {count} exceeds remaining bytes {} at {path}",
-                    rest_after_count.len()
+                    "map count {count} exceeds limit {MAX_DECODE_COUNT} at {path}"
                 )));
             }
             let mut rest = rest_after_count;

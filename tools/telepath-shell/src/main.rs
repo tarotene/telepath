@@ -472,7 +472,7 @@ fn encode_args(
 
     let json_val: serde_json::Value = if args_str.is_empty() {
         bail!(
-            "'{cmd_name}' expects arguments ({}).  Pass them as a JSON array, e.g.: [{cmd_name}] [<arg1>, <arg2>, ...]",
+            "'{cmd_name}' expects arguments ({}).  Pass them as a JSON array, e.g.: telepath> {cmd_name} [<arg1>, <arg2>, ...]",
             args_schema.name
         );
     } else {
@@ -501,6 +501,7 @@ fn open_log_sink(spec: Option<&str>) -> anyhow::Result<Box<dyn Write>> {
             println!("Firmware RTT ch0 logs -> stderr (may interleave with prompt)");
             Ok(Box::new(io::stderr()))
         }
+        Some("/dev/null") => Ok(Box::new(io::sink())),
         Some(path) => {
             let path = PathBuf::from(path);
             let (file, label) = open_log_file(&path)?;
