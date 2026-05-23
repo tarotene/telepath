@@ -92,7 +92,7 @@ from an AI agent without hand-written tool descriptors.
 `SchemaCache` currently stores schema bytes as opaque `Vec<u8>`.
 Two steps remain before MCP tool descriptors can be auto-generated:
 
-1. Decode `Vec<u8>` → `postcard_schema::NamedType`
+1. Decode `Vec<u8>` → `postcard_schema::schema::NamedType`
 2. Map `NamedType` → MCP JSON Schema (`inputSchema`)
 
 These will land in a new `tools/telepath-mcp-server` app tracked in
@@ -100,11 +100,14 @@ These will land in a new `tools/telepath-mcp-server` app tracked in
 
 ### Sketch: discover → MCP tool
 
-```rust
+```text
+// pseudocode — Stage D API not yet finalised
+
 // 1. Discover all commands from the connected server
 let _n = client.discover()?;
 
 // 2. Decode schemas  [Stage D — not yet implemented]
+//    SchemaCache will gain an iter() method in Stage D
 for entry in client.schema_cache().iter() {
     let named: NamedType = postcard::from_bytes(&entry.args_schema)?;
     let json_schema = named_type_to_json_schema(&named);
