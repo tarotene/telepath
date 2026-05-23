@@ -57,5 +57,5 @@ check-all: build firmware-build cli-build mcp-build
 emulator:
     cargo run -p loopback-demo
 
-# Full CI gate: fmt-check + clippy + test + emulator smoke
-ci: fmt-check clippy test emulator
+# Full CI gate: fmt-check + clippy + test + emulator smoke + mcp-test
+ci: fmt-check clippy test emulator mcp-test
