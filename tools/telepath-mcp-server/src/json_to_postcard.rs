@@ -295,13 +295,23 @@ fn encode_value(
         }
         Enum(variants) => {
             if let Some(s) = v.as_str() {
-                let idx = variants
+                let (idx, variant) = variants
                     .iter()
-                    .position(|var| var.name.as_str() == s)
+                    .enumerate()
+                    .find(|(_, var)| var.name.as_str() == s)
                     .ok_or_else(|| ConvertError::UnknownEnumVariant {
                         variant: s.to_string(),
                         path: path.to_string(),
                     })?;
+                if !matches!(variant.ty, OwnedDataModelVariant::UnitVariant) {
+                    return Err(ConvertError::TypeMismatch {
+                        expected: format!(
+                            "object with key '{s}' and payload (string is only valid for unit variants)"
+                        ),
+                        got: "string".into(),
+                        path: path.to_string(),
+                    });
+                }
                 ext(&(idx as u32), out)?;
             } else if let Some(obj) = v.as_object() {
                 if obj.len() != 1 {
