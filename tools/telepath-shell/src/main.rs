@@ -26,6 +26,12 @@ use postcard_schema::schema::owned::{OwnedDataModelType, OwnedNamedType};
 use postcard_to_json::postcard_to_json;
 use probe_rs::{probe::list::Lister, Permissions};
 use rtt_transport::RttTransport;
+use rustyline::completion::Completer;
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::history::DefaultHistory;
+use rustyline::validate::Validator;
+use rustyline::{Context as RlContext, Editor, Helper};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -113,17 +119,68 @@ fn main() -> anyhow::Result<()> {
     client.transport_mut().clear_read_deadline();
     println!("{n} command(s) discovered");
 
-    run_repl(&mut client, &mut *log_sink)?;
+    let commands: Vec<String> = client
+        .schema_cache()
+        .iter()
+        .map(|e| e.name.to_string())
+        .collect();
+
+    run_repl(&mut client, &mut *log_sink, commands)?;
 
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
+// Tab completion
+// ---------------------------------------------------------------------------
+
+struct CommandCompleter {
+    commands: Vec<String>,
+}
+
+impl Completer for CommandCompleter {
+    type Candidate = String;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &RlContext<'_>,
+    ) -> rustyline::Result<(usize, Vec<String>)> {
+        // Only complete the first token (command name); ignore mid-line positions.
+        if line[..pos].contains(char::is_whitespace) {
+            return Ok((pos, vec![]));
+        }
+        let word = &line[..pos];
+        let matches = self
+            .commands
+            .iter()
+            .filter(|c| c.starts_with(word))
+            .cloned()
+            .collect();
+        Ok((0, matches))
+    }
+}
+
+impl Helper for CommandCompleter {}
+impl Hinter for CommandCompleter {
+    type Hint = String;
+}
+impl Highlighter for CommandCompleter {}
+impl Validator for CommandCompleter {}
+
+// ---------------------------------------------------------------------------
 // Interactive REPL
 // ---------------------------------------------------------------------------
 
-fn run_repl(client: &mut TelepathClient<RttTransport>, log: &mut dyn Write) -> anyhow::Result<()> {
-    let mut rl = rustyline::DefaultEditor::new()?;
+fn run_repl(
+    client: &mut TelepathClient<RttTransport>,
+    log: &mut dyn Write,
+    commands: Vec<String>,
+) -> anyhow::Result<()> {
+    let mut rl = Editor::<CommandCompleter, DefaultHistory>::new()?;
+    rl.set_helper(Some(CommandCompleter { commands }));
+
     loop {
         client.transport_mut().drain_debug_logs(log);
 
@@ -140,7 +197,13 @@ fn run_repl(client: &mut TelepathClient<RttTransport>, log: &mut dyn Write) -> a
                 let rest = parts.next().unwrap_or("").trim();
 
                 match cmd_name {
-                    "help" => print_help(client),
+                    "help" => {
+                        if rest.is_empty() {
+                            print_help(client);
+                        } else {
+                            print_command_help(client, rest);
+                        }
+                    }
                     "quit" | "exit" => break,
                     name => {
                         if let Err(e) = dispatch_command(client, name, rest) {
@@ -162,23 +225,170 @@ fn run_repl(client: &mut TelepathClient<RttTransport>, log: &mut dyn Write) -> a
 // Help
 // ---------------------------------------------------------------------------
 
+fn type_label(ty: &OwnedDataModelType) -> &'static str {
+    match ty {
+        OwnedDataModelType::Bool => "bool",
+        OwnedDataModelType::I8 => "i8",
+        OwnedDataModelType::U8 => "u8",
+        OwnedDataModelType::I16 => "i16",
+        OwnedDataModelType::U16 => "u16",
+        OwnedDataModelType::I32 => "i32",
+        OwnedDataModelType::U32 => "u32",
+        OwnedDataModelType::I64 => "i64",
+        OwnedDataModelType::U64 => "u64",
+        OwnedDataModelType::F32 => "f32",
+        OwnedDataModelType::F64 => "f64",
+        OwnedDataModelType::Char => "char",
+        OwnedDataModelType::String => "str",
+        OwnedDataModelType::ByteArray => "bytes",
+        OwnedDataModelType::Option(_) => "option",
+        OwnedDataModelType::Unit | OwnedDataModelType::UnitStruct => "()",
+        OwnedDataModelType::Seq(_) => "array",
+        _ => "?",
+    }
+}
+
+fn scalar_example(ty: &OwnedDataModelType) -> &'static str {
+    match ty {
+        OwnedDataModelType::Bool => "false",
+        OwnedDataModelType::I8
+        | OwnedDataModelType::U8
+        | OwnedDataModelType::I16
+        | OwnedDataModelType::U16
+        | OwnedDataModelType::I32
+        | OwnedDataModelType::U32
+        | OwnedDataModelType::I64
+        | OwnedDataModelType::U64 => "0",
+        OwnedDataModelType::F32 | OwnedDataModelType::F64 => "0.0",
+        OwnedDataModelType::Char => "\"a\"",
+        OwnedDataModelType::String => "\"hello\"",
+        OwnedDataModelType::Option(_) => "null",
+        OwnedDataModelType::Seq(_) | OwnedDataModelType::ByteArray => "[]",
+        _ => "0",
+    }
+}
+
+/// Build a POSIX-style `<name: type>` argument string for top-level help.
+fn args_display(schema: &OwnedNamedType) -> String {
+    let elems = match &schema.ty {
+        OwnedDataModelType::Unit | OwnedDataModelType::UnitStruct => return String::new(),
+        OwnedDataModelType::Tuple(elems) => elems,
+        _ => return format!("<{}>", schema.name),
+    };
+    elems
+        .iter()
+        .enumerate()
+        .map(|(i, elem)| {
+            let name = elem_name(i, &elem.name);
+            format!("<{}: {}>", name, type_label(&elem.ty))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Return a display name for a tuple element: fall back to `arg{i}` for numeric/empty names.
+fn elem_name(i: usize, raw: &str) -> String {
+    if raw.is_empty() || raw.parse::<u64>().is_ok() {
+        format!("arg{i}")
+    } else {
+        raw.to_string()
+    }
+}
+
 fn print_help(client: &TelepathClient<RttTransport>) {
     let mut entries: Vec<_> = client.schema_cache().iter().collect();
     entries.sort_by_key(|e| e.name.as_str());
-    println!("Available commands:");
-    for entry in entries {
-        let args_label = entry
-            .decoded_args_schema()
-            .map(|t| t.name.to_string())
-            .unwrap_or_else(|_| "?".into());
-        let ret_label = entry
-            .decoded_ret_schema()
-            .map(|t| t.name.to_string())
-            .unwrap_or_else(|_| "?".into());
-        println!("  {} {} -> {}", entry.name, args_label, ret_label);
+
+    let rows: Vec<(String, String)> = entries
+        .iter()
+        .map(|entry| {
+            let args = entry
+                .decoded_args_schema()
+                .map(|t| args_display(&t))
+                .unwrap_or_default();
+            let usage = if args.is_empty() {
+                entry.name.to_string()
+            } else {
+                format!("{} {}", entry.name, args)
+            };
+            let ret = entry
+                .decoded_ret_schema()
+                .map(|t| type_label(&t.ty).to_string())
+                .unwrap_or_else(|_| "?".into());
+            (usage, ret)
+        })
+        .collect();
+
+    let col_width = rows.iter().map(|(u, _)| u.len()).max().unwrap_or(0).max(24);
+
+    println!("Commands:");
+    for (usage, ret) in &rows {
+        println!("  {usage:<col_width$}  -> {ret}");
     }
-    println!("  help");
-    println!("  quit");
+    println!();
+    println!(
+        "  {:<col_width$}  Show this help or detail for a command",
+        "help [COMMAND]"
+    );
+    println!("  {:<col_width$}  Leave the shell", "quit / exit");
+}
+
+fn print_command_help(client: &TelepathClient<RttTransport>, cmd_name: &str) {
+    let cache = client.schema_cache();
+    let Some(entry) = cache.iter().find(|e| e.name == cmd_name) else {
+        eprintln!("Unknown command: {cmd_name}  (try 'help')");
+        return;
+    };
+
+    let Ok(args_schema) = entry.decoded_args_schema() else {
+        eprintln!("Could not decode args schema for '{cmd_name}'");
+        return;
+    };
+    let Ok(ret_schema) = entry.decoded_ret_schema() else {
+        eprintln!("Could not decode ret schema for '{cmd_name}'");
+        return;
+    };
+
+    let args_disp = args_display(&args_schema);
+    let ret_lbl = type_label(&ret_schema.ty);
+
+    if args_disp.is_empty() {
+        println!("{cmd_name} -> {ret_lbl}");
+    } else {
+        println!("{cmd_name} {args_disp} -> {ret_lbl}");
+    }
+
+    if let OwnedDataModelType::Tuple(elems) = &args_schema.ty {
+        if !elems.is_empty() {
+            println!();
+            println!("  Arguments:");
+            let name_width = elems
+                .iter()
+                .enumerate()
+                .map(|(i, e)| elem_name(i, &e.name).len())
+                .max()
+                .unwrap_or(0);
+
+            for (i, elem) in elems.iter().enumerate() {
+                let name = elem_name(i, &elem.name);
+                println!(
+                    "    <{:<name_width$}>  {:<6}  Example: {}",
+                    name,
+                    type_label(&elem.ty),
+                    scalar_example(&elem.ty)
+                );
+            }
+
+            let examples: Vec<&str> = elems.iter().map(|e| scalar_example(&e.ty)).collect();
+            println!();
+            println!("  Returns: {ret_lbl}");
+            println!("  Usage:   {cmd_name} [{}]", examples.join(", "));
+            return;
+        }
+    }
+
+    println!();
+    println!("  Returns: {ret_lbl}");
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +400,11 @@ fn dispatch_command(
     name: &str,
     args_str: &str,
 ) -> anyhow::Result<()> {
+    if args_str == "--help" || args_str == "-h" {
+        print_command_help(client, name);
+        return Ok(());
+    }
+
     // Extract what we need from the cache before the mutable borrow for call_raw.
     let (cmd_id, args_schema, ret_schema) = {
         let cache = client.schema_cache();
@@ -219,8 +434,19 @@ fn dispatch_command(
     let result = postcard_to_json(&ret_schema, &response)
         .map_err(|e| anyhow::anyhow!("Response decoding failed: {e}"))?;
 
-    println!("{name} -> {result}");
+    format_result(name, &ret_schema, result);
     Ok(())
+}
+
+fn format_result(name: &str, ret_schema: &OwnedNamedType, val: serde_json::Value) {
+    match &ret_schema.ty {
+        OwnedDataModelType::U8 => println!("{name} -> 0x{:02X}", val.as_u64().unwrap_or(0)),
+        OwnedDataModelType::U16 => println!("{name} -> 0x{:04X}", val.as_u64().unwrap_or(0)),
+        OwnedDataModelType::U32 => println!("{name} -> 0x{:08X}", val.as_u64().unwrap_or(0)),
+        OwnedDataModelType::U64 => println!("{name} -> 0x{:016X}", val.as_u64().unwrap_or(0)),
+        OwnedDataModelType::Unit | OwnedDataModelType::UnitStruct => println!("{name} OK"),
+        _ => println!("{name} -> {val}"),
+    }
 }
 
 /// Encode CLI argument string into postcard bytes according to the args schema.
