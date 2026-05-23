@@ -112,7 +112,12 @@ fn encode_value(
         }
         Usize => {
             let n = require_u64(v, path)?;
-            ext(&(n as usize), out)?;
+            let val = usize::try_from(n).map_err(|_| ConvertError::OutOfRange {
+                ty: "usize",
+                value: n.to_string(),
+                path: path.to_string(),
+            })?;
+            ext(&val, out)?;
         }
         I8 => {
             let n = require_i64(v, path)?;
@@ -156,7 +161,12 @@ fn encode_value(
         }
         Isize => {
             let n = require_i64(v, path)?;
-            ext(&(n as isize), out)?;
+            let val = isize::try_from(n).map_err(|_| ConvertError::OutOfRange {
+                ty: "isize",
+                value: n.to_string(),
+                path: path.to_string(),
+            })?;
+            ext(&val, out)?;
         }
         F32 => {
             let f = require_f64(v, path)? as f32;
