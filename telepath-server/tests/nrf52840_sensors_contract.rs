@@ -147,7 +147,10 @@ fn ficr_uid_postcard_byte_width() {
     let expected = postcard::to_slice(&(0xAAAA_AAAAu32, 0x5555_5555u32), &mut oracle_buf)
         .unwrap()
         .len();
-    assert_eq!(n, expected, "unexpected postcard encoding length for (u32, u32) sentinel");
+    assert_eq!(
+        n, expected,
+        "unexpected postcard encoding length for (u32, u32) sentinel"
+    );
 }
 
 // ---------------------------------------------------------------------------
