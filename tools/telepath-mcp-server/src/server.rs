@@ -123,10 +123,12 @@ where
 }
 
 fn bridge_to_mcp_error(e: BridgeError) -> ErrorData {
-    ErrorData::new(
-        rmcp::model::ErrorCode::INTERNAL_ERROR,
-        e.to_string(),
-        None,
-    )
+    let code = match &e {
+        BridgeError::ArgsEncode(_) => rmcp::model::ErrorCode::INVALID_PARAMS,
+        BridgeError::CallRaw(_) | BridgeError::ResponseDecode(_) => {
+            rmcp::model::ErrorCode::INTERNAL_ERROR
+        }
+    };
+    ErrorData::new(code, e.to_string(), None)
 }
 
