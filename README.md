@@ -78,7 +78,7 @@ Telepath's wire protocol is designed so that a host can enumerate commands and t
 full type signatures at runtime — the foundation needed to drive a Telepath server
 from an AI agent without hand-written tool descriptors.
 
-### What works today
+### Schemas on the wire
 
 - `DiscoveryEntry.args_schema` / `ret_schema` carry real `postcard-schema` bytes
   (`NamedType` serialised with postcard) over the wire.
@@ -86,7 +86,7 @@ from an AI agent without hand-written tool descriptors.
   `SchemaCache`, keyed by command ID.
 - `examples/loopback-demo` exercises this end-to-end — no hardware required.
 
-### What works today (Stage D)
+### MCP tool auto-generation
 
 `tools/telepath-mcp-server` auto-generates MCP tool descriptors from live
 `#[command]` metadata — zero hand-written tool definitions required:
@@ -111,12 +111,8 @@ for entry in client.schema_cache().iter() {
 // MCP tool call → bridge::invoke → call_raw → JSON response
 ```
 
-Run the loopback demo server (no hardware required):
-
-```
-cd tools/telepath-mcp-server && cargo build
-./target/debug/telepath-mcp-server --transport loopback
-```
+See [`tools/telepath-mcp-server/README.md`](tools/telepath-mcp-server/README.md)
+for setup instructions, including using it from Claude Code.
 
 ## Quickstart
 

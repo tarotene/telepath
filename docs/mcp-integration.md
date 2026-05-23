@@ -105,10 +105,10 @@ Test with MCP Inspector:
 npx @modelcontextprotocol/inspector ./target/debug/telepath-mcp-server --transport loopback
 ```
 
-## Future work
+## Known limitations and followups
 
-- RTT/serialport transport (`--transport rtt`, `--transport serial:/dev/ttyUSB0`)
-- Schema cache invalidation on firmware reconnect
-- Named-argument mapping for tuple-schema commands (bridge-level adaptation)
-- MCP `resources` / `prompts` capability exposure
-- Shared `telepath-testing` crate to consolidate loopback infrastructure
+- RTT/serialport transport (`--transport rtt`, `--transport serial:/dev/ttyUSB0`) — see #36
+- Schema cache invalidation on firmware reconnect — see #37
+- Named-argument mapping for tuple-schema commands (bridge-level adaptation) — see #38
+- MCP `resources` / `prompts` capability exposure — see #39
+- Shared `telepath-testing` crate to consolidate loopback infrastructure — see #40
