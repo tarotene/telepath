@@ -15,11 +15,13 @@ The binary writes MCP JSON-RPC to `stdout` and reads from `stdin`.  Use MCP
 Inspector for interactive testing:
 
 ```bash
-npx @modelcontextprotocol/inspector ./target/debug/telepath-mcp-server --transport loopback
+npx @modelcontextprotocol/inspector@latest ./target/debug/telepath-mcp-server --transport loopback
 ```
 
-Expected: `ping` tool appears in the tool list; calling it returns
-`3735928559` (`0xDEADBEEF`).
+If the browser does not open automatically, navigate to **`http://localhost:6274`**.
+
+Expected: `ping` tool appears in the Tools tab; selecting it and clicking
+**Execute** returns `3735928559` (`0xDEADBEEF`).
 
 ## Tests
 
@@ -27,13 +29,39 @@ Expected: `ping` tool appears in the tool list; calling it returns
 cargo test
 ```
 
-Three test suites:
+Three in-process test suites:
 
 | Suite | What it covers |
 |---|---|
 | `schema_to_json_table` | All `OwnedDataModelType` variants → JSON Schema mapping |
 | `json_postcard_roundtrip` | encode → decode identity; native postcard oracle comparison |
 | `end_to_end_loopback` | discover + invoke `ping` and `add` via full bridge stack |
+| `e2e/tests/mcp.spec.ts` | Headless MCP protocol: `ping` tool listed; returns 0xDEADBEEF |
+
+### Headless MCP E2E tests (Playwright + MCP SDK)
+
+Connects directly to the server binary via `StdioClientTransport` — no browser
+required.
+
+```bash
+# First-time setup
+just mcp-e2e-install
+
+# Run E2E tests
+just mcp-e2e
+```
+
+Or without `just`:
+```bash
+cd tools/telepath-mcp-server/e2e
+npm install
+npm test
+```
+
+**Adding Inspector UI tests later**: uncomment the `inspector-ui` project block
+in `e2e/playwright.config.ts`, run `npx playwright install chromium`, then
+update `e2e/tests/inspector.spec.ts` with current selectors and run
+`npm run test:ui`.
 
 ## Architecture
 
