@@ -55,8 +55,7 @@ sequenceDiagram
 | `examples/loopback-demo` | In-process server+client emulator — no hardware required |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK (workspace-excluded) |
 | `tools/telepath-shell` | Interactive shell for Telepath servers — REPL and one-shot commands (workspace-excluded) |
-
-A planned peer app `tools/telepath-mcp-server` will expose discovered commands as MCP tools — see [issue #33](https://github.com/tarotene/telepath/issues/33).
+| `tools/telepath-mcp-server` | MCP server — exposes discovered commands as MCP tools (workspace-excluded) |
 
 ### Framing
 
@@ -87,34 +86,36 @@ from an AI agent without hand-written tool descriptors.
   `SchemaCache`, keyed by command ID.
 - `examples/loopback-demo` exercises this end-to-end — no hardware required.
 
-### What comes next (Stage D)
+### What works today (Stage D)
 
-`SchemaCache` currently stores schema bytes as opaque `Vec<u8>`.
-Two steps remain before MCP tool descriptors can be auto-generated:
+`tools/telepath-mcp-server` auto-generates MCP tool descriptors from live
+`#[command]` metadata — zero hand-written tool definitions required:
 
-1. Decode `Vec<u8>` → `postcard_schema::schema::NamedType`
-2. Map `NamedType` → MCP JSON Schema (`inputSchema`)
-
-These will land in a new `tools/telepath-mcp-server` app tracked in
-[issue #33](https://github.com/tarotene/telepath/issues/33).
-
-### Sketch: discover → MCP tool
+1. `client.discover()` fetches all commands; each `SchemaEntry` holds
+   `args_schema` / `ret_schema` as postcard-encoded `OwnedNamedType` bytes.
+2. `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` decode
+   those bytes into `postcard_schema::schema::owned::OwnedNamedType`.
+3. `schema_to_json::named_type_to_json_schema()` maps `OwnedNamedType`
+   to a JSON Schema value suitable as the MCP `inputSchema`.
+4. `bridge::invoke()` converts MCP tool call arguments (JSON) to postcard,
+   calls `client.call_raw()`, and converts the response back to JSON.
 
 ```text
-// pseudocode — Stage D API not yet finalised
-
-// 1. Discover all commands from the connected server
+// discover → MCP tool (actual API)
 let _n = client.discover()?;
-
-// 2. Decode schemas  [Stage D — not yet implemented]
-//    SchemaCache will gain an iter() method in Stage D
 for entry in client.schema_cache().iter() {
-    let named: NamedType = postcard::from_bytes(&entry.args_schema)?;
-    let json_schema = named_type_to_json_schema(&named);
-    mcp_server.register_tool(entry.name, json_schema, /* bridge handler */);
+    let args_schema = entry.decoded_args_schema()?;
+    let json_schema = named_type_to_json_schema(&args_schema);
+    // rmcp::Tool auto-registered with json_schema as inputSchema
 }
+// MCP tool call → bridge::invoke → call_raw → JSON response
+```
 
-// 3. Bridge: MCP tool call → telepath call_raw → decode response
+Run the loopback demo server (no hardware required):
+
+```
+cd tools/telepath-mcp-server && cargo build
+./target/debug/telepath-mcp-server --transport loopback
 ```
 
 ## Quickstart
