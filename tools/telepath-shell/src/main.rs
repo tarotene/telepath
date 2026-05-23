@@ -124,7 +124,7 @@ fn main() -> anyhow::Result<()> {
         .iter()
         .map(|e| e.name.to_string())
         .collect();
-    commands.extend(["help", "quit", "exit"].map(String::from));
+    commands.push(String::from("help"));
 
     run_repl(&mut client, &mut *log_sink, commands)?;
 
@@ -205,7 +205,6 @@ fn run_repl(
                             print_command_help(client, rest);
                         }
                     }
-                    "quit" | "exit" => break,
                     name => {
                         if let Err(e) = dispatch_command(client, name, rest) {
                             eprintln!("Error: {e}");
@@ -331,7 +330,7 @@ fn print_help(client: &TelepathClient<RttTransport>) {
         "  {:<col_width$}  Show this help or detail for a command",
         "help [COMMAND]"
     );
-    println!("  {:<col_width$}  Leave the shell", "quit / exit");
+    println!("  {:<col_width$}  Exit the shell", "Ctrl-D / Ctrl-C");
 }
 
 fn print_command_help(client: &TelepathClient<RttTransport>, cmd_name: &str) {
