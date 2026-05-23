@@ -1,11 +1,28 @@
 # Telepath
 
-Schema-driven embedded RPC framework for Rust.
+**Write `#[command] fn`, get a discoverable RPC server — anywhere a byte-stream goes.**
 
-Telepath eliminates the dual-maintenance problem in embedded communication: the
-firmware function definition is the interface definition. A single `#[command]`
-attribute generates the wire shim, registers metadata, and enables dynamic
-discovery — no IDL files, no manual protocol sync.
+Telepath lets you expose any MCU-side logic over the wire so you can call it
+interactively from a host shell or an AI agent — giving you real hardware feel while
+validating behaviour and API ergonomics without instrumenting tests.
+
+It splits the problem in two:
+- **Server (target):** command definitions and a poll loop. No shell, no scheduler integration, no allocator.
+- **Client (host):** `telepath-shell` for interactive use; `telepath-client` lib for building your own host or MCP server frontend.
+
+Three things make it unusual:
+1. **One attribute, zero boilerplate.** `#[command]` generates the wire shim, schema metadata, and link-time registration. No IDL, no manual sync.
+2. **Schemas travel on the wire.** The host discovers commands at runtime; firmware changes never silently break the client.
+3. **Transport is a two-method trait.** No RTOS lock-in. UART, RTT, USB-CDC, BLE, mpsc — all valid backends.
+
+Minimal example:
+
+```rust
+#[command]
+fn ping() -> u32 { 0xDEAD_BEEF }
+```
+
+That one attribute registers `ping` in the command table, generates its wire shim, and embeds its postcard schema — no further wiring needed.
 
 ## Architecture
 
@@ -36,8 +53,10 @@ sequenceDiagram
 | `telepath-server` | Target-side RPC server — `no_std` |
 | `telepath-client` | Host-side RPC client — `std` |
 | `examples/loopback-demo` | In-process server+client emulator — no hardware required |
-| `examples/nrf52840-ping` | Standalone firmware example (workspace-excluded) |
-| `tools/telepath-shell` | Host-side CLI over RTT (workspace-excluded) |
+| `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK (workspace-excluded) |
+| `tools/telepath-shell` | Interactive shell for Telepath servers — REPL and one-shot commands (workspace-excluded) |
+
+A planned peer app `tools/telepath-mcp-server` will expose discovered commands as MCP tools — see [issue #33](https://github.com/tarotene/telepath/issues/33).
 
 ### Framing
 
@@ -53,6 +72,50 @@ Both directions use `0x00` as the frame delimiter.
 Two packet types only (`Request` / `Response`), following the ONC RPC RFC 5531
 CALL/REPLY model. Errors live in `ResponseStatus`, not as separate packet types.
 CmdID `0x0000` is reserved for the Command Discovery Protocol (CDP).
+
+## Agent-ready by design
+
+Telepath's wire protocol is designed so that a host can enumerate commands and their
+full type signatures at runtime — the foundation needed to drive a Telepath server
+from an AI agent without hand-written tool descriptors.
+
+### What works today
+
+- `DiscoveryEntry.args_schema` / `ret_schema` carry real `postcard-schema` bytes
+  (`NamedType` serialised with postcard) over the wire.
+- `client.discover()` fetches all commands via CDP paging; the result lands in
+  `SchemaCache`, keyed by command ID.
+- `examples/loopback-demo` exercises this end-to-end — no hardware required.
+
+### What comes next (Stage D)
+
+`SchemaCache` currently stores schema bytes as opaque `Vec<u8>`.
+Two steps remain before MCP tool descriptors can be auto-generated:
+
+1. Decode `Vec<u8>` → `postcard_schema::schema::NamedType`
+2. Map `NamedType` → MCP JSON Schema (`inputSchema`)
+
+These will land in a new `tools/telepath-mcp-server` app tracked in
+[issue #33](https://github.com/tarotene/telepath/issues/33).
+
+### Sketch: discover → MCP tool
+
+```text
+// pseudocode — Stage D API not yet finalised
+
+// 1. Discover all commands from the connected server
+let _n = client.discover()?;
+
+// 2. Decode schemas  [Stage D — not yet implemented]
+//    SchemaCache will gain an iter() method in Stage D
+for entry in client.schema_cache().iter() {
+    let named: NamedType = postcard::from_bytes(&entry.args_schema)?;
+    let json_schema = named_type_to_json_schema(&named);
+    mcp_server.register_tool(entry.name, json_schema, /* bridge handler */);
+}
+
+// 3. Bridge: MCP tool call → telepath call_raw → decode response
+```
 
 ## Quickstart
 
@@ -159,7 +222,7 @@ cd tools/telepath-shell && cargo run -- ping
 
 ## Using telepath as a library
 
-### Firmware side
+### Server side (target)
 
 ```toml
 # Cargo.toml
