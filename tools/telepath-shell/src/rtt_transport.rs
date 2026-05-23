@@ -49,7 +49,7 @@ impl RttTransport {
             match first_attempt {
                 Ok(rtt) => rtt,
                 Err(probe_rs::rtt::Error::ControlBlockNotFound) if auto_reset => {
-                    println!(
+                    eprintln!(
                         "RTT control block not found at {:#010x}. Resetting target chip and retrying...",
                         control_block_addr
                     );
