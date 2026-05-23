@@ -6,7 +6,6 @@ use probe_rs::{
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
-
 /// RTT adapter implementing `std::io::Read + Write` for use with `TelepathClient`.
 ///
 /// Owns a probe-rs `Session` and an `Rtt` instance. Each I/O call transiently
@@ -38,13 +37,14 @@ impl RttTransport {
     ) -> anyhow::Result<Self> {
         let rtt = {
             let mut core = session.core(core_index).context("Failed to access core")?;
-            Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
-                .with_context(|| {
+            Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr)).with_context(
+                || {
                     format!(
                         "Failed to attach to RTT at {:#010x}. Is the firmware running?",
                         control_block_addr
                     )
-                })?
+                },
+            )?
         };
         Ok(Self {
             session,
@@ -74,8 +74,8 @@ impl RttTransport {
         self.read_deadline = None;
     }
 
-    /// Drain RTT channel 0 (firmware debug output) to stderr. Non-blocking.
-    pub fn drain_debug_logs(&mut self) {
+    /// Drain RTT channel 0 (firmware debug output) to `sink`. Non-blocking.
+    pub fn drain_debug_logs(&mut self, sink: &mut dyn io::Write) {
         let mut buf = [0u8; 1024];
         let mut core = match self.session.core(self.core_index) {
             Ok(c) => c,
@@ -87,7 +87,7 @@ impl RttTransport {
                 if n == 0 {
                     break;
                 }
-                eprint!("{}", String::from_utf8_lossy(&buf[..n]));
+                let _ = sink.write_all(&buf[..n]);
             }
         }
     }
