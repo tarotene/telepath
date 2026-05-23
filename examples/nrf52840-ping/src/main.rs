@@ -93,7 +93,8 @@ fn led_set(id: u8, on: bool) -> bool {
 }
 
 /// Set all four LEDs in one round trip.  Bit 0 = LED1, bit 3 = LED4.
-/// Upper nibble is ignored.  Returns the applied mask (bits 0–3 only).
+/// Upper nibble is ignored.  Returns the applied mask (bits 0–3 only),
+/// or `0` if the LED array has not been initialised.
 #[command]
 fn led_pattern(mask: u8) -> u8 {
     let m = mask & 0x0F;
@@ -108,9 +109,11 @@ fn led_pattern(mask: u8) -> u8 {
                     led.set_high();
                 }
             }
+            m
+        } else {
+            0
         }
-    });
-    m
+    })
 }
 
 /// Instantaneous snapshot of all four button states.
