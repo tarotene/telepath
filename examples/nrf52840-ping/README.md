@@ -102,28 +102,30 @@ ping -> 0xDEADBEEF
 
 **LED set/get closed loop:**
 
+Commands with arguments use JSON array syntax (`[arg1, arg2, ...]`).
+
 ```
 telepath> led_pattern_get
-led_pattern_get -> 0
-telepath> led_pattern 10
-led_pattern -> 10
+led_pattern_get -> 0x00
+telepath> led_pattern [10]
+led_pattern -> 0x0A
 telepath> led_pattern_get
-led_pattern_get -> 10
-telepath> led_set 1 true
+led_pattern_get -> 0x0A
+telepath> led_set [1, true]
 led_set -> true
 telepath> led_pattern_get
-led_pattern_get -> 11
-telepath> led_pattern 0
-led_pattern -> 0
+led_pattern_get -> 0x0B
+telepath> led_pattern [0]
+led_pattern -> 0x00
 telepath> led_pattern_get
-led_pattern_get -> 0
+led_pattern_get -> 0x00
 ```
 
 **Button snapshot:**
 
 ```
 telepath> button_read
-button_read -> 0
+button_read -> 0x00
 ```
 
 (Hold a button, then call `button_read` again — the corresponding bit will be set.)
