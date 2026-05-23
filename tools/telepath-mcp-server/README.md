@@ -106,8 +106,18 @@ claude mcp add --transport stdio --scope project telepath \
 ```
 
 This writes `.mcp.json` at the repository root (already committed to this repo).
-The server loads automatically on every Claude Code session inside the repository —
-no further setup needed after `cargo build`.
+
+**Required**: `CLAUDE_PROJECT_DIR` must be set to the repository root before
+starting Claude Code, because `.mcp.json` uses `${CLAUDE_PROJECT_DIR}` to locate
+the binary:
+
+```bash
+export CLAUDE_PROJECT_DIR=$(git rev-parse --show-toplevel)
+claude  # start Claude Code
+```
+
+The server loads automatically on every Claude Code session where
+`CLAUDE_PROJECT_DIR` is set correctly.
 
 ### 3. Verify
 
@@ -124,19 +134,6 @@ In a Claude Code prompt:
 Expected: the agent invokes the tool and returns `3735928559` (`0xDEADBEEF`).
 
 ## Limitations
-
-### rmcp v1.7.0 wire format deviations
-
-The server is built on **rmcp v1.7.0**, which diverges from the MCP spec in two
-ways that affect clients using `@modelcontextprotocol/sdk` v1.11+:
-
-| Field | rmcp sends | Spec requires | Effect |
-|---|---|---|---|
-| `tools/list` → `inputSchema.type` | `"null"` (no-arg tools) | `"object"` | SDK Zod validation rejects `listTools()` |
-| `tools/call` → `structuredContent` | raw number | `object \| null` | SDK Zod validation rejects `callTool()` |
-
-**Workaround**: the headless E2E tests (`e2e/tests/mcp.spec.ts`) bypass the SDK
-entirely and speak raw JSON-RPC over stdio.  Fix requires an upstream rmcp patch.
 
 ### Inspector UI automated tests disabled
 

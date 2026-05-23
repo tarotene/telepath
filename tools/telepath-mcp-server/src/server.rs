@@ -2,7 +2,7 @@ use crate::bridge::{self, BridgeError};
 use crate::schema_to_json::named_type_to_json_schema;
 use postcard_schema::schema::owned::OwnedNamedType;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, InitializeResult, ListToolsResult,
+    CallToolRequestParams, CallToolResult, Content, InitializeResult, ListToolsResult,
     PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
@@ -38,7 +38,15 @@ where
         for entry in entries {
             let args_schema = entry.decoded_args_schema()?;
             let ret_schema = entry.decoded_ret_schema()?;
-            let input_schema_json = named_type_to_json_schema(&args_schema);
+            let raw_schema = named_type_to_json_schema(&args_schema);
+            // MCP spec requires inputSchema.type to be "object"; override the
+            // postcard-correct "null" that Unit/UnitStruct types produce.
+            let input_schema_json =
+                if raw_schema.get("type").and_then(|v| v.as_str()) == Some("null") {
+                    serde_json::json!({"type": "object"})
+                } else {
+                    raw_schema
+                };
             let input_schema = rmcp::model::object(input_schema_json);
             let description = format!("Telepath command 0x{:04X}", entry.cmd_id);
             let tool = Tool::new(entry.name.clone(), description, input_schema);
@@ -107,7 +115,10 @@ where
         .await
         .map_err(bridge_to_mcp_error)?;
 
-        Ok(CallToolResult::structured(result))
+        // structured() sets structuredContent to a raw Value, which fails MCP
+        // spec Zod validation when the value is not an object.  Return the
+        // JSON representation as plain text instead.
+        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
     }
 }
 
