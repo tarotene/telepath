@@ -548,8 +548,7 @@ mod tests {
     #[test]
     fn fixture_unit_matches_current_postcard_schema() {
         use postcard_schema::Schema;
-        let expected: Vec<u8> =
-            postcard::to_allocvec(&<() as Schema>::SCHEMA).expect("serialize");
+        let expected: Vec<u8> = postcard::to_allocvec(&<() as Schema>::SCHEMA).expect("serialize");
         assert_eq!(
             FIXTURE_UNIT,
             expected.as_slice(),
@@ -561,8 +560,7 @@ mod tests {
     #[test]
     fn fixture_u32_matches_current_postcard_schema() {
         use postcard_schema::Schema;
-        let expected: Vec<u8> =
-            postcard::to_allocvec(&<u32 as Schema>::SCHEMA).expect("serialize");
+        let expected: Vec<u8> = postcard::to_allocvec(&<u32 as Schema>::SCHEMA).expect("serialize");
         assert_eq!(
             FIXTURE_U32,
             expected.as_slice(),
