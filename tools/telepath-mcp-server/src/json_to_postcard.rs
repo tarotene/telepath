@@ -36,8 +36,7 @@ pub enum ConvertError {
 const MAX_DEPTH: usize = 8;
 
 fn ext<T: serde::Serialize>(val: &T, out: &mut Vec<u8>) -> Result<(), ConvertError> {
-    let tmp =
-        postcard::to_allocvec(val).map_err(|e| ConvertError::Postcard(e.to_string()))?;
+    let tmp = postcard::to_allocvec(val).map_err(|e| ConvertError::Postcard(e.to_string()))?;
     out.extend_from_slice(&tmp);
     Ok(())
 }
@@ -291,10 +290,11 @@ fn encode_value(
             let obj = v.as_object();
             for f in fields {
                 let item = if let Some(obj) = obj {
-                    obj.get(&*f.name).ok_or_else(|| ConvertError::MissingField {
-                        name: f.name.to_string(),
-                        path: path.to_string(),
-                    })?
+                    obj.get(&*f.name)
+                        .ok_or_else(|| ConvertError::MissingField {
+                            name: f.name.to_string(),
+                            path: path.to_string(),
+                        })?
                 } else {
                     return Err(ConvertError::TypeMismatch {
                         expected: "object".into(),
@@ -302,7 +302,13 @@ fn encode_value(
                         path: path.to_string(),
                     });
                 };
-                encode_value(&f.ty.ty, item, out, &format!("{path}.{}", f.name), depth + 1)?;
+                encode_value(
+                    &f.ty.ty,
+                    item,
+                    out,
+                    &format!("{path}.{}", f.name),
+                    depth + 1,
+                )?;
             }
         }
         Enum(variants) => {
@@ -390,13 +396,19 @@ fn encode_variant_payload(
         OwnedDataModelVariant::StructVariant(fields) => {
             let obj = require_object(v, path)?;
             for f in fields {
-                let item = obj.get(&*f.name).ok_or_else(|| {
-                    ConvertError::MissingField {
+                let item = obj
+                    .get(&*f.name)
+                    .ok_or_else(|| ConvertError::MissingField {
                         name: f.name.to_string(),
                         path: path.to_string(),
-                    }
-                })?;
-                encode_value(&f.ty.ty, item, out, &format!("{path}.{}", f.name), depth + 1)?;
+                    })?;
+                encode_value(
+                    &f.ty.ty,
+                    item,
+                    out,
+                    &format!("{path}.{}", f.name),
+                    depth + 1,
+                )?;
             }
         }
     }

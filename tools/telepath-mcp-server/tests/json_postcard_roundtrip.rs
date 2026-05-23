@@ -1,6 +1,4 @@
-use postcard_schema::schema::owned::{
-    OwnedDataModelType as DMT, OwnedNamedType, OwnedNamedValue,
-};
+use postcard_schema::schema::owned::{OwnedDataModelType as DMT, OwnedNamedType, OwnedNamedValue};
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -160,13 +158,19 @@ fn seq_roundtrip() {
 
 #[test]
 fn tuple_roundtrip() {
-    let s = wrap("tup", DMT::Tuple(vec![wrap("0", DMT::U32), wrap("1", DMT::Bool)]));
+    let s = wrap(
+        "tup",
+        DMT::Tuple(vec![wrap("0", DMT::U32), wrap("1", DMT::Bool)]),
+    );
     roundtrip_schema(&s, json!([7u32, true]));
 }
 
 #[test]
 fn tuple_arity_mismatch_is_error() {
-    let s = wrap("tup", DMT::Tuple(vec![wrap("0", DMT::U32), wrap("1", DMT::Bool)]));
+    let s = wrap(
+        "tup",
+        DMT::Tuple(vec![wrap("0", DMT::U32), wrap("1", DMT::Bool)]),
+    );
     let err = json_to_postcard(&s, &json!([1u32])).unwrap_err();
     assert!(matches!(err, ConvertError::ArityMismatch { .. }));
 }
@@ -272,7 +276,10 @@ fn seq_decoding_rejects_oversize_count() {
     // The count guard must reject this because count >> remaining.len().
     let bytes = postcard::to_allocvec::<u64>(&u64::MAX).unwrap();
     let err = postcard_to_json(&s, &bytes).unwrap_err();
-    assert!(matches!(err, ConvertError::Postcard(_)), "expected Postcard error, got {err:?}");
+    assert!(
+        matches!(err, ConvertError::Postcard(_)),
+        "expected Postcard error, got {err:?}"
+    );
 }
 
 #[test]
@@ -286,7 +293,10 @@ fn map_decoding_rejects_oversize_count() {
     );
     let bytes = postcard::to_allocvec::<u64>(&u64::MAX).unwrap();
     let err = postcard_to_json(&s, &bytes).unwrap_err();
-    assert!(matches!(err, ConvertError::Postcard(_)), "expected Postcard error, got {err:?}");
+    assert!(
+        matches!(err, ConvertError::Postcard(_)),
+        "expected Postcard error, got {err:?}"
+    );
 }
 
 // ── Schema variant must hard-error (not silently corrupt the wire) ────────────

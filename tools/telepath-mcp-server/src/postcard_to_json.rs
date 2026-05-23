@@ -131,9 +131,7 @@ fn decode_value<'a>(
         Seq(inner) => {
             let (count_u64, rest_after_count) = de::<u64>(bytes, path)?;
             let count = usize::try_from(count_u64).map_err(|_| {
-                ConvertError::Postcard(format!(
-                    "seq count {count_u64} exceeds usize at {path}"
-                ))
+                ConvertError::Postcard(format!("seq count {count_u64} exceeds usize at {path}"))
             })?;
             if count > rest_after_count.len() {
                 return Err(ConvertError::Postcard(format!(
@@ -156,8 +154,7 @@ fn decode_value<'a>(
             let mut arr = Vec::with_capacity(elems.len());
             let mut rest = bytes;
             for (i, sch) in elems.iter().enumerate() {
-                let (item, next) =
-                    decode_value(&sch.ty, rest, &format!("{path}.{i}"), depth + 1)?;
+                let (item, next) = decode_value(&sch.ty, rest, &format!("{path}.{i}"), depth + 1)?;
                 arr.push(item);
                 rest = next;
             }
@@ -166,9 +163,7 @@ fn decode_value<'a>(
         Map { key, val } => {
             let (count_u64, rest_after_count) = de::<u64>(bytes, path)?;
             let count = usize::try_from(count_u64).map_err(|_| {
-                ConvertError::Postcard(format!(
-                    "map count {count_u64} exceeds usize at {path}"
-                ))
+                ConvertError::Postcard(format!("map count {count_u64} exceeds usize at {path}"))
             })?;
             if count > rest_after_count.len() {
                 return Err(ConvertError::Postcard(format!(
@@ -180,8 +175,7 @@ fn decode_value<'a>(
             if matches!(&key.ty, OwnedDataModelType::String) {
                 let mut obj = JsonMap::new();
                 for i in 0..count {
-                    let (k, next) =
-                        de::<std::string::String>(rest, &format!("{path}[{i}].key"))?;
+                    let (k, next) = de::<std::string::String>(rest, &format!("{path}[{i}].key"))?;
                     let (v, next2) =
                         decode_value(&val.ty, next, &format!("{path}[{i}].val"), depth + 1)?;
                     obj.insert(k, v);
@@ -216,9 +210,7 @@ fn decode_value<'a>(
         Enum(variants) => {
             let (idx, rest) = de::<u32>(bytes, path)?;
             let variant = variants.get(idx as usize).ok_or_else(|| {
-                ConvertError::Postcard(format!(
-                    "enum discriminant {idx} out of range at {path}"
-                ))
+                ConvertError::Postcard(format!("enum discriminant {idx} out of range at {path}"))
             })?;
             let (payload, rest2) = decode_variant_payload(&variant.ty, rest, path, depth + 1)?;
             match payload {
@@ -253,8 +245,7 @@ fn decode_variant_payload<'a>(
             let mut arr = Vec::new();
             let mut rest = bytes;
             for (i, sch) in elems.iter().enumerate() {
-                let (item, next) =
-                    decode_value(&sch.ty, rest, &format!("{path}.{i}"), depth + 1)?;
+                let (item, next) = decode_value(&sch.ty, rest, &format!("{path}.{i}"), depth + 1)?;
                 arr.push(item);
                 rest = next;
             }

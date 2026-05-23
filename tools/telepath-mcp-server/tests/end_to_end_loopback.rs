@@ -43,9 +43,15 @@ async fn discover_and_invoke_ping() {
     let args_schema = entry.decoded_args_schema().expect("decode args schema");
     let ret_schema = entry.decoded_ret_schema().expect("decode ret schema");
 
-    let result = bridge::invoke(&mut client, entry.cmd_id, &args_schema, &ret_schema, &json!({}))
-        .await
-        .expect("invoke ping");
+    let result = bridge::invoke(
+        &mut client,
+        entry.cmd_id,
+        &args_schema,
+        &ret_schema,
+        &json!({}),
+    )
+    .await
+    .expect("invoke ping");
 
     // 0xDEADBEEF = 3735928559
     assert_eq!(result, json!(0xDEAD_BEEFu32));

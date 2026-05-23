@@ -18,7 +18,8 @@ telepath-client = { path = "../../telepath-client" }
 telepath-wire   = { path = "../../telepath-wire" }
 telepath-server = { path = "../../telepath-server" }
 postcard        = { version = "1", features = ["alloc"] }
-postcard-schema = { version = "0.2", features = ["use-std"] }
+postcard-schema = { version = "0.2", features = ["use-std", "heapless-v0_8"] }
+heapless        = { version = "0.8", default-features = false, features = ["serde"] }
 rmcp            = { version = "1", features = ["server", "transport-io", "macros"] }
 tokio           = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"] }
 serde           = { version = "1", features = ["derive"] }

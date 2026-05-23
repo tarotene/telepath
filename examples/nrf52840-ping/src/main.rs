@@ -1,7 +1,10 @@
 //! Telepath RTT example for nRF52840-DK.
 //!
-//! Exposes nine RPC commands over the Telepath wire:
+//! Exposes twelve RPC commands over the Telepath wire:
 //! - `ping`: sanity check, returns `0xDEADBEEF: u32`.
+//! - `add(a: i32, b: i32)`: returns `a + b`.
+//! - `crc32(payload)`: CRC-32/ISO-HDLC over the payload bytes.
+//! - `echo(payload)`: returns the payload unchanged.
 //! - `led_set(id: u8, on: bool)`: illuminate or extinguish one LED (id 1–4).
 //! - `led_pattern(mask: u8)`: set all four LEDs in one round trip; bit 0 = LED1.
 //! - `led_pattern_get()`: read back the current driven state of all four LEDs.
@@ -40,6 +43,7 @@ use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use nrf_pac as pac;
 use panic_halt as _;
 use rtt_target::{rprintln, rtt_init};
+use heapless::Vec as HVec;
 use telepath_server::{command, TelepathServer};
 
 use rtt_transport::RttTransport;
@@ -85,6 +89,41 @@ static BTN4: Mutex<RefCell<Option<Input<'static>>>> = Mutex::new(RefCell::new(No
 #[command]
 fn ping() -> u32 {
     0xDEAD_BEEF
+}
+
+/// Returns `a + b`.
+#[command]
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn crc32_iso_hdlc(data: &[u8]) -> u32 {
+    // CRC-32/ISO-HDLC: poly=0x04C11DB7, refin=true, refout=true,
+    // init=0xFFFF_FFFF, xorout=0xFFFF_FFFF.
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc ^ 0xFFFF_FFFF
+}
+
+/// CRC-32/ISO-HDLC over the provided payload.
+#[command]
+fn crc32(payload: HVec<u8, 128>) -> u32 {
+    crc32_iso_hdlc(&payload)
+}
+
+/// Returns the payload unchanged.
+#[command]
+fn echo(payload: HVec<u8, 128>) -> HVec<u8, 128> {
+    payload
 }
 
 fn led_mux(id: u8) -> Option<&'static Mutex<RefCell<Option<Output<'static>>>>> {

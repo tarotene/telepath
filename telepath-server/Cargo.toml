@@ -14,5 +14,8 @@ postcard = { workspace = true }
 linkme = { workspace = true }
 postcard-schema = { workspace = true }
 
+[dev-dependencies]
+heapless = { workspace = true }
+
 [features]
 default = []

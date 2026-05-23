@@ -99,10 +99,7 @@ where
                 )
             })?;
 
-        let args_json: Value = request
-            .arguments
-            .map(Value::Object)
-            .unwrap_or(Value::Null);
+        let args_json: Value = request.arguments.map(Value::Object).unwrap_or(Value::Null);
 
         let mut client = self.client.lock().await;
         let result = bridge::invoke(
@@ -118,7 +115,9 @@ where
         // structured() sets structuredContent to a raw Value, which fails MCP
         // spec Zod validation when the value is not an object.  Return the
         // JSON representation as plain text instead.
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 }
 
@@ -131,4 +130,3 @@ fn bridge_to_mcp_error(e: BridgeError) -> ErrorData {
     };
     ErrorData::new(code, e.to_string(), None)
 }
-
