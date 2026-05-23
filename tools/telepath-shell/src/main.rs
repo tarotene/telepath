@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
         )
     })?;
     client.transport_mut().clear_read_deadline();
-    println!("{n} command(s) discovered");
+    println!("{n} command(s) discovered  (Ctrl-D / Ctrl-C to exit)");
 
     let mut commands: Vec<String> = client
         .schema_cache()
@@ -330,7 +330,6 @@ fn print_help(client: &TelepathClient<RttTransport>) {
         "  {:<col_width$}  Show this help or detail for a command",
         "help [COMMAND]"
     );
-    println!("  {:<col_width$}  Exit the shell", "Ctrl-D / Ctrl-C");
 }
 
 fn print_command_help(client: &TelepathClient<RttTransport>, cmd_name: &str) {
