@@ -2,8 +2,11 @@ use crate::bridge::{self, BridgeError};
 use crate::schema_to_json::named_type_to_json_schema;
 use postcard_schema::schema::owned::OwnedNamedType;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, InitializeResult, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+    AnnotateAble, CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams,
+    GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult, ListToolsResult,
+    PaginatedRequestParams, Prompt, PromptArgument, PromptMessage, PromptMessageRole, RawResource,
+    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
+    ServerInfo, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler};
@@ -68,6 +71,17 @@ where
             }
         }
     }
+
+    /// Returns the commands catalog JSON. Exposed for integration tests.
+    pub fn catalog_json_for_test(&self) -> String {
+        commands_catalog_json(&self.tools)
+    }
+
+    /// Returns the server info (capabilities + instructions). Exposed for integration tests.
+    pub fn get_info(&self) -> rmcp::model::ServerInfo {
+        use rmcp::ServerHandler;
+        ServerHandler::get_info(self)
+    }
 }
 
 impl<T> ServerHandler for TelepathMcpServer<T>
@@ -75,8 +89,14 @@ where
     T: std::io::Read + std::io::Write + Send + 'static,
 {
     fn get_info(&self) -> ServerInfo {
-        InitializeResult::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions("Exposes Telepath #[command] functions as MCP tools.")
+        InitializeResult::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .enable_prompts()
+                .build(),
+        )
+        .with_instructions("Exposes Telepath #[command] functions as MCP tools.")
     }
 
     async fn list_tools(
@@ -86,6 +106,61 @@ where
     ) -> Result<ListToolsResult, ErrorData> {
         let list = self.tools.iter().map(|m| m.tool.clone()).collect();
         Ok(ListToolsResult::with_all_items(list))
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        Ok(ListResourcesResult::with_all_items(vec![
+            firmware_commands_resource(),
+        ]))
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, ErrorData> {
+        if request.uri != "telepath://firmware/commands" {
+            return Err(ErrorData::new(
+                rmcp::model::ErrorCode::METHOD_NOT_FOUND,
+                format!("unknown resource: {}", request.uri),
+                None,
+            ));
+        }
+        let json = commands_catalog_json(&self.tools);
+        Ok(ReadResourceResult::new(vec![
+            ResourceContents::TextResourceContents {
+                uri: request.uri,
+                mime_type: Some("application/json".into()),
+                text: json,
+                meta: None,
+            },
+        ]))
+    }
+
+    async fn list_prompts(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, ErrorData> {
+        Ok(ListPromptsResult::with_all_items(static_prompts()))
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, ErrorData> {
+        render_prompt(&request.name, request.arguments.as_ref()).ok_or_else(|| {
+            ErrorData::new(
+                rmcp::model::ErrorCode::METHOD_NOT_FOUND,
+                format!("unknown prompt: {}", request.name),
+                None,
+            )
+        })
     }
 
     async fn call_tool(
@@ -203,6 +278,85 @@ fn named_to_positional(
         .map(|name| obj.get(name).cloned().unwrap_or(Value::Null))
         .collect();
     Value::Array(arr)
+}
+
+// ---------------------------------------------------------------------------
+// Resource / prompt helpers (pure, sync — testable without ServerHandler context)
+// ---------------------------------------------------------------------------
+
+pub fn firmware_commands_resource() -> rmcp::model::Resource {
+    RawResource::new("telepath://firmware/commands", "Discovered commands")
+        .with_description("All #[command] functions discovered from the connected firmware via CDP")
+        .with_mime_type("application/json")
+        .no_annotation()
+}
+
+pub(crate) fn commands_catalog_json(tools: &[ToolMeta]) -> String {
+    let catalog: Vec<Value> = tools
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "name": m.tool.name,
+                "cmd_id": format!("0x{:04X}", m.cmd_id),
+                "inputSchema": *m.tool.input_schema,
+            })
+        })
+        .collect();
+    serde_json::to_string_pretty(&catalog).unwrap_or_else(|_| "[]".to_string())
+}
+
+pub fn static_prompts() -> Vec<Prompt> {
+    vec![
+        Prompt::new(
+            "verify-board-alive",
+            Some("Check that the connected firmware is responsive"),
+            None::<Vec<PromptArgument>>,
+        ),
+        Prompt::new(
+            "call-command",
+            Some("Call a named Telepath command with optional arguments"),
+            Some(vec![
+                PromptArgument::new("name")
+                    .with_description("Name of the command to call")
+                    .with_required(true),
+                PromptArgument::new("args")
+                    .with_description("JSON arguments for the command (omit for zero-arg commands)")
+                    .with_required(false),
+            ]),
+        ),
+    ]
+}
+
+pub fn render_prompt(
+    name: &str,
+    arguments: Option<&rmcp::model::JsonObject>,
+) -> Option<GetPromptResult> {
+    match name {
+        "verify-board-alive" => Some(GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            "Use the 'ping' tool to verify the firmware is alive. \
+             The ping command takes no arguments and returns a 32-bit sentinel value. \
+             Report success or failure and the value you received.",
+        )])),
+        "call-command" => {
+            let cmd = arguments
+                .and_then(|a| a.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("<command>");
+            let args = arguments
+                .and_then(|a| a.get("args"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("{}");
+            Some(GetPromptResult::new(vec![PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!(
+                    "Call the Telepath command '{cmd}' with the following arguments: {args}. \
+                     Report the result value or any error that occurs.",
+                ),
+            )]))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
