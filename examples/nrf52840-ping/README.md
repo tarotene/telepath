@@ -145,6 +145,9 @@ ficr_uid -> [0x12345678, 0x9ABCDEF0]
 The two `u32` values form a 64-bit unique ID.  They are factory-programmed and
 stable across reboots.  A different board will show different values.
 
+> **HIL reference** — one particular nRF52840-DK returned `[0x893CE2C0, 0xA94DF961]`
+> (decimal: `[2302468800, 2840459617]`).  Your board's values will differ.
+
 **Die temperature — `temp_read`:**
 
 ```
@@ -152,9 +155,12 @@ telepath> temp_read
 temp_read -> 100
 ```
 
-100 ÷ 4 = 25 °C.  Run `temp_read` before and after a tight loop to observe
-self-heating — the value should increase by several counts.  Acceptance range:
-−160…340 (nRF52840 operating temperature −40 °C to 85 °C).
+Divide the raw value by 4 to get °C: 100 → 25.00 °C, 111 → 27.75 °C.  Run
+`temp_read` before and after a tight loop to observe self-heating — the value
+should increase by several counts.  Acceptance range: −160…340 (nRF52840
+operating temperature −40 °C to 85 °C).
+
+> **HIL reference** — idle room-temperature reading on one board: `111` (27.75 °C).
 
 **Hardware RNG — `rng_u32`:**
 
@@ -178,3 +184,7 @@ saadc_vdd_mv -> 3265
 Under USB power expect 3000–3300 mV.  Switch to a coin cell and the value
 drops noticeably, demonstrating the command's ability to detect power-source
 changes at runtime.
+
+> **HIL reference** — 5 consecutive samples under USB power: `2981, 2984, 2984,
+> 2988, 2991` mV (avg ≈ 2986 mV ≈ 3.0 V).  Formula: `raw_count × 3600 / 1024`
+> (10-bit ADC, GAIN=1/6, VREF=0.6 V → full-scale = 3.6 V).

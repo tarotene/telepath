@@ -188,6 +188,8 @@ fn button_read() -> u8 {
 /// Unique 64-bit chip ID from FICR.DEVICEID[0..1].
 /// Pure MMIO read — no peripheral initialization required.
 /// The value is factory-programmed, stable across reboots, and unique per die.
+/// Example (one particular nRF52840-DK): `(0x893CE2C0, 0xA94DF961)`.
+/// Your board will return different values; treat as an opaque identifier.
 #[command]
 fn ficr_uid() -> (u32, u32) {
     (pac::FICR.deviceid(0).read(), pac::FICR.deviceid(1).read())
@@ -195,7 +197,8 @@ fn ficr_uid() -> (u32, u32) {
 
 /// Die temperature in 0.25 °C units.
 /// Returns a signed integer: divide by 4 to get °C, or multiply by 250 for µ°C.
-/// Example: 100 → 25.00 °C.
+/// Example: 100 → 25.00 °C; 111 → 27.75 °C.
+/// Operating range: −160…340 (nRF52840 specification: −40 °C to 85 °C).
 ///
 /// Drives `pac::TEMP` directly (busy-poll) to satisfy the synchronous `#[command]` contract;
 /// the `embassy_nrf::temp::Temp` driver is async-only.
