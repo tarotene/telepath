@@ -18,6 +18,7 @@ embassy-nrf = { version = "0.3", features = [
     "time-driver-rtc1",
     "gpiote",
 ] }
+nrf-pac = { version = "0.1", features = ["nrf52840"] }
 
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 critical-section = "1"
