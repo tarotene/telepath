@@ -14,3 +14,4 @@ telepath-wire   = { workspace = true }
 telepath-server = { workspace = true }
 telepath-client = { workspace = true }
 postcard        = { version = "1", features = ["alloc"] }
+heapless        = { workspace = true }

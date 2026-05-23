@@ -39,13 +39,19 @@ where
             let args_schema = entry.decoded_args_schema()?;
             let ret_schema = entry.decoded_ret_schema()?;
             let raw_schema = named_type_to_json_schema(&args_schema);
-            // MCP spec requires inputSchema.type to be "object"; override the
-            // postcard-correct "null" that Unit/UnitStruct types produce.
+            // MCP spec requires inputSchema.type to be "object".
+            // Unit commands → {"type":"object"} (no properties).
+            // Tuple commands → {"type":"object","properties":{"args":<array_schema>},"required":["args"]}
+            // so that call_tool can extract args["args"] as the positional array.
             let input_schema_json =
                 if raw_schema.get("type").and_then(|v| v.as_str()) == Some("null") {
                     serde_json::json!({"type": "object"})
                 } else {
-                    raw_schema
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": { "args": raw_schema },
+                        "required": ["args"]
+                    })
                 };
             let input_schema = rmcp::model::object(input_schema_json);
             let description = format!("Telepath command 0x{:04X}", entry.cmd_id);
@@ -101,7 +107,7 @@ where
 
         let args_json: Value = request
             .arguments
-            .map(Value::Object)
+            .and_then(|obj| obj.get("args").cloned())
             .unwrap_or(Value::Null);
 
         let mut client = self.client.lock().await;
@@ -118,7 +124,9 @@ where
         // structured() sets structuredContent to a raw Value, which fails MCP
         // spec Zod validation when the value is not an object.  Return the
         // JSON representation as plain text instead.
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 }
 
@@ -131,4 +139,3 @@ fn bridge_to_mcp_error(e: BridgeError) -> ErrorData {
     };
     ErrorData::new(code, e.to_string(), None)
 }
-

@@ -5,9 +5,16 @@ use telepath_server::{command, TelepathServer};
 use telepath_wire::framing::MAX_FRAME_SIZE;
 
 #[derive(Parser)]
-#[command(name = "telepath-mcp-server", about = "Exposes Telepath commands as MCP tools")]
+#[command(
+    name = "telepath-mcp-server",
+    about = "Exposes Telepath commands as MCP tools"
+)]
 struct Cli {
-    #[arg(long, default_value = "loopback", help = "Transport backend (loopback)")]
+    #[arg(
+        long,
+        default_value = "loopback",
+        help = "Transport backend (loopback)"
+    )]
     transport: String,
 }
 
@@ -35,8 +42,14 @@ fn make_pair() -> (FwSide, HostSide) {
     let (h2f_tx, h2f_rx) = sync_channel::<u8>(cap);
     let (f2h_tx, f2h_rx) = sync_channel::<u8>(cap);
     (
-        FwSide { rx: h2f_rx, tx: f2h_tx },
-        HostSide { rx: f2h_rx, tx: h2f_tx },
+        FwSide {
+            rx: h2f_rx,
+            tx: f2h_tx,
+        },
+        HostSide {
+            rx: f2h_rx,
+            tx: h2f_tx,
+        },
     )
 }
 
@@ -45,7 +58,10 @@ impl telepath_server::transport::Transport for FwSide {
         let mut n = 0;
         while n < buf.len() {
             match self.rx.try_recv() {
-                Ok(b) => { buf[n] = b; n += 1; }
+                Ok(b) => {
+                    buf[n] = b;
+                    n += 1;
+                }
                 Err(_) => break,
             }
         }
@@ -65,7 +81,9 @@ impl telepath_server::transport::Transport for FwSide {
 
 impl std::io::Read for HostSide {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if buf.is_empty() { return Ok(0); }
+        if buf.is_empty() {
+            return Ok(0);
+        }
         let first = self.rx.recv().map_err(|_| {
             std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "fw disconnected")
         })?;
@@ -73,7 +91,10 @@ impl std::io::Read for HostSide {
         let mut n = 1;
         while n < buf.len() {
             match self.rx.try_recv() {
-                Ok(b) => { buf[n] = b; n += 1; }
+                Ok(b) => {
+                    buf[n] = b;
+                    n += 1;
+                }
                 Err(_) => break,
             }
         }
@@ -90,7 +111,9 @@ impl std::io::Write for HostSide {
         }
         Ok(buf.len())
     }
-    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────
@@ -121,9 +144,7 @@ async fn main() -> anyhow::Result<()> {
             let client = telepath_client::TelepathClient::new(host_side);
             let mcp_server = telepath_mcp_server::server::TelepathMcpServer::build(client)
                 .map_err(|e| anyhow::anyhow!("discover failed: {e:?}"))?;
-            let running = mcp_server
-                .serve(rmcp::transport::io::stdio())
-                .await?;
+            let running = mcp_server.serve(rmcp::transport::io::stdio()).await?;
             running.waiting().await?;
         }
         other => anyhow::bail!("unsupported transport: {other}"),
