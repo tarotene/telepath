@@ -119,11 +119,12 @@ fn main() -> anyhow::Result<()> {
     client.transport_mut().clear_read_deadline();
     println!("{n} command(s) discovered");
 
-    let commands: Vec<String> = client
+    let mut commands: Vec<String> = client
         .schema_cache()
         .iter()
         .map(|e| e.name.to_string())
         .collect();
+    commands.extend(["help", "quit", "exit"].map(String::from));
 
     run_repl(&mut client, &mut *log_sink, commands)?;
 
