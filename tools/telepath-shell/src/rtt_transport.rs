@@ -28,23 +28,56 @@ impl RttTransport {
     /// The channel layout matches `examples/nrf52840-ping`:
     /// - up 0 / (no down): firmware debug output
     /// - up 1 / down 1: Telepath RPC traffic
+    ///
+    /// If `auto_reset` is `true` and the first attach fails with
+    /// `ControlBlockNotFound`, issues a soft chip reset and retries once after
+    /// 300 ms — long enough for the firmware RTT init to complete on nRF52840.
     pub fn new(
         mut session: Session,
         core_index: usize,
         up_channel: usize,
         down_channel: usize,
         control_block_addr: u64,
+        auto_reset: bool,
     ) -> anyhow::Result<Self> {
         let rtt = {
-            let mut core = session.core(core_index).context("Failed to access core")?;
-            Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr)).with_context(
-                || {
-                    format!(
+            let first_attempt = {
+                let mut core = session.core(core_index).context("Failed to access core")?;
+                Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
+            };
+
+            match first_attempt {
+                Ok(rtt) => rtt,
+                Err(probe_rs::rtt::Error::ControlBlockNotFound) if auto_reset => {
+                    eprintln!(
+                        "RTT control block not found at {:#010x}. Resetting target chip and retrying...",
+                        control_block_addr
+                    );
+                    {
+                        let mut core = session
+                            .core(core_index)
+                            .context("Failed to access core for reset")?;
+                        core.reset().context("Failed to reset target chip")?;
+                    }
+                    std::thread::sleep(Duration::from_millis(300));
+
+                    let mut core = session.core(core_index).context("Failed to access core")?;
+                    Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
+                        .with_context(|| {
+                            format!(
+                                "Failed to attach to RTT at {:#010x} after auto-reset. \
+                                 Is the firmware running and SEGGER RTT initialized?",
+                                control_block_addr
+                            )
+                        })?
+                }
+                Err(e) => {
+                    return Err(anyhow::Error::new(e).context(format!(
                         "Failed to attach to RTT at {:#010x}. Is the firmware running?",
                         control_block_addr
-                    )
-                },
-            )?
+                    )));
+                }
+            }
         };
         Ok(Self {
             session,
