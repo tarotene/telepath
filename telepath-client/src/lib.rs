@@ -546,6 +546,32 @@ mod tests {
     const FIXTURE_U32: &[u8] = &[0x03, 0x75, 0x33, 0x32, 0x08];
 
     #[test]
+    fn fixture_unit_matches_current_postcard_schema() {
+        use postcard_schema::Schema;
+        let expected: Vec<u8> =
+            postcard::to_allocvec(&<() as Schema>::SCHEMA).expect("serialize");
+        assert_eq!(
+            FIXTURE_UNIT,
+            expected.as_slice(),
+            "FIXTURE_UNIT is out of sync — update it to: {:?}",
+            expected
+        );
+    }
+
+    #[test]
+    fn fixture_u32_matches_current_postcard_schema() {
+        use postcard_schema::Schema;
+        let expected: Vec<u8> =
+            postcard::to_allocvec(&<u32 as Schema>::SCHEMA).expect("serialize");
+        assert_eq!(
+            FIXTURE_U32,
+            expected.as_slice(),
+            "FIXTURE_U32 is out of sync — update it to: {:?}",
+            expected
+        );
+    }
+
+    #[test]
     fn schema_entry_decoded_args_schema_roundtrip() {
         use postcard_schema::schema::owned::OwnedNamedType;
         let entry = SchemaEntry {
