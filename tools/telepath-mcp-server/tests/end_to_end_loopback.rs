@@ -24,7 +24,7 @@ fn run_fw(fw_side: helpers::FwSide, running: std::sync::Arc<std::sync::atomic::A
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread")]
 async fn discover_and_invoke_ping() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
@@ -51,7 +51,7 @@ async fn discover_and_invoke_ping() {
     assert_eq!(result, json!(0xDEAD_BEEFu32));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread")]
 async fn discover_and_invoke_add() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);

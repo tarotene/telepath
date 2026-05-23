@@ -25,8 +25,7 @@ where
     T: std::io::Read + std::io::Write,
 {
     let args_bytes = json_to_postcard::json_to_postcard(args_schema, args_json)?;
-    let payload = client
-        .call_raw(cmd_id, &args_bytes)
+    let payload = tokio::task::block_in_place(|| client.call_raw(cmd_id, &args_bytes))
         .map_err(BridgeError::CallRaw)?;
     let result = postcard_to_json::postcard_to_json(ret_schema, &payload)
         .map_err(BridgeError::ResponseDecode)?;
