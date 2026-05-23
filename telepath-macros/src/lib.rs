@@ -156,6 +156,15 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         }
     };
 
+    // --- Build arg_names_str ---
+    // Comma-joined argument names for runtime introspection (e.g. "a,b" for fn foo(a, b)).
+    // Empty for zero-argument commands. Carried in CommandMetadata and forwarded via CDP.
+    let arg_names_str: String = arg_idents
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
     // --- Build args_type_str ---
     // Canonical tuple format matching Rust syntax: "()" for 0-arg, "(T,)" for 1-arg,
     // "(T1, T2)" for 2-arg. Must match the tuple type used for postcard deserialization.
@@ -283,6 +292,7 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                 invoke: #shim_ident,
                 args_schema: #args_schema_ident,
                 ret_schema: #ret_schema_ident,
+                arg_names: #arg_names_str,
             };
 
         #[allow(non_upper_case_globals, non_snake_case)]

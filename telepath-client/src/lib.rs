@@ -67,6 +67,9 @@ pub struct SchemaEntry {
     pub args_schema: Vec<u8>,
     /// Raw postcard-encoded return schema bytes.
     pub ret_schema: Vec<u8>,
+    /// Argument names in declaration order, e.g. `["a", "b"]` for `fn foo(a: i32, b: i32)`.
+    /// Empty for zero-argument commands.
+    pub arg_names: Vec<String>,
 }
 
 impl SchemaEntry {
@@ -202,6 +205,11 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
                     cmd_id: entry.id,
                     args_schema: entry.args_schema.to_vec(),
                     ret_schema: entry.ret_schema.to_vec(),
+                    arg_names: if entry.arg_names.is_empty() {
+                        vec![]
+                    } else {
+                        entry.arg_names.split(',').map(str::to_owned).collect()
+                    },
                 });
                 rest = next;
             }
@@ -331,6 +339,7 @@ mod tests {
             cmd_id: 0x0001,
             args_schema: vec![],
             ret_schema: vec![],
+            arg_names: vec![],
         };
         cache.insert(entry);
         assert!(cache.get(0x0001).is_some());
@@ -346,6 +355,7 @@ mod tests {
             cmd_id: 0x0001,
             args_schema: vec![],
             ret_schema: vec![],
+            arg_names: vec![],
         });
         cache.invalidate(0x0001);
         assert!(cache.is_empty());
@@ -404,6 +414,7 @@ mod tests {
             invoke: ping_shim,
             args_schema: noop_schema,
             ret_schema: noop_schema,
+            arg_names: "",
         }];
 
         // --- Inline blocking pipe (mirrors loopback-demo/src/loopback.rs) ---
@@ -577,6 +588,7 @@ mod tests {
             cmd_id: 1,
             args_schema: FIXTURE_UNIT.to_vec(),
             ret_schema: FIXTURE_U32.to_vec(),
+            arg_names: vec![],
         };
         let args: OwnedNamedType = entry.decoded_args_schema().expect("args decode");
         assert_eq!(args.name.as_ref() as &str, "()");
@@ -591,6 +603,7 @@ mod tests {
             cmd_id: 1,
             args_schema: vec![0xFF, 0xFF, 0xFF],
             ret_schema: vec![],
+            arg_names: vec![],
         };
         assert!(entry.decoded_args_schema().is_err());
     }
@@ -603,12 +616,14 @@ mod tests {
             cmd_id: 0x0001,
             args_schema: vec![1],
             ret_schema: vec![],
+            arg_names: vec![],
         });
         cache.insert(SchemaEntry {
             name: "b".into(),
             cmd_id: 0x0002,
             args_schema: vec![],
             ret_schema: vec![2],
+            arg_names: vec![],
         });
         let mut names: Vec<&str> = cache.iter().map(|e| e.name.as_str()).collect();
         names.sort();
@@ -642,6 +657,7 @@ mod tests {
             invoke: ping_shim,
             args_schema: noop_schema_sp,
             ret_schema: noop_schema_sp,
+            arg_names: "",
         }];
 
         // Pipe: client writes → server reads, server writes → client reads.

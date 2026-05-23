@@ -83,6 +83,9 @@ pub struct CommandMetadata {
     /// Writes the postcard-encoded return-type `NamedType` schema into the
     /// provided buffer. Returns the byte count written.
     pub ret_schema: SchemaFn,
+    /// Comma-separated argument names, e.g. `"a,b"` for `fn foo(a: i32, b: i32)`.
+    /// Empty string for zero-argument commands.
+    pub arg_names: &'static str,
 }
 
 /// All commands registered via `#[command]`, collected at link time.
@@ -233,6 +236,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
                 name: cmd.name,
                 args_schema: &args_scratch[..n_args],
                 ret_schema: &ret_scratch[..n_ret],
+                arg_names: cmd.arg_names,
             };
             // Pre-measure the entry by serializing into a temp scratch.
             let mut entry_tmp = [0u8; 300];
@@ -379,6 +383,7 @@ mod tests {
         invoke: noop_shim,
         args_schema: noop_schema,
         ret_schema: noop_schema,
+        arg_names: "",
     }];
 
     struct FakeTransport;
@@ -425,6 +430,7 @@ mod tests {
         invoke: ping_shim,
         args_schema: noop_schema,
         ret_schema: noop_schema,
+        arg_names: "",
     }];
 
     /// Loopback transport: bytes written are available for reading.

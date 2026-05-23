@@ -131,6 +131,10 @@ pub struct DiscoveryEntry<'a> {
     /// return type.
     #[serde(borrow)]
     pub ret_schema: &'a [u8],
+    /// Comma-separated argument names, e.g. `"a,b"` for `fn foo(a: i32, b: i32)`.
+    /// Empty string for zero-argument commands.
+    #[serde(borrow)]
+    pub arg_names: &'a str,
 }
 
 // ---------------------------------------------------------------------------
