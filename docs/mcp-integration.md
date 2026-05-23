@@ -100,11 +100,6 @@ cd tools/telepath-mcp-server
 cargo run -- --transport loopback
 ```
 
-Test with MCP Inspector:
-```bash
-npx @modelcontextprotocol/inspector ./target/debug/telepath-mcp-server --transport loopback
-```
-
 ## Known limitations and followups
 
 - RTT/serialport transport (`--transport rtt`, `--transport serial:/dev/ttyUSB0`) — see #36
