@@ -1,0 +1,82 @@
+// Integration test: verify that #[command]-annotated functions appear in the
+// linkme-collected commands() slice.
+//
+// `#[linkme::distributed_slice]` collects entries from every crate linked into
+// the binary, not only items defined in this file.  The exact-count assertions
+// below are safe because (a) each tests/*.rs is compiled as its own binary so
+// no other integration-test crate contributes entries, and (b) the
+// telepath-firmware library itself registers no commands — only the two
+// `#[command]` items defined here (alpha, beta) are linked in.
+
+use telepath_server::{command, commands};
+
+// ---------------------------------------------------------------------------
+// Commands under test
+// ---------------------------------------------------------------------------
+
+#[command]
+fn alpha() -> u8 {
+    1
+}
+
+#[command]
+fn beta(x: u8) -> u8 {
+    x.wrapping_add(1)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn registry_includes_both_commands() {
+    let names: Vec<&'static str> = commands().iter().map(|c| c.name).collect();
+    assert!(names.contains(&"alpha"), "alpha must appear in commands()");
+    assert!(names.contains(&"beta"), "beta must appear in commands()");
+}
+
+#[test]
+fn registry_has_exactly_two_commands() {
+    assert_eq!(
+        commands().len(),
+        2,
+        "expected exactly alpha + beta; \
+         a new #[command] in the library or a linker-section regression would change the count"
+    );
+}
+
+#[test]
+fn registry_ids_unique_and_nonzero() {
+    let ids: Vec<u16> = commands().iter().map(|c| c.id).collect();
+    for &id in &ids {
+        assert_ne!(id, 0x0000, "reserved CDP ID must not appear in registry");
+    }
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), ids.len(), "command IDs must be unique");
+}
+
+#[test]
+fn registry_id_matches_macro_const() {
+    // Verify that the linkme-registered entry and the macro-generated const agree.
+    // A mismatch would indicate that the distributed_slice registration was
+    // compiled against a different CommandMetadata than the one in the slice.
+    let alpha_entry = commands()
+        .iter()
+        .find(|c| c.name == "alpha")
+        .expect("alpha must be in commands()");
+    assert_eq!(
+        alpha_entry.id, __TELEPATH_CMD_ALPHA.id,
+        "commands() id must match __TELEPATH_CMD_ALPHA.id"
+    );
+
+    let beta_entry = commands()
+        .iter()
+        .find(|c| c.name == "beta")
+        .expect("beta must be in commands()");
+    assert_eq!(
+        beta_entry.id, __TELEPATH_CMD_BETA.id,
+        "commands() id must match __TELEPATH_CMD_BETA.id"
+    );
+}

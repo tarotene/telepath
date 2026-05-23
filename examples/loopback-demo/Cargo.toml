@@ -1,0 +1,16 @@
+[package]
+name = "loopback-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hardware-free loopback demo: full wire round-trip via mpsc channels"
+
+[[bin]]
+name = "loopback-demo"
+path = "src/main.rs"
+
+[dependencies]
+telepath-wire   = { workspace = true }
+telepath-server = { workspace = true }
+telepath-client = { workspace = true }
+postcard        = { version = "1", features = ["alloc"] }

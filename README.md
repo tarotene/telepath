@@ -11,8 +11,8 @@ discovery — no IDL files, no manual protocol sync.
 
 ```mermaid
 sequenceDiagram
-    participant H as Host (telepath-host)
-    participant T as Target Firmware (telepath-firmware)
+    participant H as Host (telepath-client)
+    participant T as Target Server (telepath-server)
 
     Note over T: Link time: #[command] collects CommandMetadata
     H->>T: Connect (transport open)
@@ -31,13 +31,13 @@ sequenceDiagram
 
 | Path | Role |
 |------|------|
-| `crates/telepath-wire` | Shared wire types — `no_std`, no alloc |
-| `crates/telepath-macros` | `#[command]` proc-macro |
-| `crates/telepath-firmware` | Target-side RPC server — `no_std` |
-| `crates/telepath-host` | Host-side RPC client — `std` |
-| `examples/host-emulator` | In-process server+client emulator — no hardware required |
-| `examples/nrf52840-dk` | Standalone firmware example (workspace-excluded) |
-| `tools/telepath-cli` | Host-side CLI over RTT (workspace-excluded) |
+| `telepath-wire` | Shared wire types — `no_std`, no alloc |
+| `telepath-macros` | `#[command]` proc-macro |
+| `telepath-server` | Target-side RPC server — `no_std` |
+| `telepath-client` | Host-side RPC client — `std` |
+| `examples/loopback-demo` | In-process server+client emulator — no hardware required |
+| `examples/nrf52840-ping` | Standalone firmware example (workspace-excluded) |
+| `tools/telepath-shell` | Host-side CLI over RTT (workspace-excluded) |
 
 ### Framing
 
@@ -61,7 +61,7 @@ The fastest way to see Telepath in action requires no hardware.
 ```
 git clone https://github.com/tarotene/telepath.git
 cd telepath
-cargo run -p host-emulator
+cargo run -p loopback-demo
 ```
 
 Expected output:
@@ -129,32 +129,32 @@ cargo build --workspace
 cargo test --workspace
 
 # Firmware example — must cd so .cargo/config.toml is discovered
-cd examples/nrf52840-dk && cargo build --release
+cd examples/nrf52840-ping && cargo build --release
 
 # Flash to hardware (downloads and exits; probe is released immediately)
-cd examples/nrf52840-dk && cargo run --release
+cd examples/nrf52840-ping && cargo run --release
 
 # CLI tool — must cd because it is workspace-excluded
-cd tools/telepath-cli && cargo build
+cd tools/telepath-shell && cargo build
 
 # 1-shot ping (firmware must already be flashed)
-cd tools/telepath-cli && cargo run -- ping
+cd tools/telepath-shell && cargo run -- ping
 
 # Interactive REPL
-cd tools/telepath-cli && cargo run
+cd tools/telepath-shell && cargo run
 ```
 
 ## Real hardware: nRF52840-DK
 
-See [`examples/nrf52840-dk/README.md`](examples/nrf52840-dk/README.md) for the
+See [`examples/nrf52840-ping/README.md`](examples/nrf52840-ping/README.md) for the
 full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
 
 ```
 # Flash firmware (downloads and exits; probe is released)
-cd examples/nrf52840-dk && cargo run --release
+cd examples/nrf52840-ping && cargo run --release
 
 # Ping over RTT (RPC traffic on channel 1)
-cd tools/telepath-cli && cargo run -- ping
+cd tools/telepath-shell && cargo run -- ping
 ```
 
 ## Using telepath as a library
@@ -164,12 +164,12 @@ cd tools/telepath-cli && cargo run -- ping
 ```toml
 # Cargo.toml
 [dependencies]
-telepath-firmware = { git = "https://github.com/tarotene/telepath", branch = "main" }
+telepath-server = { git = "https://github.com/tarotene/telepath", branch = "main" }
 postcard          = { version = "1", default-features = false }
 ```
 
 ```rust
-use telepath_firmware::{command, TelepathServer};
+use telepath_server::{command, TelepathServer};
 
 // 1. Annotate commands with #[command]. The macro generates a type-erased shim,
 //    a CommandMetadata const, and a linkme registration — no boilerplate required.
@@ -182,7 +182,7 @@ fn ping() -> u32 { 0xDEAD_BEEF }
 
 let mut server = TelepathServer::<MyTransport, 512>::new(
     transport,
-    telepath_firmware::commands(), // linkme-collected at link time
+    telepath_server::commands(), // linkme-collected at link time
 );
 loop { server.poll(); }
 ```
@@ -191,12 +191,12 @@ loop { server.poll(); }
 
 ```toml
 [dependencies]
-telepath-host = { git = "https://github.com/tarotene/telepath", branch = "main" }
+telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main" }
 postcard      = "1"
 ```
 
 ```rust
-use telepath_host::TelepathClient;
+use telepath_client::TelepathClient;
 
 // transport: anything implementing `std::io::Read + std::io::Write`
 let mut client = TelepathClient::new(transport);

@@ -37,10 +37,10 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
-      - name: Smoke test host-emulator
+      - name: Smoke test loopback-demo
         run: |
-          timeout 30 cargo run -p host-emulator | tee /tmp/host-emulator.out
-          grep -qF "ping -> 0xDEADBEEF" /tmp/host-emulator.out
+          timeout 30 cargo run -p loopback-demo | tee /tmp/loopback-demo.out
+          grep -qF "ping -> 0xDEADBEEF" /tmp/loopback-demo.out
 
   # -------------------------------------------------------------------------
   # Job 2: firmware — cross-compile check + release build for nRF52840-DK
@@ -61,9 +61,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check firmware (no linking)
-        working-directory: examples/nrf52840-dk
+        working-directory: examples/nrf52840-ping
         run: cargo check
 
       - name: Build firmware (release)
-        working-directory: examples/nrf52840-dk
+        working-directory: examples/nrf52840-ping
         run: cargo build --release
