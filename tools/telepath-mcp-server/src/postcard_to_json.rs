@@ -5,7 +5,13 @@ use serde_json::{json, Map as JsonMap, Value};
 const MAX_DEPTH: usize = 8;
 
 pub fn postcard_to_json(schema: &OwnedNamedType, bytes: &[u8]) -> Result<Value, ConvertError> {
-    let (val, _remaining) = decode_value(&schema.ty, bytes, "$", 0)?;
+    let (val, remaining) = decode_value(&schema.ty, bytes, "$", 0)?;
+    if !remaining.is_empty() {
+        return Err(ConvertError::Postcard(format!(
+            "{} trailing bytes after decoding root value",
+            remaining.len()
+        )));
+    }
     Ok(val)
 }
 
