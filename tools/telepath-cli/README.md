@@ -43,8 +43,10 @@ cd tools/telepath-cli && cargo run -- ping
 With a non-default chip:
 
 ```
-cd tools/telepath-cli && cargo run -- --chip STM32F411RETx ping
+cd tools/telepath-cli && cargo run -- --chip nRF52840_xxAA ping
 ```
+
+Any probe-rs chip identifier is accepted; run `probe-rs chip list` to find yours.
 
 ### Interactive REPL mode
 
