@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 telepath-client = { path = "../../telepath-client" }
 telepath-wire   = { path = "../../telepath-wire" }
+telepath-server = { path = "../../telepath-server" }
 postcard        = { version = "1", features = ["alloc"] }
 postcard-schema = { version = "0.2", features = ["use-std"] }
 rmcp            = { version = "1", features = ["server", "transport-io", "macros"] }
@@ -28,6 +29,3 @@ thiserror       = "1"
 tracing         = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures         = "0.3"
-
-[dev-dependencies]
-telepath-server = { path = "../../telepath-server" }
