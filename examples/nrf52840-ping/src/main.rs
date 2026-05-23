@@ -196,7 +196,7 @@ fn ficr_uid() -> (u32, u32) {
 }
 
 /// Die temperature in 0.25 °C units.
-/// Returns a signed integer: divide by 4 to get °C, or multiply by 250 for µ°C.
+/// Returns a signed integer: divide by 4 to get °C, or multiply by 250 for m°C.
 /// Example: 100 → 25.00 °C; 111 → 27.75 °C.
 /// Operating range: −160…340 (nRF52840 specification: −40 °C to 85 °C).
 ///
@@ -205,10 +205,12 @@ fn ficr_uid() -> (u32, u32) {
 #[command]
 fn temp_read() -> i16 {
     let t = pac::TEMP;
+    t.events_datardy().write_value(0); // clear stale event before starting
     t.tasks_start().write_value(1);
     while t.events_datardy().read() == 0 {}
     let raw = t.temp().read() as i32;
     t.events_datardy().write_value(0);
+    t.tasks_stop().write_value(1);
     raw as i16
 }
 
@@ -222,12 +224,13 @@ fn temp_read() -> i16 {
 fn rng_u32() -> u32 {
     let r = pac::RNG;
     r.config().write(|w| w.set_dercen(true));
+    r.events_valrdy().write_value(0); // clear stale event before starting
     r.tasks_start().write_value(1);
     let mut bytes = [0u8; 4];
     for byte in bytes.iter_mut() {
         while r.events_valrdy().read() == 0 {}
+        *byte = r.value().read().value(); // read VALUE before clearing VALRDY
         r.events_valrdy().write_value(0);
-        *byte = r.value().read().value();
     }
     r.tasks_stop().write_value(1);
     u32::from_le_bytes(bytes)
@@ -262,6 +265,7 @@ fn saadc_vdd_mv() -> u16 {
         .write_value(core::ptr::addr_of_mut!(buf) as u32);
     r.result().maxcnt().write(|w| w.set_maxcnt(1));
     r.enable().write(|w| w.set_enable(true));
+    r.events_started().write_value(0); // clear stale events before starting
     r.events_end().write_value(0);
     r.tasks_start().write_value(1);
     // Wait for SAADC to be ready before issuing SAMPLE (nRF52840 PS §6.23.4).

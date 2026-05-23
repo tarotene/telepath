@@ -136,19 +136,18 @@ fn shim_saadc_vdd_mv_roundtrip() {
 
 // ---------------------------------------------------------------------------
 // Tuple return type: postcard encodes (u32, u32) as two consecutive varints.
-// Verify byte count is correct (each u32 ≤ 0x7FFF_FFFF → 5 bytes max, sentinel
-// 0xAAAA_AAAA needs 5 bytes, 0x5555_5555 needs 4 bytes).
+// Use postcard as the encoding oracle rather than hand-derived varint math.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn ficr_uid_postcard_byte_width() {
     let mut buf = [0u8; 16];
     let n = (__TELEPATH_CMD_FICR_UID.invoke)(&[], &mut buf).unwrap();
-    // Both 0xAAAAAAAA (32 bits) and 0x55555555 (31 bits) need 5 varint bytes each → 10 total
-    assert_eq!(
-        n, 10,
-        "unexpected postcard encoding length for (u32, u32) sentinel"
-    );
+    let mut oracle_buf = [0u8; 16];
+    let expected = postcard::to_slice(&(0xAAAA_AAAAu32, 0x5555_5555u32), &mut oracle_buf)
+        .unwrap()
+        .len();
+    assert_eq!(n, expected, "unexpected postcard encoding length for (u32, u32) sentinel");
 }
 
 // ---------------------------------------------------------------------------
