@@ -5,17 +5,20 @@ Telepath server as an MCP tool, with zero hand-written tool descriptors.
 
 ## Architecture
 
-```
-[MCP Client (AI agent)]
-        ↕ stdio JSON-RPC
-[telepath-mcp-server bin]
-   ├ server.rs   — rmcp::ServerHandler, list_tools / call_tool
-   ├ bridge.rs   — async invoke(): JSON args → postcard → call_raw → JSON ret
-   ├ schema_to_json.rs   — OwnedNamedType → JSON Schema (pure, sync)
-   ├ json_to_postcard.rs — serde_json::Value + schema → postcard bytes (pure, sync)
-   └ postcard_to_json.rs — postcard bytes + schema → serde_json::Value (pure, sync)
-        ↕ TelepathClient::call_raw
-[Telepath server (loopback or RTT)]
+```mermaid
+flowchart TB
+    MC[MCP Client<br/>AI agent]
+    subgraph Bridge["telepath-mcp-server bin"]
+        SRV["server.rs<br/>rmcp::ServerHandler — list_tools / call_tool"]
+        BR["bridge.rs<br/>async invoke(): JSON ↔ postcard via call_raw"]
+        S2J["schema_to_json.rs<br/>OwnedNamedType → JSON Schema (pure, sync)"]
+        J2P["json_to_postcard.rs<br/>serde_json::Value + schema → postcard (pure, sync)"]
+        P2J["postcard_to_json.rs<br/>postcard + schema → serde_json::Value (pure, sync)"]
+    end
+    TS[Telepath server<br/>loopback or RTT]
+
+    MC <-->|stdio JSON-RPC| Bridge
+    Bridge <-->|TelepathClient::call_raw| TS
 ```
 
 The three pure modules (`schema_to_json`, `json_to_postcard`, `postcard_to_json`)
@@ -23,14 +26,12 @@ have no I/O or async dependencies and are covered by unit tests.
 
 ## Startup sequence
 
-```
-1. client.discover()         — fetches all #[command] metadata via CDP paging
-2. For each SchemaEntry:
-   a. decoded_args_schema()  — postcard::from_bytes → OwnedNamedType
-   b. named_type_to_json_schema() → serde_json::Value (JSON Schema)
-   c. rmcp::Tool::new(name, description, input_schema)
-3. serve((stdin, stdout))    — rmcp stdio JSON-RPC loop
-```
+1. `client.discover()` — fetches all `#[command]` metadata via CDP paging
+2. For each `SchemaEntry`:
+   - `decoded_args_schema()` — `postcard::from_bytes` → `OwnedNamedType`
+   - `named_type_to_json_schema()` → `serde_json::Value` (JSON Schema)
+   - `rmcp::Tool::new(name, description, input_schema)`
+3. `serve((stdin, stdout))` — rmcp stdio JSON-RPC loop
 
 ## OwnedDataModelType → JSON Schema mapping
 
