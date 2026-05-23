@@ -69,6 +69,22 @@ pub struct SchemaEntry {
     pub ret_schema: Vec<u8>,
 }
 
+impl SchemaEntry {
+    /// Decode the raw argument-schema bytes into an `OwnedNamedType`.
+    pub fn decoded_args_schema(
+        &self,
+    ) -> Result<postcard_schema::schema::owned::OwnedNamedType, HostError> {
+        postcard::from_bytes(&self.args_schema).map_err(|_| HostError::SerdeError)
+    }
+
+    /// Decode the raw return-schema bytes into an `OwnedNamedType`.
+    pub fn decoded_ret_schema(
+        &self,
+    ) -> Result<postcard_schema::schema::owned::OwnedNamedType, HostError> {
+        postcard::from_bytes(&self.ret_schema).map_err(|_| HostError::SerdeError)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SchemaCache
 // ---------------------------------------------------------------------------
@@ -111,6 +127,10 @@ impl SchemaCache {
 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SchemaEntry> {
+        self.entries.values()
     }
 }
 
@@ -518,6 +538,62 @@ mod tests {
         // Verify the host faithfully stored whatever the server sent.
         assert_eq!(entry.args_schema, Vec::<u8>::new());
         assert_eq!(entry.ret_schema, Vec::<u8>::new());
+    }
+
+    // Golden fixtures: postcard::to_allocvec(<T as Schema>::SCHEMA)
+    // Captured 2026-05-23 from postcard-schema 0.2.5
+    const FIXTURE_UNIT: &[u8] = &[0x02, 0x28, 0x29, 0x13];
+    const FIXTURE_U32: &[u8] = &[0x03, 0x75, 0x33, 0x32, 0x08];
+
+    #[test]
+    fn schema_entry_decoded_args_schema_roundtrip() {
+        use postcard_schema::schema::owned::OwnedNamedType;
+        let entry = SchemaEntry {
+            name: "ping".into(),
+            cmd_id: 1,
+            args_schema: FIXTURE_UNIT.to_vec(),
+            ret_schema: FIXTURE_U32.to_vec(),
+        };
+        let args: OwnedNamedType = entry.decoded_args_schema().expect("args decode");
+        assert_eq!(args.name.as_ref() as &str, "()");
+        let ret: OwnedNamedType = entry.decoded_ret_schema().expect("ret decode");
+        assert_eq!(ret.name.as_ref() as &str, "u32");
+    }
+
+    #[test]
+    fn schema_entry_decode_returns_err_on_garbage() {
+        let entry = SchemaEntry {
+            name: "x".into(),
+            cmd_id: 1,
+            args_schema: vec![0xFF, 0xFF, 0xFF],
+            ret_schema: vec![],
+        };
+        assert!(entry.decoded_args_schema().is_err());
+    }
+
+    #[test]
+    fn schema_cache_iter_yields_inserted_entries() {
+        let mut cache = SchemaCache::new();
+        cache.insert(SchemaEntry {
+            name: "a".into(),
+            cmd_id: 0x0001,
+            args_schema: vec![1],
+            ret_schema: vec![],
+        });
+        cache.insert(SchemaEntry {
+            name: "b".into(),
+            cmd_id: 0x0002,
+            args_schema: vec![],
+            ret_schema: vec![2],
+        });
+        let mut names: Vec<&str> = cache.iter().map(|e| e.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn schema_cache_iter_is_empty_on_empty_cache() {
+        assert_eq!(SchemaCache::new().iter().count(), 0);
     }
 
     /// Server-side round-trip: manually encode a request, feed to server, decode the response.
