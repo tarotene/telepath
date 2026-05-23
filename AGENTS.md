@@ -90,9 +90,37 @@ just ci
 
 ## `#[command]` Macro
 
-- Current state: **passthrough stub** — the function is emitted unchanged.
-- Planned: generate type-erased shim + `CommandMetadata` static + `linkme` distributed slice registration.
-- Changes to the macro MUST NOT break existing callers on stable toolchain.
+### Signature contract
+
+`#[command]` accepts a plain free function with the following constraints.
+
+Allowed:
+- Free function only (no `self` or methods)
+- Any number of positional arguments (simple identifier patterns only)
+- Argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- Return type: any `T: Serialize + postcard_schema::Schema` (owned, no references); `()` means "no payload"
+
+Rejected at compile time (`syn::Error`):
+- `async fn`, `unsafe fn`
+- Generic parameters and `where` clauses
+- `&T` / `&mut T` argument or return type
+- Methods (`fn foo(&self, …)`)
+- Non-identifier argument patterns (e.g. tuple destructuring)
+
+Wire encoding:
+- Args serialized as a postcard tuple: `()` (0-arg), `(T,)` (1-arg), `(T1, T2, …)` (N-arg)
+- Return value serialized standalone (no wrapper tuple)
+- CmdID derived deterministically from `(name, args_type_str, ret_type_str)` — renaming a function or changing a type is a breaking wire change
+
+### Generated items
+
+For each `#[command] fn foo(…) -> R`, the macro emits:
+- `__telepath_shim_foo` — type-erased shim: postcard-deserializes args, calls `foo`, serializes return value
+- `__telepath_args_schema_foo` / `__telepath_ret_schema_foo` — write postcard-encoded `NamedType` schema bytes
+- `pub const __TELEPATH_CMD_FOO: CommandMetadata`
+- `#[linkme::distributed_slice]` static `__TELEPATH_REG_FOO` for zero-cost link-time registration
+
+Changes to the macro MUST NOT break existing callers on stable toolchain.
 
 ## Commit and PR Rules
 
