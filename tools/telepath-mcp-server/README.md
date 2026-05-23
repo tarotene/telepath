@@ -121,68 +121,25 @@ cd tools/telepath-mcp-server
 cargo build
 ```
 
-### 2. Register as a project-scoped MCP server
+### 2. Register with `claude mcp add`
 
 ```bash
-claude mcp add --transport stdio --scope project telepath \
-  -- "${CLAUDE_PROJECT_DIR}/tools/telepath-mcp-server/target/debug/telepath-mcp-server" \
+claude mcp add --scope local --transport stdio telepath \
+  -- "$(git rev-parse --show-toplevel)/tools/telepath-mcp-server/target/debug/telepath-mcp-server" \
   --transport loopback
 ```
 
-This writes `.mcp.json` at the repository root (already committed to this repo).
+This writes the server entry directly into `~/.claude.json` for this project,
+bypassing any trust-dialog flow.  The server is available in every Claude Code
+session you start from this directory from now on.
 
-Start Claude Code from the repository root — no `CLAUDE_PROJECT_DIR` export
-needed.  `.mcp.json` uses `${CLAUDE_PROJECT_DIR:-.}`, which falls back to `.`
-(current directory) when the variable is unset, and Claude Code always starts
-in the project root.
-
-```bash
-cd <repo-root>
-claude  # start Claude Code
-```
-
-The server loads automatically on every Claude Code session started from the
-repository root.
-
-### 3. Approve the project trust gate
-
-The first time you open Claude Code in this directory, a **project trust dialog**
-appears asking whether to enable MCP servers defined in `.mcp.json`.  You must
-approve `telepath` here — without approval it will not appear in `/mcp` even if
-`claude mcp list` shows `✓ Connected` (that command bypasses the dialog for
-health-check purposes only).
-
-If the dialog never appeared, the most likely cause is that the binary path was
-unresolvable at session start (e.g. old `.mcp.json` without the `:-.` fallback,
-or the binary not yet built).  Ensure `.mcp.json` is correct and the binary
-exists, then reset and retry:
-
-```bash
-cd <repo-root>
-cargo build -p telepath-mcp-server 2>/dev/null || (cd tools/telepath-mcp-server && cargo build)
-claude mcp reset-project-choices
-claude   # trust dialog re-appears on next session start
-```
-
-Confirm approval was recorded:
-
-```bash
-jq '.projects["'$(git rev-parse --show-toplevel)'"].enabledMcpjsonServers' \
-  ~/.claude.json
-# expected: ["telepath"]
-```
-
-> **Note**: `claude mcp list` / `claude mcp get` skip the trust dialog when running
-> health checks.  `✓ Connected` there does **not** guarantee the server is loaded
-> inside an active Claude Code session.
-
-### 4. Verify
+### 3. Verify
 
 Start a new Claude Code session inside the repository and run `/mcp` to confirm
 `telepath` appears with its discovered tools. For the loopback build, `ping` will
 be listed.
 
-### 5. Invoke a Telepath command
+### 4. Invoke a Telepath command
 
 In a Claude Code prompt:
 
