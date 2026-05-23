@@ -15,7 +15,7 @@ flowchart TB
         J2P["json_to_postcard.rs<br/>serde_json::Value + schema → postcard (pure, sync)"]
         P2J["postcard_to_json.rs<br/>postcard + schema → serde_json::Value (pure, sync)"]
     end
-    TS[Telepath server<br/>loopback or RTT]
+    TS[Telepath server<br/>loopback / RTT / serial]
 
     MC <-->|stdio JSON-RPC| Bridge
     Bridge <-->|TelepathClient::call_raw| TS
@@ -93,17 +93,46 @@ Encoding follows the postcard wire format exactly:
 | Struct return type | ret schema = `Struct(fields)`; JSON = `{"field":value,…}` |
 | Enum return type | unit variants return `"Name"` string; payload variants return `{"Name":payload}` |
 
-## Running
+## Transports
+
+Three transport backends are supported via the `--transport` flag:
+
+| Transport | Flag | When to use |
+|---|---|---|
+| Loopback | `--transport loopback` (default) | Local testing — no hardware required; built-in demo `ping` command |
+| RTT | `--transport rtt` | Firmware running on a board connected via J-Link / CMSIS-DAP |
+| Serial | `--transport serial:<path>` | Firmware connected via USB-CDC or UART |
+
+### Loopback (default)
 
 ```bash
-# Loopback mode — no hardware required (demo ping command built in)
 cd tools/telepath-mcp-server
 cargo run -- --transport loopback
 ```
 
+### RTT
+
+Flash firmware first, then attach:
+
+```bash
+# Flash (probe released immediately so the MCP server can attach)
+cd examples/nrf52840-ping && cargo run --release
+
+# Connect via RTT
+cd ../../tools/telepath-mcp-server
+cargo run -- --transport rtt
+# Use --chip <name> to override the target (default: nRF52840_xxAA)
+# Use --rtt-control-block-addr <hex> or env TELEPATH_RTT_CONTROL_BLOCK_ADDR to override the RTT control block address
+```
+
+### Serial
+
+```bash
+cargo run -- --transport serial:/dev/ttyACM0 --baud 115200
+```
+
 ## Known limitations and followups
 
-- RTT/serialport transport (`--transport rtt`, `--transport serial:/dev/ttyUSB0`) — see #36
 - Schema cache invalidation on firmware reconnect — see #37
 - Named-argument mapping for tuple-schema commands (bridge-level adaptation) — see #38
 - MCP `resources` / `prompts` capability exposure — see #39

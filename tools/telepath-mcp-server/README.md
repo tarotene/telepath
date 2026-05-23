@@ -55,6 +55,7 @@ cargo test
 | `schema_to_json_table` | All `OwnedDataModelType` variants → JSON Schema mapping |
 | `json_postcard_roundtrip` | encode → decode identity; native postcard oracle comparison |
 | `end_to_end_loopback` | discover + invoke `ping` and `add` via full bridge stack |
+| `serial_pty_smoke` | full wire path (COBS + postcard) over a Unix pty pair (unix only) |
 
 ## Architecture
 
@@ -104,4 +105,13 @@ Expected: the agent invokes the tool and returns `3735928559` (`0xDEADBEEF`).
 - This crate is **excluded from the workspace** — always `cd` into it before
   running `cargo` commands.
 - `stdout` carries the MCP JSON-RPC stream; all logging goes to `stderr`.
-- The loopback transport is currently the only built-in transport — see #36 for RTT/serialport support.
+
+## Transports
+
+| Transport | Flag | Notes |
+|---|---|---|
+| Loopback | `--transport loopback` (default) | No hardware required; built-in demo `ping` command |
+| RTT | `--transport rtt` | J-Link / CMSIS-DAP probe via probe-rs. Use `--chip` and `--rtt-control-block-addr` (or env `TELEPATH_RTT_CONTROL_BLOCK_ADDR`) to configure |
+| Serial | `--transport serial:<path>` | USB-CDC or UART. Use `--baud` to set baud rate (default: 115200) |
+
+See [`docs/mcp-integration.md`](../../docs/mcp-integration.md) for full usage examples.
