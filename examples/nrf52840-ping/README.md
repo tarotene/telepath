@@ -53,6 +53,7 @@ runtime by any connected host (MCP server, shell, or client library).
 | `ping` | `() -> u32` | Sanity check; returns `0xDEADBEEF`. |
 | `led_set` | `(id: u8, on: bool) -> bool` | Set one LED. `id` 1–4; out-of-range returns `false`. |
 | `led_pattern` | `(mask: u8) -> u8` | Set all four LEDs: bit 0 = LED1, bit 3 = LED4. Returns applied mask. |
+| `led_pattern_get` | `() -> u8` | Read back driven state of all four LEDs. Bit 0 = LED1, bit 3 = LED4. On = 1, Off = 0. |
 | `button_read` | `() -> u8` | Instantaneous button snapshot: bit 0 = BTN1, bit 3 = BTN4, pressed = 1. |
 
 All four LEDs (LED1–LED4) are fully under RPC control.
@@ -78,19 +79,51 @@ indicator.  Channel 1 carries COBS-framed postcard-serialized Telepath frames.
 
 ## Verify with telepath-shell
 
-With the firmware flashed (probe released), run `telepath-shell` and send a
-`ping` request to confirm the stack is up:
+Flash the firmware first (probe is released immediately after `cargo run --release` exits):
 
 ```
-cd tools/telepath-shell && cargo run -- ping
+cd examples/nrf52840-ping && cargo run --release
 ```
 
-Expected output:
+Then launch the discovery-driven REPL.  `telepath-shell` calls the Command
+Discovery Protocol (CmdID `0x0000`) at startup and builds a schema-aware
+prompt from the registered commands — no hardcoded subcommands required.
 
 ```
+telepath-shell
+```
+
+**Regression — `ping`:**
+
+```
+telepath> ping
 ping -> 0xDEADBEEF
 ```
 
-For LED and button commands, use `telepath-mcp-server` (which discovers all
-commands at runtime via the Command Discovery Protocol) or issue them via the
-Telepath client API directly.
+**LED set/get closed loop:**
+
+```
+telepath> led_pattern_get
+led_pattern_get -> 0
+telepath> led_pattern 10
+led_pattern -> 10
+telepath> led_pattern_get
+led_pattern_get -> 10
+telepath> led_set 1 true
+led_set -> true
+telepath> led_pattern_get
+led_pattern_get -> 11
+telepath> led_pattern 0
+led_pattern -> 0
+telepath> led_pattern_get
+led_pattern_get -> 0
+```
+
+**Button snapshot:**
+
+```
+telepath> button_read
+button_read -> 0
+```
+
+(Hold a button, then call `button_read` again — the corresponding bit will be set.)

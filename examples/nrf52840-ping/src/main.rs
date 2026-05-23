@@ -1,9 +1,10 @@
 //! Telepath RTT example for nRF52840-DK.
 //!
-//! Exposes four RPC commands over the Telepath wire:
+//! Exposes five RPC commands over the Telepath wire:
 //! - `ping`: sanity check, returns `0xDEADBEEF: u32`.
 //! - `led_set(id: u8, on: bool)`: illuminate or extinguish one LED (id 1–4).
 //! - `led_pattern(mask: u8)`: set all four LEDs in one round trip; bit 0 = LED1.
+//! - `led_pattern_get()`: read back the current driven state of all four LEDs.
 //! - `button_read()`: snapshot of all four button states; bit 0 = BTN1, pressed = 1.
 //!
 //! LED1–LED4 are fully under RPC control.  Liveness is indicated by periodic
@@ -110,6 +111,27 @@ fn led_pattern(mask: u8) -> u8 {
                 }
             }
             m
+        } else {
+            0
+        }
+    })
+}
+
+/// Read back the current driven state of all four LEDs.
+/// Bit 0 = LED1, bit 3 = LED4.  On (illuminated) = 1, Off = 0
+/// (active-low hardware is inverted here).  Returns `0` if uninitialised.
+#[command]
+fn led_pattern_get() -> u8 {
+    critical_section::with(|cs| {
+        let guard = LEDS.borrow(cs).borrow();
+        if let Some(leds) = guard.as_ref() {
+            let mut state = 0u8;
+            for (i, led) in leds.iter().enumerate() {
+                if led.is_set_low() {
+                    state |= 1 << i;
+                }
+            }
+            state
         } else {
             0
         }
