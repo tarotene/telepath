@@ -7,36 +7,36 @@
 
 | Crate | Role | Target |
 |-------|------|--------|
-| `crates/telepath-wire` | Shared wire protocol types | host + firmware |
-| `crates/telepath-macros` | `#[command]` proc-macro | host (build time only) |
-| `crates/telepath-firmware` | Target-side RPC server | `thumbv7em-none-eabi` |
-| `crates/telepath-host` | Host-side RPC client | native (`std`) |
-| `examples/host-emulator` | In-process server+client emulator | native (`std`) |
-| `examples/nrf52840-dk` | Standalone firmware example | `thumbv7em-none-eabi` |
-| `tools/telepath-cli` | Host-side CLI over RTT | native (`std`) |
+| `telepath-wire` | Shared wire protocol types | server + client |
+| `telepath-macros` | `#[command]` proc-macro | server (build time only) |
+| `telepath-server` | Target-side RPC server library | `thumbv7em-none-eabi` |
+| `telepath-client` | Host-side RPC client library | native (`std`) |
+| `examples/loopback-demo` | In-process server+client loopback | native (`std`) |
+| `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
+| `tools/telepath-shell` | Interactive shell for Telepath servers | native (`std`) |
 
 ## Build Commands
 
 ```
-# Host workspace (all 5 members including host-emulator)
+# Host workspace (all 5 members including loopback-demo)
 cargo build --workspace
 
-# Run the in-process emulator end-to-end (no hardware required)
-cargo run -p host-emulator
+# Run the in-process loopback end-to-end (no hardware required)
+cargo run -p loopback-demo
 
 # Host tests
 cargo test --workspace
 
-# Firmware example — cd required so .cargo/config.toml is discovered
-cd examples/nrf52840-dk && cargo build --release
+# Server example — cd required so .cargo/config.toml is discovered
+cd examples/nrf52840-ping && cargo build --release
 
 # Flash to nRF52840-DK (probe-rs download: flashes and exits, probe released)
-cd examples/nrf52840-dk && cargo run --release
+cd examples/nrf52840-ping && cargo run --release
 
-# CLI tool (excluded from workspace — requires cd)
-cd tools/telepath-cli && cargo build
-cd tools/telepath-cli && cargo run -- ping
-cd tools/telepath-cli && cargo run
+# Shell tool (excluded from workspace — requires cd)
+cd tools/telepath-shell && cargo build
+cd tools/telepath-shell && cargo run -- ping
+cd tools/telepath-shell && cargo run
 
 # Format check
 cargo fmt --all -- --check
@@ -55,24 +55,24 @@ just ci
 - All types MUST implement `serde::Serialize + serde::Deserialize` with `default-features = false`.
 - Lifetime-parameterised types (e.g. `Request<'a>`) MUST borrow from the receive buffer to achieve zero-copy deserialization.
 
-### `examples/nrf52840-dk`
+### `examples/nrf52840-ping`
 - MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
 - MUST NOT be added to the workspace `members` list; it has its own `target` directory and Cargo config.
 - Cross-compilation REQUIRES `rustup target add thumbv7em-none-eabi`.
-- `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-cli` can attach.
+- `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-shell` can attach.
 
-### `examples/host-emulator`
+### `examples/loopback-demo`
 - IS a workspace member (`std` target, no cross-compile). Build with `cargo build --workspace`.
-- MUST exercise the full wire path including COBS framing — it is the primary hardware-free regression for `telepath-firmware` and `telepath-host`.
+- MUST exercise the full wire path including COBS framing — it is the primary hardware-free regression for `telepath-server` and `telepath-client`.
 - MUST use only public APIs of the dependent crates; it MUST NOT poke internal state to aid the round-trip.
-- CI runs `timeout 30 cargo run -p host-emulator` and grep-asserts the `ping -> 0xDEADBEEF` output on every push.
+- CI runs `timeout 30 cargo run -p loopback-demo` and grep-asserts the `ping -> 0xDEADBEEF` output on every push.
 
-### `tools/telepath-cli`
+### `tools/telepath-shell`
 - MUST be built separately; it is excluded from the workspace.
-- MUST NOT be built with `cargo build -p telepath-cli` from the workspace root (not a workspace member).
-- Firmware MUST be flashed (and probe released) before invoking the CLI.
+- MUST NOT be built with `cargo build -p telepath-shell` from the workspace root (not a workspace member).
+- Server MUST be flashed (and probe released) before invoking the shell.
 
-### `telepath-firmware`
+### `telepath-server`
 - MUST remain `#![no_std]`.
 - MUST NOT depend on `std` or `alloc` directly.
 
@@ -127,7 +127,7 @@ Changes to the macro MUST NOT break existing callers on stable toolchain.
 - Follow Conventional Commits: `feat(wire): add CRC field to Request`
 - Feature branches MUST be created before any code change.
 - PRs MUST reference the corresponding GitHub Issue.
-- `examples/nrf52840-dk/` changes SHOULD be a separate commit from workspace changes.
+- `examples/nrf52840-ping/` changes SHOULD be a separate commit from workspace changes.
 
 ## Toolchain
 

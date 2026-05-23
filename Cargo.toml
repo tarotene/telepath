@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/telepath-wire",
-    "crates/telepath-macros",
-    "crates/telepath-firmware",
-    "crates/telepath-host",
-    "examples/host-emulator",
+    "telepath-wire",
+    "telepath-macros",
+    "telepath-server",
+    "telepath-client",
+    "examples/loopback-demo",
 ]
-exclude = ["examples/nrf52840-dk", "tools/telepath-cli"]
+exclude = ["examples/nrf52840-ping", "tools/telepath-shell"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,9 +16,10 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/tarotene/telepath"
 
 [workspace.dependencies]
-telepath-wire = { path = "crates/telepath-wire" }
-telepath-macros = { path = "crates/telepath-macros" }
-telepath-firmware = { path = "crates/telepath-firmware" }
+telepath-wire = { path = "telepath-wire" }
+telepath-macros = { path = "telepath-macros" }
+telepath-server = { path = "telepath-server" }
+telepath-client = { path = "telepath-client" }
 serde = { version = "1", default-features = false, features = ["derive"] }
 postcard = { version = "1", default-features = false }
 syn = { version = "2", features = ["full"] }

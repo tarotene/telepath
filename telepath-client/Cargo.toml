@@ -1,0 +1,16 @@
+[package]
+name = "telepath-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Host-side Telepath RPC client library (std)"
+
+[dependencies]
+telepath-wire = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
+cobs = "0.2"
+
+[dev-dependencies]
+telepath-server = { workspace = true }
+postcard-schema = { workspace = true, features = ["use-std"] }

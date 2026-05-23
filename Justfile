@@ -24,30 +24,30 @@ clippy:
 # Build firmware example (cross-compile; requires thumbv7em-none-eabi target)
 # Must cd into the example dir so .cargo/config.toml picks up target = "thumbv7em-none-eabi"
 firmware-build:
-    cd examples/nrf52840-dk && cargo build --release
+    cd examples/nrf52840-ping && cargo build --release
 
 # Flash firmware to nRF52840-DK (downloads and exits; probe is released)
 firmware-flash:
-    cd examples/nrf52840-dk && cargo run --release
+    cd examples/nrf52840-ping && cargo run --release
 
-# Build telepath-cli
+# Build telepath-shell
 cli-build:
-    cd tools/telepath-cli && cargo build
+    cd tools/telepath-shell && cargo build
 
-# Run telepath-cli with arguments (firmware must already be flashed)
+# Run telepath-shell with arguments (firmware must already be flashed)
 cli *ARGS:
-    cd tools/telepath-cli && cargo run -- {{ARGS}}
+    cd tools/telepath-shell && cargo run -- {{ARGS}}
 
 # End-to-end smoke test: flash then ping
 firmware-ping: firmware-flash
-    cd tools/telepath-cli && cargo run -- ping
+    cd tools/telepath-shell && cargo run -- ping
 
 # Build everything: workspace + firmware + CLI
 check-all: build firmware-build cli-build
 
 # Run the in-process emulator end-to-end (no hardware required)
 emulator:
-    cargo run -p host-emulator
+    cargo run -p loopback-demo
 
 # Full CI gate: fmt-check + clippy + test + emulator smoke
 ci: fmt-check clippy test emulator

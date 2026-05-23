@@ -1,0 +1,36 @@
+[package]
+name = "nrf52840-ping"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "nrf52840-ping"
+path = "src/main.rs"
+
+[dependencies]
+telepath-server = { path = "../../telepath-server" }
+postcard = { version = "1", default-features = false }
+
+embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread"] }
+embassy-nrf = { version = "0.3", features = [
+    "nrf52840",
+    "time-driver-rtc1",
+    "gpiote",
+] }
+
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+
+# RTT for both debug printing and Telepath transport.
+# We use rtt-target exclusively (no defmt-rtt) to avoid duplicate RTT control
+# blocks. Debug output goes on up channel 0; Telepath goes on channel 1.
+rtt-target = "0.6"
+
+panic-halt = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = true
