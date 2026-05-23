@@ -5,26 +5,36 @@ server as an MCP tool — zero hand-written tool descriptors required.
 
 ## Quick start (loopback, no hardware)
 
-`telepath-mcp-server` is a stdio MCP server: the MCP **client** spawns the binary
-as a child process and connects via stdin/stdout.  You do not need to run the server
-manually in a separate terminal.
+`telepath-mcp-server` is a bridge binary that wraps a `telepath-client` as a
+stdio MCP server.  An MCP client spawns it as a child process; in **loopback**
+mode the binary additionally hosts an in-process Telepath server so every
+`#[command]` function is exposed as an MCP tool with zero hand-written
+descriptors.
+
+For the wider protocol design see the
+[Agent-ready by design](../../README.md#agent-ready-by-design) section of the
+root README; for the bridge's internal module layout and JSON↔postcard
+encoding contract see [`docs/mcp-integration.md`](../../docs/mcp-integration.md).
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Client as MCP Client<br/>(Claude Code / any MCP client)
-    participant Server as telepath-mcp-server<br/>(stdio)
+    participant MC as MCP Client<br/>(e.g. Claude Code)
+    participant Bridge as telepath-client<br/>(as MCP server)
+    participant TS as Telepath server<br/>(in-process, loopback)
 
-    User->>Client: launch (pass binary path as argument)
-    Client->>Server: spawn(--transport loopback)
-    Note over Client,Server: same process tree / stdin·stdout connected<br/>no separate terminal needed
-    Client->>Server: initialize
-    Server-->>Client: capabilities (tools)
-    Client->>Server: tools/list
-    Server-->>Client: [ping, ...]
-    User->>Client: invoke ping tool
-    Client->>Server: tools/call ping
-    Server-->>Client: 0xDEADBEEF
+    User->>MC: launch — pass binary path as arg
+    MC->>Bridge: spawn telepath-mcp-server<br/>(--transport loopback)
+    Bridge->>TS: start in-process server + connect (mpsc loopback)
+    MC->>Bridge: initialize / tools/list (MCP)
+    Bridge->>TS: Request CmdID=0x0000 (Discovery)
+    TS-->>Bridge: command list + postcard schemas
+    Bridge-->>MC: tools = [ping, ...] with auto-generated JSON Schema
+    User->>MC: invoke ping tool
+    MC->>Bridge: tools/call ping (MCP)
+    Bridge->>TS: Request CmdID=ping
+    TS-->>Bridge: Response 0xDEADBEEF
+    Bridge-->>MC: 3735928559 (= 0xDEADBEEF)
 ```
 
 ### Build
