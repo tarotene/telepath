@@ -58,10 +58,28 @@ npm install
 npm test
 ```
 
-**Adding Inspector UI tests later**: uncomment the `inspector-ui` project block
-in `e2e/playwright.config.ts`, run `npx playwright install chromium`, then
-update `e2e/tests/inspector.spec.ts` with current selectors and run
-`npm run test:ui`.
+### Re-enabling Inspector UI tests (future)
+
+`e2e/tests/inspector.spec.ts` contains the full browser-based test suite.
+It is excluded from the default project due to the Tools panel issue described
+in [Limitations](#limitations).  When that issue is resolved:
+
+1. Uncomment the `inspector-ui` project block in `e2e/playwright.config.ts`
+2. Install the browser:
+   ```bash
+   cd tools/telepath-mcp-server/e2e && npx playwright install chromium
+   ```
+3. Update selectors if the Inspector UI has changed since the last working run:
+   ```bash
+   cd tools/telepath-mcp-server/e2e && npm run codegen
+   # Navigate to http://localhost:6274, click the Tools tab,
+   # List Tools, and select ping — capture the current selectors
+   ```
+4. Run: `cd tools/telepath-mcp-server/e2e && npm run test:ui`
+
+Known environment requirement: `DANGEROUSLY_OMIT_AUTH=true` is set by the
+test `beforeEach` hook — this disables the Inspector proxy session-token check
+so the browser can reach `http://localhost:6274` without a token in the URL.
 
 ## Architecture
 
@@ -105,6 +123,31 @@ In a Claude Code prompt:
 > Call the `ping` MCP tool and report the result.
 
 Expected: the agent invokes the tool and returns `3735928559` (`0xDEADBEEF`).
+
+## Limitations
+
+### rmcp v1.7.0 wire format deviations
+
+The server is built on **rmcp v1.7.0**, which diverges from the MCP spec in two
+ways that affect clients using `@modelcontextprotocol/sdk` v1.11+:
+
+| Field | rmcp sends | Spec requires | Effect |
+|---|---|---|---|
+| `tools/list` → `inputSchema.type` | `"null"` (no-arg tools) | `"object"` | SDK Zod validation rejects `listTools()` |
+| `tools/call` → `structuredContent` | raw number | `object \| null` | SDK Zod validation rejects `callTool()` |
+
+**Workaround**: the headless E2E tests (`e2e/tests/mcp.spec.ts`) bypass the SDK
+entirely and speak raw JSON-RPC over stdio.  Fix requires an upstream rmcp patch.
+
+### Inspector UI automated tests disabled
+
+`e2e/tests/inspector.spec.ts` exists but is excluded from the default Playwright
+project (`mcp-headless`).  Root cause: after clicking **List Tools** in Inspector
+v0.21.x the Tools panel does not populate even though `tools/list` appears in the
+History panel — likely a React render timing issue.  The headless tests in
+`mcp.spec.ts` cover the same protocol behaviors in the meantime.  See
+[Re-enabling Inspector UI tests](#re-enabling-inspector-ui-tests-future) for the
+recovery path.
 
 ## Notes
 
