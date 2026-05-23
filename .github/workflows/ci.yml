@@ -42,6 +42,10 @@ jobs:
           timeout 30 cargo run -p loopback-demo | tee /tmp/loopback-demo.out
           grep -qF "ping -> 0xDEADBEEF" /tmp/loopback-demo.out
 
+      - name: Test MCP server (workspace-excluded)
+        working-directory: tools/telepath-mcp-server
+        run: cargo test
+
   # -------------------------------------------------------------------------
   # Job 2: firmware — cross-compile check + release build for nRF52840-DK
   # -------------------------------------------------------------------------

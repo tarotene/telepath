@@ -42,12 +42,20 @@ cli *ARGS:
 firmware-ping: firmware-flash
     cd tools/telepath-shell && cargo run -- ping
 
-# Build everything: workspace + firmware + CLI
-check-all: build firmware-build cli-build
+# Build telepath-mcp-server
+mcp-build:
+    cd tools/telepath-mcp-server && cargo build
+
+# Run telepath-mcp-server tests
+mcp-test:
+    cd tools/telepath-mcp-server && cargo test
+
+# Build everything: workspace + firmware + CLI + MCP server
+check-all: build firmware-build cli-build mcp-build
 
 # Run the in-process emulator end-to-end (no hardware required)
 emulator:
     cargo run -p loopback-demo
 
-# Full CI gate: fmt-check + clippy + test + emulator smoke
-ci: fmt-check clippy test emulator
+# Full CI gate: fmt-check + clippy + test + emulator smoke + mcp-test
+ci: fmt-check clippy test emulator mcp-test

@@ -14,6 +14,7 @@
 | `examples/loopback-demo` | In-process server+client loopback | native (`std`) |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
 | `tools/telepath-shell` | Interactive shell for Telepath servers | native (`std`) |
+| `tools/telepath-mcp-server` | MCP server — discovers commands, exposes as MCP tools | native (`std`) |
 
 ## Build Commands
 
@@ -37,6 +38,11 @@ cd examples/nrf52840-ping && cargo run --release
 cd tools/telepath-shell && cargo build
 cd tools/telepath-shell && cargo run -- ping
 cd tools/telepath-shell && cargo run
+
+# MCP server (excluded from workspace — requires cd)
+cd tools/telepath-mcp-server && cargo build
+cd tools/telepath-mcp-server && cargo test
+cd tools/telepath-mcp-server && cargo run -- --transport loopback
 
 # Format check
 cargo fmt --all -- --check
@@ -71,6 +77,12 @@ just ci
 - MUST be built separately; it is excluded from the workspace.
 - MUST NOT be built with `cargo build -p telepath-shell` from the workspace root (not a workspace member).
 - Server MUST be flashed (and probe released) before invoking the shell.
+
+### `tools/telepath-mcp-server`
+- MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
+- MUST NOT be built with `cargo build -p telepath-mcp-server` from the workspace root.
+- Pure conversion modules (`schema_to_json`, `json_to_postcard`, `postcard_to_json`) MUST remain side-effect free and sync; async lives only in `bridge.rs` and `server.rs`.
+- All logging MUST go to `stderr`; `stdout` is reserved for the MCP JSON-RPC stream.
 
 ### `telepath-server`
 - MUST remain `#![no_std]`.

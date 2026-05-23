@@ -63,9 +63,11 @@ cargo test -p telepath-client
 ## Limitations
 
 - No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
-  (roadmap C1).
+  (see #3).
 - Upstream rzCOBS is not yet supported; both framing directions are COBS.
 - `HostError::SerdeError` is opaque — the original `postcard::Error` is
-  discarded (roadmap C3).
-- `SchemaCache` stores schema bytes as opaque `Vec<u8>`; `postcard_schema::NamedType`
-  decode and MCP tool-descriptor generation are planned for Stage D.
+  discarded (see #3).
+- `SchemaCache` stores schema bytes as `Vec<u8>`; use
+  `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` to obtain
+  `postcard_schema::schema::owned::OwnedNamedType`. MCP tool descriptors are
+  auto-generated in `tools/telepath-mcp-server`.
