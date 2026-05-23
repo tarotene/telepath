@@ -1,11 +1,15 @@
 //! Telepath RTT example for nRF52840-DK.
 //!
-//! Exposes five RPC commands over the Telepath wire:
+//! Exposes nine RPC commands over the Telepath wire:
 //! - `ping`: sanity check, returns `0xDEADBEEF: u32`.
 //! - `led_set(id: u8, on: bool)`: illuminate or extinguish one LED (id 1–4).
 //! - `led_pattern(mask: u8)`: set all four LEDs in one round trip; bit 0 = LED1.
 //! - `led_pattern_get()`: read back the current driven state of all four LEDs.
 //! - `button_read()`: snapshot of all four button states; bit 0 = BTN1, pressed = 1.
+//! - `ficr_uid()`: unique 64-bit chip ID from FICR.DEVICEID[0..1].
+//! - `temp_read()`: die temperature in 0.25 °C units from the on-chip TEMP peripheral.
+//! - `rng_u32()`: true random u32 from the hardware RNG (bias-corrected).
+//! - `saadc_vdd_mv()`: supply voltage in millivolts via the SAADC VDD channel.
 //!
 //! LED1–LED4 are fully under RPC control.  Liveness is indicated by periodic
 //! `hb {n}` output on RTT channel 0 (visible in the RTT viewer).
@@ -33,6 +37,7 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
+use nrf_pac as pac;
 use panic_halt as _;
 use rtt_target::{rprintln, rtt_init};
 use telepath_server::{command, TelepathServer};
@@ -178,6 +183,102 @@ fn button_read() -> u8 {
         }
         state
     })
+}
+
+/// Unique 64-bit chip ID from FICR.DEVICEID[0..1].
+/// Pure MMIO read — no peripheral initialization required.
+/// The value is factory-programmed, stable across reboots, and unique per die.
+/// Example (one particular nRF52840-DK): `(0x893CE2C0, 0xA94DF961)`.
+/// Your board will return different values; treat as an opaque identifier.
+#[command]
+fn ficr_uid() -> (u32, u32) {
+    (pac::FICR.deviceid(0).read(), pac::FICR.deviceid(1).read())
+}
+
+/// Die temperature in 0.25 °C units.
+/// Returns a signed integer: divide by 4 to get °C, or multiply by 250 for m°C.
+/// Example: 100 → 25.00 °C; 111 → 27.75 °C.
+/// Operating range: −160…340 (nRF52840 specification: −40 °C to 85 °C).
+///
+/// Drives `pac::TEMP` directly (busy-poll) to satisfy the synchronous `#[command]` contract;
+/// the `embassy_nrf::temp::Temp` driver is async-only.
+#[command]
+fn temp_read() -> i16 {
+    let t = pac::TEMP;
+    t.events_datardy().write_value(0); // clear stale event before starting
+    t.tasks_start().write_value(1);
+    while t.events_datardy().read() == 0 {}
+    let raw = t.temp().read() as i32;
+    t.events_datardy().write_value(0);
+    t.tasks_stop().write_value(1);
+    raw as i16
+}
+
+/// True random u32 from the hardware RNG with bias correction enabled.
+/// Each call generates 4 fresh random bytes; values should differ across calls.
+///
+/// Drives `pac::RNG` directly (busy-poll per byte) to satisfy the synchronous
+/// `#[command]` contract. Bias correction adds ~167 ns per bit on average but
+/// eliminates LFSR output bias.
+#[command]
+fn rng_u32() -> u32 {
+    let r = pac::RNG;
+    r.config().write(|w| w.set_dercen(true));
+    r.events_valrdy().write_value(0); // clear stale event before starting
+    r.tasks_start().write_value(1);
+    let mut bytes = [0u8; 4];
+    for byte in bytes.iter_mut() {
+        while r.events_valrdy().read() == 0 {}
+        *byte = r.value().read().value(); // read VALUE before clearing VALRDY
+        r.events_valrdy().write_value(0);
+    }
+    r.tasks_stop().write_value(1);
+    u32::from_le_bytes(bytes)
+}
+
+/// Supply voltage in millivolts via the SAADC VDD internal channel.
+/// Typical value: ~3300 mV under USB power, ~3000 mV from a coin cell.
+///
+/// Drives `pac::SAADC` directly to satisfy the synchronous `#[command]` contract;
+/// the `embassy_nrf::saadc::Saadc` driver is async-only.
+/// Configuration: 10-bit, GAIN=1/6, VREF=0.6 V → full-scale input = 3.6 V.
+/// Conversion: VDD_mV = raw_count × 3600 / 1024.
+#[command]
+fn saadc_vdd_mv() -> u16 {
+    use pac::saadc::vals;
+    let r = pac::SAADC;
+    r.resolution().write(|w| w.set_val(vals::Val::_10BIT));
+    r.oversample().write(|w| w.set_oversample(vals::Oversample::BYPASS));
+    r.ch(0).pselp().write(|w| w.set_pselp(vals::Psel::VDD));
+    r.ch(0).config().write(|w| {
+        w.set_refsel(vals::Refsel::INTERNAL);
+        w.set_gain(vals::Gain::GAIN1_6);
+        w.set_tacq(vals::Tacq::_10US);
+        w.set_mode(vals::ConfigMode::SE);
+    });
+    // DMA result buffer: one i16 sample on the stack.
+    // `read_volatile` after the END event prevents the optimizer from eliding
+    // the DMA-written value (the write is invisible to the compiler).
+    let mut buf: i16 = 0;
+    r.result()
+        .ptr()
+        .write_value(core::ptr::addr_of_mut!(buf) as u32);
+    r.result().maxcnt().write(|w| w.set_maxcnt(1));
+    r.enable().write(|w| w.set_enable(true));
+    r.events_started().write_value(0); // clear stale events before starting
+    r.events_end().write_value(0);
+    r.tasks_start().write_value(1);
+    // Wait for SAADC to be ready before issuing SAMPLE (nRF52840 PS §6.23.4).
+    while r.events_started().read() == 0 {}
+    r.events_started().write_value(0);
+    r.tasks_sample().write_value(1);
+    while r.events_end().read() == 0 {}
+    r.events_end().write_value(0);
+    r.tasks_stop().write_value(1);
+    r.enable().write(|w| w.set_enable(false));
+    let raw = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(buf)) };
+    // VDD_mV = raw × 3600 / 1024  (GAIN=1/6, VREF=0.6 V, 10-bit → full-scale = 2^10)
+    ((raw as i32) * 3600 / 1024).max(0) as u16
 }
 
 // ---------------------------------------------------------------------------

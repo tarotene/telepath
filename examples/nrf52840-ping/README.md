@@ -3,9 +3,10 @@
 Reference **server** deployment on nRF52840-DK (Embassy + RTT transport).
 
 Minimal Embassy firmware for the [nRF52840-DK](https://www.nordicsemi.com/Products/Development-hardware/nRF52840-DK)
-that demonstrates the Telepath RPC stack over RTT.  Registers four commands
-that expose all on-board LEDs and buttons, and calls `server.poll()` in a
-tight loop to handle incoming RPC requests.
+that demonstrates the Telepath RPC stack over RTT.  Registers nine commands
+covering on-board LEDs, buttons, and on-chip sensor/ID peripherals unique to
+real silicon, then calls `server.poll()` in a tight loop to handle incoming
+RPC requests.
 
 ## Prerequisites
 
@@ -55,6 +56,10 @@ runtime by any connected host (MCP server, shell, or client library).
 | `led_pattern` | `(mask: u8) -> u8` | Set all four LEDs: bit 0 = LED1, bit 3 = LED4. Returns applied mask. |
 | `led_pattern_get` | `() -> u8` | Read back driven state of all four LEDs. Bit 0 = LED1, bit 3 = LED4. On = 1, Off = 0. |
 | `button_read` | `() -> u8` | Instantaneous button snapshot: bit 0 = BTN1, bit 3 = BTN4, pressed = 1. |
+| `ficr_uid` | `() -> (u32, u32)` | Factory-programmed unique 64-bit chip ID from FICR.DEVICEID[0..1]. Stable across reboots; different on every board. |
+| `temp_read` | `() -> i16` | Die temperature in 0.25 °C units from the on-chip TEMP peripheral. Divide by 4 for °C (e.g. 100 → 25 °C). Operating range: −160…340 (−40 °C to 85 °C). |
+| `rng_u32` | `() -> u32` | Hardware true random u32 with bias correction. Each call produces 4 fresh bytes from the silicon RNG; values should differ across calls. |
+| `saadc_vdd_mv` | `() -> u16` | Supply voltage in millivolts via the SAADC VDD internal channel. ~3300 mV under USB power; ~3000 mV from a coin cell. |
 
 All four LEDs (LED1–LED4) are fully under RPC control.
 
@@ -129,3 +134,57 @@ button_read -> 0x00
 ```
 
 (Hold a button, then call `button_read` again — the corresponding bit will be set.)
+
+**Chip ID — `ficr_uid`:**
+
+```
+telepath> ficr_uid
+ficr_uid -> [0x12345678, 0x9ABCDEF0]
+```
+
+The two `u32` values form a 64-bit unique ID.  They are factory-programmed and
+stable across reboots.  A different board will show different values.
+
+> **HIL reference** — one particular nRF52840-DK returned `[0x893CE2C0, 0xA94DF961]`
+> (decimal: `[2302468800, 2840459617]`).  Your board's values will differ.
+
+**Die temperature — `temp_read`:**
+
+```
+telepath> temp_read
+temp_read -> 100
+```
+
+Divide the raw value by 4 to get °C: 100 → 25.00 °C, 111 → 27.75 °C.  Run
+`temp_read` before and after a tight loop to observe self-heating — the value
+should increase by several counts.  Acceptance range: −160…340 (nRF52840
+operating temperature −40 °C to 85 °C).
+
+> **HIL reference** — idle room-temperature reading on one board: `111` (27.75 °C).
+
+**Hardware RNG — `rng_u32`:**
+
+```
+telepath> rng_u32
+rng_u32 -> 0x7F3A19C2
+telepath> rng_u32
+rng_u32 -> 0xB40E5D87
+```
+
+Values should differ on every call.  Bias correction is enabled (set via
+`RNG.CONFIG.DERCEN = 1`) so the output is free from bias toward 0 or 1.
+
+**Supply voltage — `saadc_vdd_mv`:**
+
+```
+telepath> saadc_vdd_mv
+saadc_vdd_mv -> 3265
+```
+
+Under USB power expect 3000–3300 mV.  Switch to a coin cell and the value
+drops noticeably, demonstrating the command's ability to detect power-source
+changes at runtime.
+
+> **HIL reference** — 5 consecutive samples under USB power: `2981, 2984, 2984,
+> 2988, 2991` mV (avg ≈ 2986 mV ≈ 3.0 V).  Formula: `raw_count × 3600 / 1024`
+> (10-bit ADC, GAIN=1/6, VREF=0.6 V → full-scale = 3.6 V).
