@@ -131,17 +131,18 @@ claude mcp add --transport stdio --scope project telepath \
 
 This writes `.mcp.json` at the repository root (already committed to this repo).
 
-**Required**: `CLAUDE_PROJECT_DIR` must be set to the repository root before
-starting Claude Code, because `.mcp.json` uses `${CLAUDE_PROJECT_DIR}` to locate
-the binary:
+Start Claude Code from the repository root — no `CLAUDE_PROJECT_DIR` export
+needed.  `.mcp.json` uses `${CLAUDE_PROJECT_DIR:-.}`, which falls back to `.`
+(current directory) when the variable is unset, and Claude Code always starts
+in the project root.
 
 ```bash
-export CLAUDE_PROJECT_DIR=$(git rev-parse --show-toplevel)
+cd <repo-root>
 claude  # start Claude Code
 ```
 
-The server loads automatically on every Claude Code session where
-`CLAUDE_PROJECT_DIR` is set correctly.
+The server loads automatically on every Claude Code session started from the
+repository root.
 
 ### 3. Approve the project trust gate
 
@@ -151,12 +152,15 @@ approve `telepath` here — without approval it will not appear in `/mcp` even i
 `claude mcp list` shows `✓ Connected` (that command bypasses the dialog for
 health-check purposes only).
 
-If you missed the dialog or rejected it:
+If the dialog never appeared, the most likely cause is that the binary path was
+unresolvable at session start (e.g. old `.mcp.json` without the `:-.` fallback,
+or the binary not yet built).  Ensure `.mcp.json` is correct and the binary
+exists, then reset and retry:
 
 ```bash
 cd <repo-root>
+cargo build -p telepath-mcp-server 2>/dev/null || (cd tools/telepath-mcp-server && cargo build)
 claude mcp reset-project-choices
-export CLAUDE_PROJECT_DIR=$(git rev-parse --show-toplevel)
 claude   # trust dialog re-appears on next session start
 ```
 
