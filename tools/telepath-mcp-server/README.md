@@ -21,7 +21,7 @@ npx @modelcontextprotocol/inspector@latest ./target/debug/telepath-mcp-server --
 If the browser does not open automatically, navigate to **`http://localhost:6274`**.
 
 Expected: `ping` tool appears in the Tools tab; selecting it and clicking
-**Execute** returns `3735928559` (`0xDEADBEEF`).
+**Run Tool** returns `3735928559` (`0xDEADBEEF`).
 
 ## Tests
 
@@ -29,19 +29,18 @@ Expected: `ping` tool appears in the Tools tab; selecting it and clicking
 cargo test
 ```
 
-Three in-process test suites:
-
 | Suite | What it covers |
 |---|---|
 | `schema_to_json_table` | All `OwnedDataModelType` variants → JSON Schema mapping |
 | `json_postcard_roundtrip` | encode → decode identity; native postcard oracle comparison |
 | `end_to_end_loopback` | discover + invoke `ping` and `add` via full bridge stack |
-| `e2e/tests/mcp.spec.ts` | Headless MCP protocol: `ping` tool listed; returns 0xDEADBEEF |
 
-### Headless MCP E2E tests (Playwright + MCP SDK)
+## E2E tests (Playwright)
 
-Connects directly to the server binary via `StdioClientTransport` — no browser
-required.
+### Headless MCP protocol tests
+
+Sends raw JSON-RPC over stdio directly to the server binary — no browser or
+MCP SDK required.
 
 ```bash
 # First-time setup
@@ -58,7 +57,7 @@ npm install
 npm test
 ```
 
-### Re-enabling Inspector UI tests (future)
+### Inspector UI tests (future)
 
 `e2e/tests/inspector.spec.ts` contains the full browser-based test suite.
 It is excluded from the default project due to the Tools panel issue described
@@ -146,7 +145,7 @@ project (`mcp-headless`).  Root cause: after clicking **List Tools** in Inspecto
 v0.21.x the Tools panel does not populate even though `tools/list` appears in the
 History panel — likely a React render timing issue.  The headless tests in
 `mcp.spec.ts` cover the same protocol behaviors in the meantime.  See
-[Re-enabling Inspector UI tests](#re-enabling-inspector-ui-tests-future) for the
+[Inspector UI tests (future)](#inspector-ui-tests-future) for the
 recovery path.
 
 ## Notes
