@@ -117,12 +117,9 @@ fn dmt_to_schema(dmt: &OwnedDataModelType, depth: usize) -> Value {
 fn variant_to_schema(v: &OwnedNamedVariant, depth: usize) -> Value {
     match &v.ty {
         OwnedDataModelVariant::UnitVariant => {
-            json!({
-                "type": "object",
-                "properties": {v.name.as_str(): {"type": "null"}},
-                "required": [v.name.as_str()],
-                "additionalProperties": false
-            })
+            // In mixed enums, unit variants are encoded as a JSON string so the
+            // schema and json_to_postcard agree on the representation.
+            json!({"type": "string", "const": v.name.as_str()})
         }
         OwnedDataModelVariant::NewtypeVariant(inner) => {
             let inner_schema = dmt_to_schema(&inner.ty, depth);

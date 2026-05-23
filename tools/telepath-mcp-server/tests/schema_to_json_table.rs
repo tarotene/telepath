@@ -312,9 +312,22 @@ fn enum_mixed_variants_is_one_of() {
         ),
     ];
     let s = schema(DMT::Enum(variants));
-    // oneOf with two branches
-    let branches = s["oneOf"].as_array().expect("oneOf array");
-    assert_eq!(branches.len(), 2);
+    assert_eq!(
+        s,
+        json!({
+            "oneOf": [
+                {"type": "string", "const": "None"},
+                {
+                    "type": "object",
+                    "properties": {
+                        "Some": {"type": "integer", "minimum": 0u64, "maximum": 4294967295u64}
+                    },
+                    "required": ["Some"],
+                    "additionalProperties": false
+                }
+            ]
+        })
+    );
 }
 
 #[test]
