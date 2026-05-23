@@ -236,7 +236,7 @@ fn rng_u32() -> u32 {
 /// Drives `pac::SAADC` directly to satisfy the synchronous `#[command]` contract;
 /// the `embassy_nrf::saadc::Saadc` driver is async-only.
 /// Configuration: 10-bit, GAIN=1/6, VREF=0.6 V → full-scale input = 3.6 V.
-/// Conversion: VDD_mV = raw_count × 3600 / 512.
+/// Conversion: VDD_mV = raw_count × 3600 / 1024.
 #[command]
 fn saadc_vdd_mv() -> u16 {
     use pac::saadc::vals;
@@ -270,8 +270,8 @@ fn saadc_vdd_mv() -> u16 {
     r.tasks_stop().write_value(1);
     r.enable().write(|w| w.set_enable(false));
     let raw = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(buf)) };
-    // VDD_mV = raw × 3600 / 512  (GAIN=1/6, VREF=0.6 V, 10-bit → 2^9=512)
-    ((raw as i32) * 3600 / 512).max(0) as u16
+    // VDD_mV = raw × 3600 / 1024  (GAIN=1/6, VREF=0.6 V, 10-bit → full-scale = 2^10)
+    ((raw as i32) * 3600 / 1024).max(0) as u16
 }
 
 // ---------------------------------------------------------------------------
