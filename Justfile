@@ -50,14 +50,6 @@ mcp-build:
 mcp-test:
     cd tools/telepath-mcp-server && cargo test
 
-# Install npm dependencies for MCP E2E tests (run once; browser not required)
-mcp-e2e-install:
-    cd tools/telepath-mcp-server/e2e && npm install
-
-# Run Inspector E2E tests (requires cargo build first)
-mcp-e2e: mcp-build
-    cd tools/telepath-mcp-server/e2e && npm test
-
 # Build everything: workspace + firmware + CLI + MCP server
 check-all: build firmware-build cli-build mcp-build
 
