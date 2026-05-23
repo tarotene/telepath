@@ -9,7 +9,7 @@ use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler};
 use serde_json::Value;
 use std::sync::Arc;
-use telepath_client::{HostError, TelepathClient};
+use telepath_client::{HostError, SchemaEntry, TelepathClient};
 use tokio::sync::Mutex;
 
 struct ToolMeta {
@@ -35,28 +35,26 @@ where
 {
     pub fn build(mut client: TelepathClient<T>) -> Result<Self, HostError> {
         client.discover()?;
-        let entries: Vec<_> = client.schema_cache().iter().cloned().collect();
-        let mut tools = Vec::new();
-        for entry in entries {
-            let args_schema = entry.decoded_args_schema()?;
-            let ret_schema = entry.decoded_ret_schema()?;
-            let input_schema_json =
-                build_input_schema(&named_type_to_json_schema(&args_schema), &entry.arg_names);
-            let input_schema = rmcp::model::object(input_schema_json);
-            let description = format!("Telepath command 0x{:04X}", entry.cmd_id);
-            let tool = Tool::new(entry.name.clone(), description, input_schema);
-            tools.push(ToolMeta {
-                tool,
-                cmd_id: entry.cmd_id,
-                args_schema,
-                ret_schema,
-                arg_names: entry.arg_names.clone(),
-            });
-        }
+        let tools = build_tools(client.schema_cache().iter().cloned().collect())?;
         Ok(Self {
             client: Arc::new(Mutex::new(client)),
             tools,
         })
+    }
+
+    /// Re-run the Command Discovery Protocol and rebuild the tool list.
+    ///
+    /// Call this after a firmware reflash or transport reconnect to pick up
+    /// new or changed `#[command]` registrations. Automatically triggers
+    /// [`TelepathClient::rediscover`] on the underlying client.
+    pub async fn rediscover(&mut self) -> Result<(), HostError> {
+        let entries = {
+            let mut client = self.client.lock().await;
+            client.rediscover()?;
+            client.schema_cache().iter().cloned().collect::<Vec<_>>()
+        };
+        self.tools = build_tools(entries)?;
+        Ok(())
     }
 }
 
@@ -115,6 +113,27 @@ where
             result.to_string(),
         )]))
     }
+}
+
+fn build_tools(entries: Vec<SchemaEntry>) -> Result<Vec<ToolMeta>, HostError> {
+    let mut tools = Vec::new();
+    for entry in entries {
+        let args_schema = entry.decoded_args_schema()?;
+        let ret_schema = entry.decoded_ret_schema()?;
+        let input_schema_json =
+            build_input_schema(&named_type_to_json_schema(&args_schema), &entry.arg_names);
+        let input_schema = rmcp::model::object(input_schema_json);
+        let description = format!("Telepath command 0x{:04X}", entry.cmd_id);
+        let tool = Tool::new(entry.name.clone(), description, input_schema);
+        tools.push(ToolMeta {
+            tool,
+            cmd_id: entry.cmd_id,
+            args_schema,
+            ret_schema,
+            arg_names: entry.arg_names.clone(),
+        });
+    }
+    Ok(tools)
 }
 
 fn bridge_to_mcp_error(e: BridgeError) -> ErrorData {

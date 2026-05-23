@@ -123,6 +123,14 @@ impl SchemaCache {
         self.entries.remove(&cmd_id);
     }
 
+    /// Remove all cached entries.
+    ///
+    /// Called automatically by [`TelepathClient::rediscover`] before re-running CDP.
+    /// Exposed here so callers that manage the cache directly can reset it independently.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
     /// Number of cached entries.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -222,6 +230,19 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             }
         }
         Ok(self.schema_cache.len())
+    }
+
+    /// Re-run the Command Discovery Protocol from scratch.
+    ///
+    /// Equivalent to [`discover`](Self::discover) but makes the intent explicit:
+    /// the caller is reconnecting to a (potentially updated) firmware and needs a
+    /// fresh schema cache.
+    ///
+    /// Use this after a transport reconnect or firmware reflash to avoid stale
+    /// `cmd_id` lookups. Automatic triggering on transport events is left to
+    /// higher-level wrappers (e.g. `TelepathMcpServer::rediscover`).
+    pub fn rediscover(&mut self) -> Result<usize, HostError> {
+        self.discover()
     }
 
     /// Issue a raw RPC call.
@@ -359,6 +380,28 @@ mod tests {
         });
         cache.invalidate(0x0001);
         assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn schema_cache_clear_removes_all_entries() {
+        let mut cache = SchemaCache::new();
+        cache.insert(SchemaEntry {
+            name: "a".to_string(),
+            cmd_id: 0x0001,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+        cache.insert(SchemaEntry {
+            name: "b".to_string(),
+            cmd_id: 0x0002,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+        assert_eq!(cache.len(), 2);
+        cache.clear();
+        assert!(cache.is_empty(), "clear() must remove all entries");
     }
 
     #[test]
@@ -549,6 +592,14 @@ mod tests {
         // Verify the host faithfully stored whatever the server sent.
         assert_eq!(entry.args_schema, Vec::<u8>::new());
         assert_eq!(entry.ret_schema, Vec::<u8>::new());
+
+        // rediscover() must reset the cache and re-populate it.
+        let n2 = client.rediscover().expect("rediscover failed");
+        assert_eq!(n2, 1, "rediscover must still find 1 command");
+        assert!(
+            client.schema_cache().get(0x0001).is_some(),
+            "rediscover must re-populate ping in the cache"
+        );
     }
 
     // Golden fixtures: postcard::to_allocvec(<T as Schema>::SCHEMA)
