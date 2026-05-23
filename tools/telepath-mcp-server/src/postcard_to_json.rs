@@ -129,8 +129,20 @@ fn decode_value<'a>(
         Unit | UnitStruct => Ok((Value::Null, bytes)),
         NewtypeStruct(inner) => decode_value(&inner.ty, bytes, path, depth + 1),
         Seq(inner) => {
-            let (count, mut rest) = de::<u64>(bytes, path)?;
-            let mut arr = Vec::with_capacity(count as usize);
+            let (count_u64, rest_after_count) = de::<u64>(bytes, path)?;
+            let count = usize::try_from(count_u64).map_err(|_| {
+                ConvertError::Postcard(format!(
+                    "seq count {count_u64} exceeds usize at {path}"
+                ))
+            })?;
+            if count > rest_after_count.len() {
+                return Err(ConvertError::Postcard(format!(
+                    "seq count {count} exceeds remaining bytes {} at {path}",
+                    rest_after_count.len()
+                )));
+            }
+            let mut rest = rest_after_count;
+            let mut arr = Vec::with_capacity(count);
             for i in 0..count {
                 let (item, next) =
                     decode_value(&inner.ty, rest, &format!("{path}[{i}]"), depth + 1)?;
@@ -152,7 +164,19 @@ fn decode_value<'a>(
             Ok((Value::Array(arr), rest))
         }
         Map { key, val } => {
-            let (count, mut rest) = de::<u64>(bytes, path)?;
+            let (count_u64, rest_after_count) = de::<u64>(bytes, path)?;
+            let count = usize::try_from(count_u64).map_err(|_| {
+                ConvertError::Postcard(format!(
+                    "map count {count_u64} exceeds usize at {path}"
+                ))
+            })?;
+            if count > rest_after_count.len() {
+                return Err(ConvertError::Postcard(format!(
+                    "map count {count} exceeds remaining bytes {} at {path}",
+                    rest_after_count.len()
+                )));
+            }
+            let mut rest = rest_after_count;
             if matches!(&key.ty, OwnedDataModelType::String) {
                 let mut obj = JsonMap::new();
                 for i in 0..count {
@@ -206,7 +230,10 @@ fn decode_value<'a>(
                 }
             }
         }
-        Schema => Ok((Value::Null, bytes)),
+        Schema => Err(ConvertError::TypeUnsupported {
+            ty: "Schema",
+            path: path.to_string(),
+        }),
     }
 }
 

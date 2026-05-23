@@ -263,6 +263,55 @@ fn unknown_enum_variant_is_error() {
     assert!(matches!(err, ConvertError::UnknownEnumVariant { .. }));
 }
 
+// ── count-guard error cases (DoS / 32-bit truncation protection) ─────────────
+
+#[test]
+fn seq_decoding_rejects_oversize_count() {
+    let s = wrap("seq", DMT::Seq(Box::new(wrap("u8", DMT::U8))));
+    // Encode u64::MAX as a postcard varint, then pass it as the full payload.
+    // The count guard must reject this because count >> remaining.len().
+    let bytes = postcard::to_allocvec::<u64>(&u64::MAX).unwrap();
+    let err = postcard_to_json(&s, &bytes).unwrap_err();
+    assert!(matches!(err, ConvertError::Postcard(_)), "expected Postcard error, got {err:?}");
+}
+
+#[test]
+fn map_decoding_rejects_oversize_count() {
+    let s = wrap(
+        "map",
+        DMT::Map {
+            key: Box::new(wrap("k", DMT::String)),
+            val: Box::new(wrap("v", DMT::U8)),
+        },
+    );
+    let bytes = postcard::to_allocvec::<u64>(&u64::MAX).unwrap();
+    let err = postcard_to_json(&s, &bytes).unwrap_err();
+    assert!(matches!(err, ConvertError::Postcard(_)), "expected Postcard error, got {err:?}");
+}
+
+// ── Schema variant must hard-error (not silently corrupt the wire) ────────────
+
+#[test]
+fn schema_variant_encode_errors() {
+    let s = wrap("meta", DMT::Schema);
+    let err = json_to_postcard(&s, &json!(null)).unwrap_err();
+    assert!(
+        matches!(err, ConvertError::TypeUnsupported { ty: "Schema", .. }),
+        "expected TypeUnsupported, got {err:?}"
+    );
+}
+
+#[test]
+fn schema_variant_decode_errors() {
+    let s = wrap("meta", DMT::Schema);
+    // Any byte slice; Schema must error before consuming anything.
+    let err = postcard_to_json(&s, &[0x01, 0x02]).unwrap_err();
+    assert!(
+        matches!(err, ConvertError::TypeUnsupported { ty: "Schema", .. }),
+        "expected TypeUnsupported, got {err:?}"
+    );
+}
+
 // ── error cases ──────────────────────────────────────────────────────────────
 
 #[test]

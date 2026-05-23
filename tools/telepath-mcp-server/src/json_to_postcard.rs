@@ -29,6 +29,8 @@ pub enum ConvertError {
     Postcard(String),
     #[error("schema depth exceeded at {path}")]
     DepthExceeded { path: String },
+    #[error("unsupported data model type '{ty}' at {path}")]
+    TypeUnsupported { ty: &'static str, path: String },
 }
 
 const MAX_DEPTH: usize = 8;
@@ -351,7 +353,10 @@ fn encode_value(
             }
         }
         Schema => {
-            // Should not appear in args/ret in practice
+            return Err(ConvertError::TypeUnsupported {
+                ty: "Schema",
+                path: path.to_string(),
+            });
         }
     }
     Ok(())
