@@ -63,6 +63,11 @@ struct Cli {
     /// [default: $XDG_STATE_HOME/telepath/shell.log or ~/.local/state/telepath/shell.log]
     #[arg(long, value_name = "PATH")]
     log_file: Option<String>,
+
+    /// Disable automatic chip reset when the RTT control block is not found on attach.
+    /// By default, telepath-shell issues a soft reset and retries the attach once.
+    #[arg(long)]
+    no_reset: bool,
 }
 
 fn parse_hex_u64(s: &str) -> Result<u64, String> {
@@ -101,7 +106,7 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("Failed to attach to target '{}'", cli.chip))?;
 
     // RTT channels: up 1 / down 1 for RPC, up 0 for debug logs.
-    let transport = RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr)?;
+    let transport = RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr, !cli.no_reset)?;
     let mut client = TelepathClient::new(transport);
 
     // Drain any startup messages from the firmware before discovery.

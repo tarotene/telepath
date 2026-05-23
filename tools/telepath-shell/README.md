@@ -33,6 +33,11 @@ telepath-shell [--chip CHIP] [COMMAND]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--chip` | `nRF52840_xxAA` | probe-rs chip name |
+| `--no-reset` | (disabled) | Skip the automatic chip reset retry when the RTT control block is missing on attach |
+
+If the firmware has not yet initialized the SEGGER RTT control block when `telepath-shell` attaches
+(common right after `cargo run --release` in `examples/nrf52840-ping`), the shell issues a soft chip
+reset and retries the attach once. Pass `--no-reset` to disable this behavior.
 
 ### 1-shot mode
 
