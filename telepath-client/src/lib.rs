@@ -33,8 +33,9 @@ use telepath_wire::{
 /// All methods have no-op defaults so that simpler transports (e.g. serial
 /// ports, in-memory pipes) do not need to implement them.
 pub trait HostTransportExt: std::io::Read + std::io::Write {
-    /// Arm a read deadline: subsequent reads return `TimedOut` once the
-    /// deadline elapses. Calling again overwrites the previous deadline.
+    /// Set a per-call read timeout: each `Read::read()` invocation waits at most
+    /// `timeout` for data before returning `TimedOut`. Calling again updates the
+    /// timeout for future reads.
     fn set_read_deadline(&mut self, _timeout: std::time::Duration) {}
 
     /// Disarm the read deadline; reads block indefinitely again.

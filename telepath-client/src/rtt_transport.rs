@@ -25,7 +25,7 @@ pub struct RttTransport {
     core_index: usize,
     up_channel: usize,
     down_channel: usize,
-    read_deadline: Option<Instant>,
+    read_timeout: Option<Duration>,
 }
 
 impl RttTransport {
@@ -120,18 +120,18 @@ impl RttTransport {
             core_index,
             up_channel,
             down_channel,
-            read_deadline: None,
+            read_timeout: None,
         })
     }
 }
 
 impl HostTransportExt for RttTransport {
     fn set_read_deadline(&mut self, timeout: Duration) {
-        self.read_deadline = Some(Instant::now() + timeout);
+        self.read_timeout = Some(timeout);
     }
 
     fn clear_read_deadline(&mut self) {
-        self.read_deadline = None;
+        self.read_timeout = None;
     }
 
     fn drain_rpc_rx(&mut self) {
@@ -176,12 +176,14 @@ impl Read for RttTransport {
         if buf.is_empty() {
             return Ok(0);
         }
+        // Compute a per-call deadline from the stored Duration so each invocation
+        // gets a fresh timeout window (matches SerialTransport's set_timeout semantics).
+        let deadline = self.read_timeout.map(|d| Instant::now() + d);
         // probe-rs RTT `read` is non-blocking and returns Ok(0) when no data is
-        // available. Busy-loop with a 1ms sleep so that `read_exact` in
-        // `TelepathClient::call_raw` does not mistake an empty read for EOF.
+        // available. Busy-loop with a 1ms sleep until data arrives or deadline expires.
         loop {
-            if let Some(deadline) = self.read_deadline {
-                if Instant::now() > deadline {
+            if let Some(dl) = deadline {
+                if Instant::now() > dl {
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
                         "RTT read deadline exceeded",
