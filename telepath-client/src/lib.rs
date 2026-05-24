@@ -43,6 +43,10 @@ pub trait HostTransportExt: std::io::Read + std::io::Write {
     /// Drain an out-of-band debug log channel to `sink`. Non-blocking no-op
     /// by default; RTT transports override this for channel 0 drain.
     fn drain_debug_logs(&mut self, _sink: &mut dyn std::io::Write) {}
+
+    /// Discard stale frames in the RPC receive buffer left over from a
+    /// previous session. No-op by default; RTT transports override this.
+    fn drain_rpc_rx(&mut self) {}
 }
 
 // ---------------------------------------------------------------------------
