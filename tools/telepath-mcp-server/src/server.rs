@@ -142,14 +142,16 @@ fn build_input_schema(raw_schema: &Value, arg_names: &[String]) -> Value {
         .cloned()
         .unwrap_or_default();
     let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
     for (name, schema) in arg_names.iter().zip(prefix_items.iter()) {
         properties.insert(name.clone(), schema.clone());
+        required.push(Value::String(name.clone()));
     }
-    let required: Vec<Value> = arg_names.iter().map(|n| Value::String(n.clone())).collect();
     serde_json::json!({
         "type": "object",
         "properties": properties,
-        "required": required
+        "required": required,
+        "additionalProperties": false
     })
 }
 
@@ -201,6 +203,7 @@ mod tests {
         assert!(schema["properties"]["a"].is_object());
         assert!(schema["properties"]["b"].is_object());
         assert_eq!(schema["required"], json!(["a", "b"]));
+        assert_eq!(schema["additionalProperties"], json!(false));
     }
 
     #[test]

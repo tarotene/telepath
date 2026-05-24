@@ -103,7 +103,7 @@ async fn discover_populates_arg_names_for_add() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn discover_populates_empty_arg_names_for_zero_arg_command() {
+async fn discover_populates_arg_names_for_single_arg_command() {
     // crc32 and echo are 1-arg; add is 2-arg.
     // Use crc32 (single arg "payload") to confirm single-arg extraction.
     let (fw_side, host_side) = make_pair();
