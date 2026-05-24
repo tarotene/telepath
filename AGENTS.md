@@ -43,6 +43,7 @@ cd tools/telepath-shell && cargo run
 cd tools/telepath-mcp-server && cargo build
 cd tools/telepath-mcp-server && cargo test
 cd tools/telepath-mcp-server && cargo run -- --transport loopback
+cd tools/telepath-mcp-server && cargo run -- --transport rtt --chip nRF52840_xxAA
 
 # Format check
 cargo fmt --all -- --check

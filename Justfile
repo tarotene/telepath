@@ -50,6 +50,10 @@ mcp-build:
 mcp-test:
     cd tools/telepath-mcp-server && cargo test
 
+# Run telepath-mcp-server against a flashed nRF52840-DK (firmware must already be flashed)
+mcp-run-rtt:
+    cd tools/telepath-mcp-server && cargo run -- --transport rtt
+
 # Build everything: workspace + firmware + CLI + MCP server
 check-all: build firmware-build cli-build mcp-build
 
