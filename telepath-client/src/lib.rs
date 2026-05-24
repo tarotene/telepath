@@ -191,6 +191,10 @@ pub struct TelepathClient<T> {
     transport: T,
     schema_cache: SchemaCache,
     seq_counter: u16,
+    /// Bytes read from the transport but not yet consumed by a `call_raw`.
+    /// Allows `call_raw` to read in chunks rather than one byte at a time,
+    /// saving a USB roundtrip per byte on slow transports like RTT over J-Link.
+    read_buf: Vec<u8>,
 }
 
 impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
@@ -200,6 +204,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             transport,
             schema_cache: SchemaCache::new(),
             seq_counter: 0,
+            read_buf: Vec::new(),
         }
     }
 
@@ -310,20 +315,34 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             .write_all(&encoded[..n + 1])
             .map_err(|e| HostError::Io(e.to_string()))?;
 
-        // Receive response bytes until 0x00 delimiter.
+        // Receive response bytes until 0x00 delimiter (COBS frame boundary).
+        // Read in chunks to avoid a USB roundtrip per byte on slow transports.
         let mut raw_frame: Vec<u8> = Vec::new();
-        let mut byte = [0u8; 1];
-        loop {
-            self.transport
-                .read_exact(&mut byte)
-                .map_err(|e| HostError::Io(e.to_string()))?;
-            if byte[0] == 0x00 {
-                break;
+        'recv: loop {
+            if let Some(pos) = self.read_buf.iter().position(|&b| b == 0x00) {
+                if raw_frame.len() + pos >= MAX_FRAME_SIZE {
+                    self.read_buf.drain(..=pos);
+                    return Err(HostError::FrameTooLarge);
+                }
+                raw_frame.extend_from_slice(&self.read_buf[..pos]);
+                self.read_buf.drain(..=pos);
+                break 'recv;
             }
-            if raw_frame.len() >= MAX_FRAME_SIZE {
+            if raw_frame.len() + self.read_buf.len() >= MAX_FRAME_SIZE {
+                self.read_buf.clear();
                 return Err(HostError::FrameTooLarge);
             }
-            raw_frame.push(byte[0]);
+            raw_frame.extend_from_slice(&self.read_buf);
+            self.read_buf.clear();
+            let mut chunk = [0u8; 256];
+            let n = self
+                .transport
+                .read(&mut chunk)
+                .map_err(|e| HostError::Io(e.to_string()))?;
+            if n == 0 {
+                return Err(HostError::Io("transport closed (EOF)".to_string()));
+            }
+            self.read_buf.extend_from_slice(&chunk[..n]);
         }
 
         // COBS decode.
