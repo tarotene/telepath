@@ -52,7 +52,7 @@ sequenceDiagram
 | `telepath-macros` | `#[command]` proc-macro |
 | `telepath-server` | Target-side RPC server — `no_std` |
 | `telepath-client` | Host-side RPC client — `std` |
-| `examples/loopback-demo` | In-process server+client emulator — no hardware required |
+| `examples/host-pty-server` | Host-side server deployment over a PTY pair — hardware-free regression |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK (workspace-excluded) |
 | `tools/telepath-shell` | Interactive shell for Telepath servers — REPL and one-shot commands (workspace-excluded) |
 | `tools/telepath-mcp-server` | MCP server — exposes discovered commands as MCP tools (workspace-excluded) |
@@ -84,7 +84,7 @@ from an AI agent without hand-written tool descriptors.
   (`NamedType` serialised with postcard) over the wire.
 - `client.discover()` fetches all commands via CDP paging; the result lands in
   `SchemaCache`, keyed by command ID.
-- `examples/loopback-demo` exercises this end-to-end — no hardware required.
+- `examples/host-pty-server` exercises this end-to-end over a real PTY transport — no hardware required.
 
 ### MCP tool auto-generation
 
@@ -121,7 +121,7 @@ The fastest way to see Telepath in action requires no hardware.
 ```
 git clone https://github.com/tarotene/telepath.git
 cd telepath
-cargo run -p loopback-demo
+just host-pty-smoke
 ```
 
 Expected output:
@@ -130,10 +130,10 @@ Expected output:
 ping -> 0xDEADBEEF
 ```
 
-The emulator runs a `TelepathServer` and `TelepathClient` on two OS threads
-connected by `std::sync::mpsc` byte channels. The full wire path
-(postcard serialization + COBS framing) executes identically to real hardware.
-Switching to an MCU is purely a transport swap.
+`host-pty-smoke` starts `examples/host-pty-server` (a `TelepathServer` over a PTY
+master), then drives it from `telepath-shell --features serial` via the slave end.
+The full wire path (postcard serialization + COBS framing) runs identically to real
+hardware. Switching to an MCU is purely a transport swap.
 
 ## Prerequisites
 

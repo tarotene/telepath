@@ -14,14 +14,13 @@ name = "telepath_mcp_server"
 path = "src/lib.rs"
 
 [features]
-default = ["loopback", "rtt"]
-loopback = ["dep:telepath-server"]
-rtt = ["dep:probe-rs"]
+default = ["rtt"]
+rtt = ["dep:probe-rs", "telepath-client/rtt"]
+serial = ["telepath-client/serial"]
 
 [dependencies]
 telepath-client = { path = "../../telepath-client" }
 telepath-wire   = { path = "../../telepath-wire" }
-telepath-server = { path = "../../telepath-server", optional = true }
 postcard        = { version = "1", features = ["alloc"] }
 postcard-schema = { version = "0.2", features = ["use-std", "heapless-v0_8"] }
 heapless        = { version = "0.8", default-features = false, features = ["serde"] }
@@ -37,3 +36,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # probe-rs 0.31 is the latest stable release (2026-01-17).
 # Pin to this minor to avoid unexpected API breaks.
 probe-rs = { version = "0.31", optional = true }
+
+[dev-dependencies]
+telepath-server = { path = "../../telepath-server" }

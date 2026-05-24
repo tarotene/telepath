@@ -10,20 +10,23 @@
 | `telepath-wire` | Shared wire protocol types | server + client |
 | `telepath-macros` | `#[command]` proc-macro | server (build time only) |
 | `telepath-server` | Target-side RPC server library | `thumbv7em-none-eabi` |
-| `telepath-client` | Host-side RPC client library | native (`std`) |
-| `examples/loopback-demo` | In-process server+client loopback | native (`std`) |
+| `telepath-client` | Host-side RPC client library; `rtt` and `serial` Cargo features select the transport | native (`std`) |
+| `examples/host-pty-server` | Host-side server deployment over a PTY pair (hardware-free regression) | native (`std`) |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
-| `tools/telepath-shell` | Interactive shell for Telepath servers | native (`std`) |
-| `tools/telepath-mcp-server` | MCP server — discovers commands, exposes as MCP tools | native (`std`) |
+| `tools/telepath-shell` | Interactive shell for Telepath servers; `default = ["rtt"]`, `serial` opt-in | native (`std`) |
+| `tools/telepath-mcp-server` | MCP server — discovers commands, exposes as MCP tools; `default = ["rtt"]`, `serial` opt-in | native (`std`) |
 
 ## Build Commands
 
 ```
-# Host workspace (all 5 members including loopback-demo)
+# Host workspace (all 5 members including host-pty-server)
 cargo build --workspace
 
-# Run the in-process loopback end-to-end (no hardware required)
-cargo run -p loopback-demo
+# Run host-pty-server (prints slave PTY path; connect telepath-shell --features serial to that path)
+cargo run -p host-pty-server
+
+# Full hardware-free smoke via just (spawns server + serial shell, asserts ping)
+just host-pty-smoke
 
 # Host tests
 cargo test --workspace
@@ -35,15 +38,19 @@ cd examples/nrf52840-ping && cargo build --release
 cd examples/nrf52840-ping && cargo run --release
 
 # Shell tool (excluded from workspace — requires cd)
+# Default build: RTT transport (--features rtt, the default)
 cd tools/telepath-shell && cargo build
 cd tools/telepath-shell && cargo run -- ping
 cd tools/telepath-shell && cargo run
+# Serial build: CDC-ACM / PTY transport
+cd tools/telepath-shell && cargo build --no-default-features --features serial
+cd tools/telepath-shell && cargo run --no-default-features --features serial -- --port /dev/ttyACM0
 
 # MCP server (excluded from workspace — requires cd)
 cd tools/telepath-mcp-server && cargo build
 cd tools/telepath-mcp-server && cargo test
-cd tools/telepath-mcp-server && cargo run -- --transport loopback
-cd tools/telepath-mcp-server && cargo run -- --transport rtt --chip nRF52840_xxAA
+cd tools/telepath-mcp-server && cargo run
+cd tools/telepath-mcp-server && cargo run --no-default-features --features serial -- --port /dev/ttyACM0
 
 # Format check
 cargo fmt --all -- --check
@@ -68,11 +75,12 @@ just ci
 - Cross-compilation REQUIRES `rustup target add thumbv7em-none-eabi`.
 - `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-shell` can attach.
 
-### `examples/loopback-demo`
+### `examples/host-pty-server`
 - IS a workspace member (`std` target, no cross-compile). Build with `cargo build --workspace`.
-- MUST exercise the full wire path including COBS framing — it is the primary hardware-free regression for `telepath-server` and `telepath-client`.
+- MUST exercise the full wire path including COBS framing via a real PTY transport — it is the primary hardware-free regression for `telepath-server` and the serial path of `telepath-client`.
 - MUST use only public APIs of the dependent crates; it MUST NOT poke internal state to aid the round-trip.
-- CI runs `timeout 30 cargo run -p loopback-demo` and grep-asserts the `ping -> 0xDEADBEEF` output on every push.
+- On startup, prints `HOST_PTY_SERVER_PATH=<path>` to stdout then flushes; the test harness reads this to obtain the slave device path.
+- CI spawns `host-pty-server` in background, reads the slave path, runs `telepath-shell --features serial --port <path> --exec ping`, and grep-asserts `ping -> 0xDEADBEEF`.
 
 ### `tools/telepath-shell`
 - MUST be built separately; it is excluded from the workspace.
@@ -166,6 +174,6 @@ git config --local core.hooksPath .githooks
 
 - `pre-commit` → `just fmt-check` (sub-second; runs on every commit)
 - `pre-push` → `just clippy` + `just test` (~30 s; runs before every push)
-- `just ci` (fmt-check + clippy + test + emulator) SHOULD be run before opening a PR.
+- `just ci` (fmt-check + clippy + test + host-pty-smoke + mcp-test) SHOULD be run before opening a PR.
 - `just firmware-ping` SHOULD additionally be run when the PR touches wire / macros /
   server / client / shell / nrf52840-ping (see "Commit and PR Rules" above).

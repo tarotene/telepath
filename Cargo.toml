@@ -5,7 +5,7 @@ members = [
     "telepath-macros",
     "telepath-server",
     "telepath-client",
-    "examples/loopback-demo",
+    "examples/host-pty-server",
 ]
 exclude = ["examples/nrf52840-ping", "tools/telepath-shell", "tools/telepath-mcp-server"]
 
