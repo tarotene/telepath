@@ -291,7 +291,7 @@ pub fn firmware_commands_resource() -> rmcp::model::Resource {
         .no_annotation()
 }
 
-pub(crate) fn commands_catalog_json(tools: &[ToolMeta]) -> String {
+fn commands_catalog_json(tools: &[ToolMeta]) -> String {
     let catalog: Vec<Value> = tools
         .iter()
         .map(|m| {
