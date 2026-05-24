@@ -63,12 +63,22 @@ Omit the subcommand to enter a readline prompt:
 cd tools/telepath-shell && cargo run
 ```
 
+At startup the shell calls the Command Discovery Protocol and builds a
+schema-aware prompt from the registered commands — no hardcoded subcommands.
+
 ```
+telepath> help
+Commands:
+  ping               -> u32
+  add <i32> <i32>    -> i32
+  ...
+  help [COMMAND]     Show this help or detail for a command
+
 telepath> ping
 ping -> 0xDEADBEEF
-telepath> help
-Commands: ping, help, quit
-telepath> quit
+
+telepath> add [2, 3]
+add -> 5
 ```
 
 RTT debug output from the firmware appears on stderr before each prompt.
@@ -94,8 +104,3 @@ ping -> 0xDEADBEEF
 | 1 (up) | Target→Host | Telepath responses |
 | 1 (down) | Host→Target | Telepath requests |
 
-## Limitations
-
-- Only `ping` is implemented. `discover` and arbitrary command dispatch
-  await the typed-API milestone (roadmap C1,
-  [tracking issue #3](https://github.com/tarotene/telepath/issues/3)).

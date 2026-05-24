@@ -70,26 +70,57 @@ it. The shortest path with [Claude Code](https://claude.com/claude-code):
 
 ```bash
 cd tools/telepath-mcp-server
-cargo build
+cargo build --release
 ```
+
+Both `loopback` and `rtt` features are included in the default build
+(`default = ["loopback", "rtt"]`); no extra flags are needed.
+Use `target/debug/telepath-mcp-server` instead for a faster (but slower-running) dev build.
 
 ### 2. Register with `claude mcp add`
 
+> Note: the `--` separator is required to distinguish Claude Code's own flags
+> (before `--`) from the arguments passed to the `telepath-mcp-server` binary
+> (after `--`). Both use a `--transport` flag with different meanings.
+
+#### Loopback (no hardware required)
+
 ```bash
-claude mcp add --scope local --transport stdio telepath \
-  -- "$(git rev-parse --show-toplevel)/tools/telepath-mcp-server/target/debug/telepath-mcp-server" \
+claude mcp add --scope local telepath \
+  -- "$(git rev-parse --show-toplevel)/tools/telepath-mcp-server/target/release/telepath-mcp-server" \
   --transport loopback
 ```
 
-This writes the server entry directly into `~/.claude.json` for this project,
-bypassing any trust-dialog flow.  The server is available in every Claude Code
-session you start from this directory from now on.
+#### RTT (flashed nRF52840-DK)
+
+Flash the firmware first, then register:
+
+```bash
+cd examples/nrf52840-ping && cargo run --release
+```
+
+```bash
+claude mcp add --scope local telepath \
+  -- "$(git rev-parse --show-toplevel)/tools/telepath-mcp-server/target/release/telepath-mcp-server" \
+  --transport rtt --chip nRF52840_xxAA
+```
+
+Optional RTT flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--rtt-control-block-addr <hex>` | `0x20000000` | RTT control block address; also settable via `TELEPATH_RTT_CONTROL_BLOCK_ADDR` env var |
+| `--no-reset` | disabled | Skip automatic chip reset retry when RTT control block is not found on attach |
+
+This writes the server entry into `.claude/settings.local.json` for this project.
+The server is available in every Claude Code session you start from this directory.
 
 ### 3. Verify
 
 Start a new Claude Code session inside the repository and run `/mcp` to confirm
-`telepath` appears with its discovered tools. For the loopback build, `ping` will
-be listed.
+`telepath` appears. The listed tools are discovered at runtime from the connected
+server — for loopback the built-in `ping` command will appear; for RTT, all
+`#[command]` functions registered in the flashed firmware will appear.
 
 ### 4. Invoke a Telepath command
 
@@ -104,4 +135,4 @@ Expected: the agent invokes the tool and returns `3735928559` (`0xDEADBEEF`).
 - This crate is **excluded from the workspace** — always `cd` into it before
   running `cargo` commands.
 - `stdout` carries the MCP JSON-RPC stream; all logging goes to `stderr`.
-- The loopback transport is currently the only built-in transport — see #36 for RTT/serialport support.
+- serialport transport (`--transport serial`) is not yet implemented — see #36.

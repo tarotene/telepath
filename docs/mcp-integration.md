@@ -103,8 +103,7 @@ cargo run -- --transport loopback
 
 ## Known limitations and followups
 
-- RTT/serialport transport (`--transport rtt`, `--transport serial:/dev/ttyUSB0`) — see #36
+- serialport transport (`--transport serial`) — see #36
 - Schema cache invalidation on firmware reconnect — see #37
-- Named-argument mapping for tuple-schema commands (bridge-level adaptation) — see #38
 - MCP `resources` / `prompts` capability exposure — see #39
 - Shared `telepath-testing` crate to consolidate loopback infrastructure — see #40
