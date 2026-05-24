@@ -9,7 +9,7 @@ Telepath server as an MCP tool, with zero hand-written tool descriptors.
 flowchart TB
     MC[MCP Client<br/>AI agent]
     subgraph Bridge["telepath-mcp-server bin"]
-        SRV["server.rs<br/>rmcp::ServerHandler — list_tools / call_tool"]
+        SRV["server.rs<br/>rmcp::ServerHandler<br/>list_tools / call_tool<br/>list_resources / read_resource<br/>list_prompts / get_prompt"]
         BR["bridge.rs<br/>async invoke(): JSON ↔ postcard via call_raw"]
         S2J["schema_to_json.rs<br/>OwnedNamedType → JSON Schema (pure, sync)"]
         J2P["json_to_postcard.rs<br/>serde_json::Value + schema → postcard (pure, sync)"]
@@ -93,6 +93,26 @@ Encoding follows the postcard wire format exactly:
 | Struct return type | ret schema = `Struct(fields)`; JSON = `{"field":value,…}` |
 | Enum return type | unit variants return `"Name"` string; payload variants return `{"Name":payload}` |
 
+## Resources
+
+`telepath-mcp-server` advertises one resource:
+
+| URI | MIME | Description |
+|-----|------|-------------|
+| `telepath://firmware/commands` | `application/json` | JSON array of all commands discovered via CDP — each entry has `name`, `cmd_id`, and `inputSchema`. |
+
+MCP clients can call `resources/read` with `{"uri":"telepath://firmware/commands"}` to get
+a snapshot of the current command catalogue without calling any firmware commands.
+
+## Prompts
+
+Two built-in prompts are available:
+
+| Name | Arguments | Description |
+|------|-----------|-------------|
+| `verify-board-alive` | — | Produces a user message asking the MCP agent to call `ping` and confirm the firmware is responsive. |
+| `call-command` | `name` (required), `args` (optional) | Produces a user message asking the MCP agent to call the named command with the provided JSON arguments. |
+
 ## Running
 
 ```bash
@@ -105,5 +125,4 @@ cargo run -- --transport loopback
 
 - serialport transport (`--transport serial`) — see #36
 - Schema cache invalidation on firmware reconnect — see #37
-- MCP `resources` / `prompts` capability exposure — see #39
 - Shared `telepath-testing` crate to consolidate loopback infrastructure — see #40

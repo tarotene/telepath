@@ -5,3 +5,5 @@ pub mod postcard_to_json;
 pub mod rtt_transport;
 pub mod schema_to_json;
 pub mod server;
+
+pub use server::TelepathMcpServer;
