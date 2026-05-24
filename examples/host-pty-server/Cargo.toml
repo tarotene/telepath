@@ -1,17 +1,18 @@
 [package]
-name = "loopback-demo"
+name = "host-pty-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Hardware-free loopback demo: full wire round-trip via mpsc channels"
+description = "Host-side Telepath server deployment over a PTY pair (parallel to nrf52840-ping)"
 
 [[bin]]
-name = "loopback-demo"
+name = "host-pty-server"
 path = "src/main.rs"
 
 [dependencies]
 telepath-wire   = { workspace = true }
 telepath-server = { workspace = true }
-telepath-client = { workspace = true }
 postcard        = { version = "1", features = ["alloc"] }
 heapless        = { workspace = true }
+anyhow          = "1"
+nix             = { version = "0.29", features = ["term", "fs"] }

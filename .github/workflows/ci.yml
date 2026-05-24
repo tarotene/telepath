@@ -25,6 +25,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install system libudev (required by serialport on Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config
+
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -37,10 +42,25 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
-      - name: Smoke test loopback-demo
+      - name: Smoke test host-pty-server
         run: |
-          timeout 30 cargo run -p loopback-demo | tee /tmp/loopback-demo.out
-          grep -qF "ping -> 0xDEADBEEF" /tmp/loopback-demo.out
+          cargo build -p host-pty-server
+          cargo build --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial
+          cargo run -p host-pty-server > /tmp/server.out &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 15); do
+            SLAVE=$(grep 'HOST_PTY_SERVER_PATH=' /tmp/server.out 2>/dev/null | sed 's/HOST_PTY_SERVER_PATH=//' | head -1 || true)
+            if [ -n "$SLAVE" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$SLAVE" ]; then
+            echo "host-pty-server did not print PTY path within 15s"
+            cat /tmp/server.out
+            exit 1
+          fi
+          tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec ping | tee /tmp/shell.out
+          grep -qF "ping -> 0xDEADBEEF" /tmp/shell.out
 
       - name: Test MCP server (workspace-excluded)
         working-directory: tools/telepath-mcp-server

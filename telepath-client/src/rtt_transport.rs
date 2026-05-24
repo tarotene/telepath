@@ -1,6 +1,3 @@
-// TODO(#63): This file is a temporary copy of tools/telepath-shell/src/rtt_transport.rs.
-// It will be removed when telepath-shell and telepath-mcp-server are merged into
-// a single `telepath` binary.
 use anyhow::Context;
 use probe_rs::{
     rtt::{Rtt, ScanRegion},
@@ -8,6 +5,8 @@ use probe_rs::{
 };
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
+
+use crate::HostTransportExt;
 
 /// RTT adapter implementing `std::io::Read + Write` for use with `TelepathClient`.
 ///
@@ -91,27 +90,19 @@ impl RttTransport {
             read_deadline: None,
         })
     }
+}
 
-    /// Arm an absolute read deadline at `Instant::now() + timeout`.
-    ///
-    /// Once armed, **every** subsequent `Read::read` call returns
-    /// `ErrorKind::TimedOut` as soon as the deadline elapses, until the deadline
-    /// is overwritten via another `set_read_deadline` call or cleared via
-    /// `clear_read_deadline`. The deadline applies to the whole `call_raw`
-    /// multi-chunk read, not per-chunk.
-    pub fn set_read_deadline(&mut self, timeout: Duration) {
+impl HostTransportExt for RttTransport {
+    fn set_read_deadline(&mut self, timeout: Duration) {
         self.read_deadline = Some(Instant::now() + timeout);
     }
 
-    /// Disarm any previously-set read deadline. `Read::read` will then block
-    /// indefinitely (subject to the underlying probe-rs timing).
-    #[allow(dead_code)]
-    pub fn clear_read_deadline(&mut self) {
+    fn clear_read_deadline(&mut self) {
         self.read_deadline = None;
     }
 
     /// Drain RTT channel 0 (firmware debug output) to `sink`. Non-blocking.
-    pub fn drain_debug_logs(&mut self, sink: &mut dyn io::Write) {
+    fn drain_debug_logs(&mut self, sink: &mut dyn io::Write) {
         let mut buf = [0u8; 1024];
         let mut core = match self.session.core(self.core_index) {
             Ok(c) => c,

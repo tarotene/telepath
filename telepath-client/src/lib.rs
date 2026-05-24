@@ -13,10 +13,37 @@
 //! let result = client.call_raw(0x0001, &args_bytes).unwrap();
 //! ```
 
+#[cfg(feature = "rtt")]
+pub mod rtt_transport;
+#[cfg(feature = "serial")]
+pub mod serial_transport;
+
 use telepath_wire::{
     framing::MAX_FRAME_SIZE, DiscoveryEntry, DiscoveryPage, DiscoveryRequest, CMD_ID_DISCOVERY,
     MAX_PAYLOAD_SIZE,
 };
+
+// ---------------------------------------------------------------------------
+// HostTransportExt
+// ---------------------------------------------------------------------------
+
+/// Extension trait for host-side transports that support read deadlines and
+/// optional debug-log draining (RTT channel 0).
+///
+/// All methods have no-op defaults so that simpler transports (e.g. serial
+/// ports, in-memory pipes) do not need to implement them.
+pub trait HostTransportExt: std::io::Read + std::io::Write {
+    /// Arm a read deadline: subsequent reads return `TimedOut` once the
+    /// deadline elapses. Calling again overwrites the previous deadline.
+    fn set_read_deadline(&mut self, _timeout: std::time::Duration) {}
+
+    /// Disarm the read deadline; reads block indefinitely again.
+    fn clear_read_deadline(&mut self) {}
+
+    /// Drain an out-of-band debug log channel to `sink`. Non-blocking no-op
+    /// by default; RTT transports override this for channel 0 drain.
+    fn drain_debug_logs(&mut self, _sink: &mut dyn std::io::Write) {}
+}
 
 // ---------------------------------------------------------------------------
 // HostError
