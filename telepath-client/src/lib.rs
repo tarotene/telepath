@@ -125,8 +125,11 @@ impl SchemaCache {
 
     /// Remove all cached entries.
     ///
-    /// Called automatically by [`TelepathClient::rediscover`] before re-running CDP.
-    /// Exposed here so callers that manage the cache directly can reset it independently.
+    /// [`TelepathClient::discover`] and [`TelepathClient::rediscover`] reset the
+    /// cache by assigning a fresh [`SchemaCache::new`] rather than calling this
+    /// method, so manual `clear()` is unnecessary for routine rediscovery.
+    /// Exposed for callers that manage the cache directly and need to reset it
+    /// without running CDP.
     pub fn clear(&mut self) {
         self.entries.clear();
     }

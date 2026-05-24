@@ -47,14 +47,26 @@ where
     /// Call this after a firmware reflash or transport reconnect to pick up
     /// new or changed `#[command]` registrations. Automatically triggers
     /// [`TelepathClient::rediscover`] on the underlying client.
+    ///
+    /// If schema rebuild fails after the client cache has been refreshed,
+    /// the local tool list is cleared so subsequent `list_tools`/`call_tool`
+    /// requests fail closed instead of dispatching to stale `cmd_id`s.
     pub async fn rediscover(&mut self) -> Result<(), HostError> {
         let entries = {
             let mut client = self.client.lock().await;
-            client.rediscover()?;
+            tokio::task::block_in_place(|| client.rediscover())?;
             client.schema_cache().iter().cloned().collect::<Vec<_>>()
         };
-        self.tools = build_tools(entries)?;
-        Ok(())
+        match build_tools(entries) {
+            Ok(tools) => {
+                self.tools = tools;
+                Ok(())
+            }
+            Err(e) => {
+                self.tools.clear();
+                Err(e)
+            }
+        }
     }
 }
 
