@@ -74,22 +74,39 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "rtt")]
     {
         use probe_rs::{probe::list::Lister, Permissions};
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
 
+        let rtt_timing = std::env::var_os("TELEPATH_RTT_TIMING").is_some();
         let lister = Lister::new();
         let probes = lister.list_all();
         if probes.is_empty() {
             anyhow::bail!("No debug probes found. Is the J-Link / CMSIS-DAP connected?");
         }
+        let t_probe_open = Instant::now();
         let probe = probes
             .into_iter()
             .next()
             .unwrap()
             .open()
             .map_err(|e| anyhow::anyhow!("Failed to open debug probe: {e}"))?;
+        if rtt_timing {
+            eprintln!(
+                "[telepath:rtt-timing] probe.open elapsed={:?}",
+                t_probe_open.elapsed()
+            );
+        }
+
+        let t_session = Instant::now();
         let session = probe
             .attach(&cli.chip, Permissions::default())
             .map_err(|e| anyhow::anyhow!("Failed to attach to target '{}': {e}", cli.chip))?;
+        if rtt_timing {
+            eprintln!(
+                "[telepath:rtt-timing] probe.attach({}) elapsed={:?}",
+                cli.chip,
+                t_session.elapsed()
+            );
+        }
 
         let mut transport =
             RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr, !cli.no_reset)?;

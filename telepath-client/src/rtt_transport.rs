@@ -8,6 +8,10 @@ use std::time::{Duration, Instant};
 
 use crate::HostTransportExt;
 
+fn rtt_timing_enabled() -> bool {
+    std::env::var_os("TELEPATH_RTT_TIMING").is_some()
+}
+
 /// RTT adapter implementing `std::io::Read + Write` for use with `TelepathClient`.
 ///
 /// Owns a probe-rs `Session` and an `Rtt` instance. Each I/O call transiently
@@ -42,36 +46,59 @@ impl RttTransport {
         control_block_addr: u64,
         auto_reset: bool,
     ) -> anyhow::Result<Self> {
+        let timing = rtt_timing_enabled();
+        let t_total = Instant::now();
         let rtt = {
+            let t_attach1 = Instant::now();
             let first_attempt = {
                 let mut core = session.core(core_index).context("Failed to access core")?;
                 Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
             };
+            let attach1_elapsed = t_attach1.elapsed();
 
             match first_attempt {
-                Ok(rtt) => rtt,
+                Ok(rtt) => {
+                    if timing {
+                        eprintln!(
+                            "[telepath:rtt-timing] attach_region(Exact={:#010x})=OK elapsed={:?}",
+                            control_block_addr, attach1_elapsed
+                        );
+                    }
+                    rtt
+                }
                 Err(probe_rs::rtt::Error::ControlBlockNotFound) if auto_reset => {
                     eprintln!(
                         "RTT control block not found at {:#010x}. Resetting target chip and retrying...",
                         control_block_addr
                     );
+                    let t_reset = Instant::now();
                     {
                         let mut core = session
                             .core(core_index)
                             .context("Failed to access core for reset")?;
                         core.reset().context("Failed to reset target chip")?;
                     }
+                    let reset_elapsed = t_reset.elapsed();
                     std::thread::sleep(Duration::from_millis(300));
 
+                    let t_attach2 = Instant::now();
                     let mut core = session.core(core_index).context("Failed to access core")?;
-                    Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
+                    let rtt = Rtt::attach_region(&mut core, &ScanRegion::Exact(control_block_addr))
                         .with_context(|| {
                             format!(
                                 "Failed to attach to RTT at {:#010x} after auto-reset. \
                                  Is the firmware running and SEGGER RTT initialized?",
                                 control_block_addr
                             )
-                        })?
+                        })?;
+                    let attach2_elapsed = t_attach2.elapsed();
+                    if timing {
+                        eprintln!(
+                            "[telepath:rtt-timing] attach1=ControlBlockNotFound elapsed={:?} reset={:?} sleep=300ms attach2=OK elapsed={:?}",
+                            attach1_elapsed, reset_elapsed, attach2_elapsed
+                        );
+                    }
+                    rtt
                 }
                 Err(e) => {
                     return Err(anyhow::Error::new(e).context(format!(
@@ -81,6 +108,12 @@ impl RttTransport {
                 }
             }
         };
+        if timing {
+            eprintln!(
+                "[telepath:rtt-timing] RttTransport::new total elapsed={:?}",
+                t_total.elapsed()
+            );
+        }
         Ok(Self {
             session,
             rtt,

@@ -29,7 +29,8 @@ use rustyline::history::DefaultHistory;
 use rustyline::validate::Validator;
 use rustyline::{Context as RlContext, Editor, Helper};
 use std::io::{self, Write};
-use std::time::Duration;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use telepath_client::{HostTransportExt, TelepathClient};
 
 #[cfg(feature = "rtt")]
@@ -111,25 +112,40 @@ fn main() -> anyhow::Result<()> {
     {
         use probe_rs::{probe::list::Lister, Permissions};
         use std::fs::{self, File, OpenOptions};
-        use std::path::PathBuf;
 
         let mut log_sink: Box<dyn Write> = open_log_sink(cli.log_file.as_deref())?;
 
+        let rtt_timing = std::env::var_os("TELEPATH_RTT_TIMING").is_some();
         let lister = Lister::new();
         let probes = lister.list_all();
         if probes.is_empty() {
             bail!("No debug probes found. Is the J-Link / CMSIS-DAP connected?");
         }
+        let t_probe_open = Instant::now();
         let probe = probes
             .into_iter()
             .next()
             .unwrap()
             .open()
             .context("Failed to open debug probe")?;
+        if rtt_timing {
+            eprintln!(
+                "[telepath:rtt-timing] probe.open elapsed={:?}",
+                t_probe_open.elapsed()
+            );
+        }
 
+        let t_session = Instant::now();
         let session = probe
             .attach(&cli.chip, Permissions::default())
             .with_context(|| format!("Failed to attach to target '{}'", cli.chip))?;
+        if rtt_timing {
+            eprintln!(
+                "[telepath:rtt-timing] probe.attach({}) elapsed={:?}",
+                cli.chip,
+                t_session.elapsed()
+            );
+        }
 
         let transport =
             RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr, !cli.no_reset)?;
