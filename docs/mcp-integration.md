@@ -9,7 +9,7 @@ Telepath server as an MCP tool, with zero hand-written tool descriptors.
 flowchart TB
     MC[MCP Client<br/>AI agent]
     subgraph Bridge["telepath-mcp-server bin"]
-        SRV["server.rs<br/>rmcp::ServerHandler\nlist_tools / call_tool\nlist_resources / read_resource\nlist_prompts / get_prompt"]
+        SRV["server.rs<br/>rmcp::ServerHandler<br/>list_tools / call_tool<br/>list_resources / read_resource<br/>list_prompts / get_prompt"]
         BR["bridge.rs<br/>async invoke(): JSON ↔ postcard via call_raw"]
         S2J["schema_to_json.rs<br/>OwnedNamedType → JSON Schema (pure, sync)"]
         J2P["json_to_postcard.rs<br/>serde_json::Value + schema → postcard (pure, sync)"]

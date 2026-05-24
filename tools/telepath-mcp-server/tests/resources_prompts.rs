@@ -2,6 +2,7 @@ mod helpers;
 
 use helpers::{make_pair, spawn_fw};
 use rmcp::model::PromptMessageRole;
+use rmcp::ServerHandler;
 use telepath_client::TelepathClient;
 use telepath_mcp_server::server::{firmware_commands_resource, render_prompt, static_prompts};
 use telepath_mcp_server::TelepathMcpServer;
@@ -37,7 +38,7 @@ async fn get_info_advertises_resources_and_prompts() {
     let client = TelepathClient::new(host_side);
     let server = TelepathMcpServer::build(client).expect("build server");
 
-    let info = server.get_info();
+    let info = ServerHandler::get_info(&server);
     let caps = info.capabilities;
 
     assert!(caps.tools.is_some(), "tools capability must be present");
@@ -157,6 +158,27 @@ fn render_call_command_interpolates_arguments() {
         "command name 'add' must appear in rendered text"
     );
     assert!(text.contains("[2, 3]"), "args must appear in rendered text");
+}
+
+#[test]
+fn render_call_command_accepts_json_array_args() {
+    use serde_json::json;
+    let args_obj = json!({"name": "add", "args": [2, 3]});
+    let args_map = args_obj.as_object().unwrap();
+
+    let result = render_prompt("call-command", Some(args_map)).expect("prompt must exist");
+    let text = match &result.messages[0].content {
+        rmcp::model::PromptMessageContent::Text { text } => text.clone(),
+        other => panic!("expected text content, got {:?}", other),
+    };
+    assert!(
+        text.contains("add"),
+        "command name 'add' must appear in rendered text"
+    );
+    assert!(
+        text.contains("2") && text.contains("3"),
+        "array elements must appear in rendered text; got: {text}"
+    );
 }
 
 #[test]

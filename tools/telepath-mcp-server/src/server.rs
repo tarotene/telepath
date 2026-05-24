@@ -73,14 +73,9 @@ where
     }
 
     /// Returns the commands catalog JSON. Exposed for integration tests.
+    #[doc(hidden)]
     pub fn catalog_json_for_test(&self) -> String {
         commands_catalog_json(&self.tools)
-    }
-
-    /// Returns the server info (capabilities + instructions). Exposed for integration tests.
-    pub fn get_info(&self) -> rmcp::model::ServerInfo {
-        use rmcp::ServerHandler;
-        ServerHandler::get_info(self)
     }
 }
 
