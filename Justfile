@@ -18,8 +18,13 @@ fmt:
     cargo fmt --all
 
 # Run clippy; warnings are treated as errors
+# Workspace-excluded tool crates are linted explicitly with both transport feature combinations.
 clippy:
     cargo clippy --workspace -- -D warnings
+    cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
 
 # Build firmware example (cross-compile; requires thumbv7em-none-eabi target)
 # Must cd into the example dir so .cargo/config.toml picks up target = "thumbv7em-none-eabi"
