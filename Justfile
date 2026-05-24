@@ -31,11 +31,10 @@ clippy:
 firmware-build:
     cd examples/nrf52840-ping && cargo build --release
 
-# Flash firmware to nRF52840-DK (downloads and exits; probe is released)
-# After flashing, probe-rs leaves the chip in reset-and-halt state (see
-# flasher.rs `reset_and_halt`).  Explicitly release the core so the firmware
-# runs and `rtt_init!` populates the SEGGER RTT control block before any
-# subsequent host attach.
+# Flash firmware to nRF52840-DK and bring the core to run state.
+# Two steps: `cargo run` flashes via probe-rs and releases the probe;
+# `probe-rs reset` then exits reset-and-halt so the firmware starts and
+# `rtt_init!` populates the RTT control block before any host attach.
 firmware-flash:
     cd examples/nrf52840-ping && cargo run --release
     probe-rs reset --chip nRF52840_xxAA
@@ -51,6 +50,8 @@ cli *ARGS:
 # Local end-to-end smoke: rebuild FW, flash, run `ping` once, assert sentinel.
 # Requires nRF52840-DK connected.  Catches wire-format skew between FW and host.
 firmware-ping: firmware-flash
+    #!/usr/bin/env bash
+    set -euo pipefail
     cd tools/telepath-shell && cargo run -- --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
 # Build telepath-mcp-server
