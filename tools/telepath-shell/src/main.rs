@@ -29,8 +29,11 @@ use rustyline::history::DefaultHistory;
 use rustyline::validate::Validator;
 use rustyline::{Context as RlContext, Editor, Helper};
 use std::io::{self, Write};
+#[cfg(feature = "rtt")]
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(feature = "rtt")]
+use std::time::Instant;
 use telepath_client::{HostTransportExt, TelepathClient};
 
 #[cfg(feature = "rtt")]
