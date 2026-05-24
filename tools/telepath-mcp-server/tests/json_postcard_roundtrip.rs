@@ -92,7 +92,7 @@ fn f32_roundtrip() {
 
 #[test]
 fn f64_roundtrip() {
-    roundtrip_schema(&wrap("f64", DMT::F64), json!(3.14f64));
+    roundtrip_schema(&wrap("f64", DMT::F64), json!(std::f64::consts::PI));
 }
 
 #[test]
