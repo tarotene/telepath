@@ -71,10 +71,11 @@ struct Cli {
 
     /// Execute a single command non-interactively and exit.
     /// The argument uses the same syntax as the interactive REPL prompt:
-    /// `ping`, `add 1 2`, `led_set 1 true`, etc.
+    /// `--exec ping`, `--exec add 1 2`, `--exec led_set 1 true`, etc.
+    /// Pass `--exec help [COMMAND]` to print help and exit.
     /// Exit code is non-zero if discovery or the command itself fails.
-    #[arg(long, value_name = "COMMAND")]
-    exec: Option<String>,
+    #[arg(long, value_name = "COMMAND", num_args = 1..)]
+    exec: Vec<String>,
 }
 
 fn parse_hex_u64(s: &str) -> Result<u64, String> {
@@ -130,11 +131,23 @@ fn main() -> anyhow::Result<()> {
     })?;
     client.transport_mut().clear_read_deadline();
 
-    if let Some(line) = cli.exec.as_deref() {
-        let line = line.trim();
+    if !cli.exec.is_empty() {
+        let joined = cli.exec.join(" ");
+        let line = joined.trim();
+        if line.is_empty() {
+            bail!("--exec requires a non-empty command");
+        }
         let mut parts = line.splitn(2, char::is_whitespace);
         let name = parts.next().unwrap_or("");
         let rest = parts.next().unwrap_or("").trim();
+        if name == "help" {
+            if rest.is_empty() {
+                print_help(&client);
+            } else {
+                print_command_help(&client, rest);
+            }
+            return Ok(());
+        }
         dispatch_command(&mut client, name, rest)?;
         return Ok(());
     }
