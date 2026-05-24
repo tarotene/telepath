@@ -38,9 +38,10 @@ cli-build:
 cli *ARGS:
     cd tools/telepath-shell && cargo run -- {{ARGS}}
 
-# End-to-end smoke test: flash then ping
+# Local end-to-end smoke: rebuild FW, flash, run `ping` once, assert sentinel.
+# Requires nRF52840-DK connected.  Catches wire-format skew between FW and host.
 firmware-ping: firmware-flash
-    cd tools/telepath-shell && cargo run -- ping
+    cd tools/telepath-shell && cargo run -- --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
 # Build telepath-mcp-server
 mcp-build:

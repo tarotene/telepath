@@ -141,6 +141,14 @@ Changes to the macro MUST NOT break existing callers on stable toolchain.
 - Feature branches MUST be created before any code change.
 - PRs MUST reference the corresponding GitHub Issue.
 - `examples/nrf52840-ping/` changes SHOULD be a separate commit from workspace changes.
+- PRs that touch any of the following SHOULD be smoke-tested with `just firmware-ping`
+  against a connected nRF52840-DK before requesting review, and the result recorded in
+  the PR description's Test plan section:
+  - `telepath-wire/`, `telepath-macros/`, `telepath-server/`, `telepath-client/`
+  - `tools/telepath-shell/`
+  - `examples/nrf52840-ping/`
+
+  This catches FW/host wire-format skew that `just ci` alone cannot detect without hardware.
 
 ## Toolchain
 
@@ -159,3 +167,5 @@ git config --local core.hooksPath .githooks
 - `pre-commit` → `just fmt-check` (sub-second; runs on every commit)
 - `pre-push` → `just clippy` + `just test` (~30 s; runs before every push)
 - `just ci` (fmt-check + clippy + test + emulator) SHOULD be run before opening a PR.
+- `just firmware-ping` SHOULD additionally be run when the PR touches wire / macros /
+  server / client / shell / nrf52840-ping (see "Commit and PR Rules" above).
