@@ -31,9 +31,13 @@ clippy:
 firmware-build:
     cd examples/nrf52840-ping && cargo build --release
 
-# Flash firmware to nRF52840-DK (downloads and exits; probe is released)
+# Flash firmware to nRF52840-DK and bring the core to run state.
+# Two steps: `cargo run` flashes via probe-rs and releases the probe;
+# `probe-rs reset` then exits reset-and-halt so the firmware starts and
+# `rtt_init!` populates the RTT control block before any host attach.
 firmware-flash:
     cd examples/nrf52840-ping && cargo run --release
+    probe-rs reset --chip nRF52840_xxAA
 
 # Build telepath-shell
 cli-build:
@@ -45,14 +49,10 @@ cli *ARGS:
 
 # Local end-to-end smoke: rebuild FW, flash, run `ping` once, assert sentinel.
 # Requires nRF52840-DK connected.  Catches wire-format skew between FW and host.
-# Resolves _SEGGER_RTT address from the just-flashed ELF so --rtt-control-block-addr
-# is always in sync with the actual firmware image.
 firmware-ping: firmware-flash
     #!/usr/bin/env bash
     set -euo pipefail
-    elf=examples/nrf52840-ping/target/thumbv7em-none-eabi/release/nrf52840-ping
-    addr=$(nm "$elf" | awk '/_SEGGER_RTT/{print "0x"$1}')
-    cd tools/telepath-shell && cargo run -- --rtt-control-block-addr "$addr" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
+    cd tools/telepath-shell && cargo run -- --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
 # Build telepath-mcp-server
 mcp-build:
