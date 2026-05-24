@@ -136,7 +136,6 @@ fn main() -> anyhow::Result<()> {
         let mut client = TelepathClient::new(transport);
 
         run_session(&cli, &mut client, &mut *log_sink)?;
-        return Ok(());
 
         // ----------- RTT-specific helpers (inner fns to limit scope) -----------
 
