@@ -134,6 +134,25 @@ impl HostTransportExt for RttTransport {
         self.read_deadline = None;
     }
 
+    /// Discard any stale response frames in the RPC up channel left over from a
+    /// previous session. Call before the first `discover()` to prevent
+    /// `SeqMismatch` caused by leftover data.
+    pub fn drain_rpc_rx(&mut self) {
+        let mut buf = [0u8; 256];
+        let mut core = match self.session.core(self.core_index) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        if let Some(ch) = self.rtt.up_channel(self.up_channel) {
+            loop {
+                let n = ch.read(&mut core, &mut buf).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+            }
+        }
+    }
+
     /// Drain RTT channel 0 (firmware debug output) to `sink`. Non-blocking.
     fn drain_debug_logs(&mut self, sink: &mut dyn io::Write) {
         let mut buf = [0u8; 1024];

@@ -112,6 +112,7 @@ async fn main() -> anyhow::Result<()> {
             RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr, !cli.no_reset)?;
         // Drain firmware boot logs to stderr — stdout is reserved for MCP JSON-RPC.
         transport.drain_debug_logs(&mut std::io::stderr());
+        transport.drain_rpc_rx();
         transport.set_read_deadline(Duration::from_secs(10));
 
         let client = telepath_client::TelepathClient::new(transport);

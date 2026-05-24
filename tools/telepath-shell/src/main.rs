@@ -239,6 +239,7 @@ fn run_session<T: HostTransportExt>(
     log: &mut dyn Write,
 ) -> anyhow::Result<()> {
     client.transport_mut().drain_debug_logs(log);
+    client.transport_mut().drain_rpc_rx();
 
     client
         .transport_mut()

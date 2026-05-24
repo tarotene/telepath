@@ -40,8 +40,14 @@ cli *ARGS:
 
 # Local end-to-end smoke: rebuild FW, flash, run `ping` once, assert sentinel.
 # Requires nRF52840-DK connected.  Catches wire-format skew between FW and host.
+# Resolves _SEGGER_RTT address from the just-flashed ELF so --rtt-control-block-addr
+# is always in sync with the actual firmware image.
 firmware-ping: firmware-flash
-    cd tools/telepath-shell && cargo run -- --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    elf=examples/nrf52840-ping/target/thumbv7em-none-eabi/release/nrf52840-ping
+    addr=$(nm "$elf" | awk '/_SEGGER_RTT/{print "0x"$1}')
+    cd tools/telepath-shell && cargo run -- --rtt-control-block-addr "$addr" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
 # Build telepath-mcp-server
 mcp-build:
