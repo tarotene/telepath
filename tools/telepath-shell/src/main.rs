@@ -68,6 +68,13 @@ struct Cli {
     /// By default, telepath-shell issues a soft reset and retries the attach once.
     #[arg(long)]
     no_reset: bool,
+
+    /// Execute a single command non-interactively and exit.
+    /// The argument uses the same syntax as the interactive REPL prompt:
+    /// `ping`, `add 1 2`, `led_set 1 true`, etc.
+    /// Exit code is non-zero if discovery or the command itself fails.
+    #[arg(long, value_name = "COMMAND")]
+    exec: Option<String>,
 }
 
 fn parse_hex_u64(s: &str) -> Result<u64, String> {
@@ -122,6 +129,16 @@ fn main() -> anyhow::Result<()> {
         )
     })?;
     client.transport_mut().clear_read_deadline();
+
+    if let Some(line) = cli.exec.as_deref() {
+        let line = line.trim();
+        let mut parts = line.splitn(2, char::is_whitespace);
+        let name = parts.next().unwrap_or("");
+        let rest = parts.next().unwrap_or("").trim();
+        dispatch_command(&mut client, name, rest)?;
+        return Ok(());
+    }
+
     println!("{n} command(s) discovered  (Ctrl-D / Ctrl-C to exit)");
 
     let mut commands: Vec<String> = client
