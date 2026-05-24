@@ -39,6 +39,18 @@ jobs:
       - name: Clippy (warnings as errors)
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Clippy tools/telepath-shell (rtt feature)
+        run: cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --all-targets -- -D warnings
+
+      - name: Clippy tools/telepath-shell (serial feature)
+        run: cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
+
+      - name: Clippy tools/telepath-mcp-server (rtt feature)
+        run: cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --all-targets -- -D warnings
+
+      - name: Clippy tools/telepath-mcp-server (serial feature)
+        run: cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
+
       - name: Run tests
         run: cargo test --workspace
 
