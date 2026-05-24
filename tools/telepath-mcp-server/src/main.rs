@@ -1,3 +1,9 @@
+#[cfg(all(feature = "rtt", feature = "serial"))]
+compile_error!("telepath-mcp-server: enable exactly one of `rtt`/`serial`; use --no-default-features --features serial for serial-only.");
+
+#[cfg(not(any(feature = "rtt", feature = "serial")))]
+compile_error!("telepath-mcp-server: at least one transport feature must be enabled (`rtt` or `serial`).");
+
 use clap::Parser;
 use rmcp::ServiceExt;
 use telepath_client::HostTransportExt;

@@ -4,7 +4,7 @@ Hardware-free regression server: full wire round-trip over a real PTY pair.
 
 Opens a PTY with `openpty(3)`, prints the slave device path, then runs a
 `TelepathServer` on the master side in a poll loop. A client (e.g.
-`telepath-shell --features serial`) connects to the slave end and speaks the
+`telepath-shell --no-default-features --features serial`) connects to the slave end and speaks the
 full Telepath wire protocol — COBS framing + postcard serialization — over
 the PTY byte stream.
 
@@ -63,6 +63,6 @@ The same four CPU-only demo commands as `examples/nrf52840-ping`:
 | Command | Args | Return |
 |---------|------|--------|
 | `ping` | — | `u32` (`0xDEAD_BEEF`) |
-| `add` | `u32, u32` | `u32` |
-| `crc32` | `[u8; 16]` | `u32` |
-| `echo` | `[u8; 16]` | `[u8; 16]` |
+| `add` | `i32, i32` | `i32` |
+| `crc32` | `heapless::Vec<u8, 128>` | `u32` |
+| `echo` | `heapless::Vec<u8, 128>` | `heapless::Vec<u8, 128>` |

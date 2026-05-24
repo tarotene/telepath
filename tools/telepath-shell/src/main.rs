@@ -4,7 +4,15 @@
 //! Transport is selected at build time via Cargo features:
 //!
 //! - `--features rtt` (default): probe-rs RTT over J-Link / CMSIS-DAP.
-//! - `--features serial`: CDC-ACM serial port (USB or physical UART).
+//! - `--no-default-features --features serial`: CDC-ACM serial port (USB or physical UART).
+//!
+//! Exactly one transport feature must be enabled; enabling both or neither is a compile error.
+
+#[cfg(all(feature = "rtt", feature = "serial"))]
+compile_error!("telepath-shell: enable exactly one of `rtt`/`serial`; use --no-default-features --features serial for serial-only.");
+
+#[cfg(not(any(feature = "rtt", feature = "serial")))]
+compile_error!("telepath-shell: at least one transport feature must be enabled (`rtt` or `serial`).");
 
 mod json_to_postcard;
 mod postcard_to_json;

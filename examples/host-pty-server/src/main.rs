@@ -2,7 +2,7 @@
 //!
 //! Opens a PTY with `openpty(3)`, prints the slave device path to stdout so
 //! that a test harness or human operator can connect a `telepath-shell
-//! --features serial --port <path>` client, then runs `TelepathServer` on
+//! --no-default-features --features serial --port <path>` client, then runs `TelepathServer` on
 //! the master end in a blocking loop.
 //!
 //! This is structurally identical to `examples/nrf52840-ping`: both are
@@ -79,8 +79,10 @@ fn echo(payload: HVec<u8, 128>) -> HVec<u8, 128> {
 
 /// Wraps the PTY master `File` as a `telepath_server::transport::Transport`.
 ///
-/// The master fd is set to O_NONBLOCK so `read` never stalls the server poll
-/// loop. `write` remains blocking (PTY writes are fast in practice).
+/// The master fd is set to O_NONBLOCK; both `read` and `write` are subject to
+/// this flag. `read` returns 0 on WouldBlock so the poll loop is never stalled.
+/// `write` can also return WouldBlock, which is absorbed as 0 bytes written and
+/// retried on the next poll iteration.
 struct PtyTransport {
     master: File,
 }

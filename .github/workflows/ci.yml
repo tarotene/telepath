@@ -48,6 +48,7 @@ jobs:
           cargo build --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial
           cargo run -p host-pty-server > /tmp/server.out &
           SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 15); do
             SLAVE=$(grep 'HOST_PTY_SERVER_PATH=' /tmp/server.out 2>/dev/null | sed 's/HOST_PTY_SERVER_PATH=//' | head -1 || true)
             if [ -n "$SLAVE" ]; then break; fi
@@ -56,11 +57,9 @@ jobs:
           if [ -z "$SLAVE" ]; then
             echo "host-pty-server did not print PTY path within 15s"
             cat /tmp/server.out
-            kill $SERVER_PID 2>/dev/null
             exit 1
           fi
           tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec ping | tee /tmp/shell.out
-          kill $SERVER_PID 2>/dev/null || true
           grep -qF "ping -> 0xDEADBEEF" /tmp/shell.out
 
       - name: Test MCP server (workspace-excluded)

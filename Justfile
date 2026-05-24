@@ -66,16 +66,16 @@ host-pty-smoke:
     cargo build --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial
     cargo run -p host-pty-server > /tmp/host-pty-server.out &
     SERVER_PID=$!
+    trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
     for i in $(seq 1 15); do
         SLAVE=$(grep 'HOST_PTY_SERVER_PATH=' /tmp/host-pty-server.out 2>/dev/null | sed 's/HOST_PTY_SERVER_PATH=//' | head -1 || true)
         if [ -n "$SLAVE" ]; then break; fi
         sleep 1
     done
     if [ -z "$SLAVE" ]; then
-        echo "ERROR: host-pty-server did not print PTY path"; kill $SERVER_PID; exit 1
+        echo "ERROR: host-pty-server did not print PTY path"; exit 1
     fi
     tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
-    kill $SERVER_PID 2>/dev/null || true
 
 # Full CI gate: fmt-check + clippy + test + host-pty smoke + mcp-test
 ci: fmt-check clippy test host-pty-smoke mcp-test
