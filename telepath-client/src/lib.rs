@@ -320,7 +320,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         let mut raw_frame: Vec<u8> = Vec::new();
         'recv: loop {
             if let Some(pos) = self.read_buf.iter().position(|&b| b == 0x00) {
-                if raw_frame.len() + pos > MAX_FRAME_SIZE {
+                if raw_frame.len() + pos >= MAX_FRAME_SIZE {
                     self.read_buf.drain(..=pos);
                     return Err(HostError::FrameTooLarge);
                 }
@@ -328,7 +328,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
                 self.read_buf.drain(..=pos);
                 break 'recv;
             }
-            if raw_frame.len() + self.read_buf.len() > MAX_FRAME_SIZE {
+            if raw_frame.len() + self.read_buf.len() >= MAX_FRAME_SIZE {
                 self.read_buf.clear();
                 return Err(HostError::FrameTooLarge);
             }
@@ -339,6 +339,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
                 .transport
                 .read(&mut chunk)
                 .map_err(|e| HostError::Io(e.to_string()))?;
+            if n == 0 {
+                return Err(HostError::Io("transport closed (EOF)".to_string()));
+            }
             self.read_buf.extend_from_slice(&chunk[..n]);
         }
 
