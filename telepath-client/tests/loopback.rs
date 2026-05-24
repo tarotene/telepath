@@ -128,6 +128,7 @@ static COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
     invoke: ping_shim,
     args_schema: noop_schema,
     ret_schema: noop_schema,
+    arg_names: "",
 }];
 
 #[test]

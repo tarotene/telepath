@@ -52,6 +52,11 @@ fn run_fw(fw_side: helpers::FwSide, running: std::sync::Arc<std::sync::atomic::A
 // ---------------------------------------------------------------------------
 // Discovery: all three CPU commands appear in the registry
 // ---------------------------------------------------------------------------
+//
+// Note: invoke_* tests below use bridge::invoke with a positional JSON array,
+// which is the low-level interface.  The named-argument mapping exercised by
+// TelepathMcpServer::call_tool() is tested in named_args_e2e.rs.
+// ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
 async fn discover_includes_add_crc32_echo() {
@@ -73,6 +78,52 @@ async fn discover_includes_add_crc32_echo() {
             "command '{cmd}' not in discovery result"
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discover_populates_arg_names_for_add() {
+    let (fw_side, host_side) = make_pair();
+    let _guard = spawn_fw(fw_side, run_fw);
+
+    let mut client = TelepathClient::new(host_side);
+    client.discover().expect("discover");
+
+    let entry = client
+        .schema_cache()
+        .iter()
+        .find(|e| e.name == "add")
+        .expect("add not in schema cache")
+        .clone();
+
+    assert_eq!(
+        entry.arg_names,
+        vec!["a".to_string(), "b".to_string()],
+        "add(a, b) must expose named arg list via discovery"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discover_populates_arg_names_for_single_arg_command() {
+    // crc32 and echo are 1-arg; add is 2-arg.
+    // Use crc32 (single arg "payload") to confirm single-arg extraction.
+    let (fw_side, host_side) = make_pair();
+    let _guard = spawn_fw(fw_side, run_fw);
+
+    let mut client = TelepathClient::new(host_side);
+    client.discover().expect("discover");
+
+    let entry = client
+        .schema_cache()
+        .iter()
+        .find(|e| e.name == "crc32")
+        .expect("crc32 not in schema cache")
+        .clone();
+
+    assert_eq!(
+        entry.arg_names,
+        vec!["payload".to_string()],
+        "crc32(payload) must expose single arg name via discovery"
+    );
 }
 
 // ---------------------------------------------------------------------------

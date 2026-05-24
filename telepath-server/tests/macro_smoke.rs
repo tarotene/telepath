@@ -138,3 +138,13 @@ fn commands_array_has_correct_names() {
     assert_eq!(COMMANDS[1].name, "add");
     assert_eq!(COMMANDS[2].name, "unary_echo");
 }
+
+#[test]
+fn commands_have_correct_arg_names() {
+    assert_eq!(
+        COMMANDS[0].arg_names, "",
+        "0-arg command must have empty arg_names"
+    );
+    assert_eq!(COMMANDS[1].arg_names, "a,b", "add(a, b) must emit \"a,b\"");
+    assert_eq!(COMMANDS[2].arg_names, "x", "unary_echo(x) must emit \"x\"");
+}
