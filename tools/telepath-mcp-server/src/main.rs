@@ -16,7 +16,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = Transport::Loopback, help = "Transport backend")]
     transport: Transport,
 
-    /// Target chip name (required for --transport rtt).
+    /// Target chip name. Used when --transport rtt; defaults to nRF52840_xxAA.
     #[arg(long, default_value = "nRF52840_xxAA")]
     chip: String,
 
