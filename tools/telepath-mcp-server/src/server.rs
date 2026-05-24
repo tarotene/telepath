@@ -343,10 +343,11 @@ pub fn render_prompt(
                 .and_then(|a| a.get("name"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("<command>");
-            let args = arguments
-                .and_then(|a| a.get("args"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("{}");
+            let args = match arguments.and_then(|a| a.get("args")) {
+                None => "{}".to_string(),
+                Some(Value::String(s)) => s.clone(),
+                Some(other) => serde_json::to_string(other).unwrap_or_else(|_| "{}".to_string()),
+            };
             Some(GetPromptResult::new(vec![PromptMessage::new_text(
                 PromptMessageRole::User,
                 format!(

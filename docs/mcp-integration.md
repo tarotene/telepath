@@ -110,8 +110,8 @@ Two built-in prompts are available:
 
 | Name | Arguments | Description |
 |------|-----------|-------------|
-| `verify-board-alive` | — | Produces a user message asking Claude to call `ping` and confirm the firmware is responsive. |
-| `call-command` | `name` (required), `args` (optional) | Produces a user message asking Claude to call the named command with the provided JSON arguments. |
+| `verify-board-alive` | — | Produces a user message asking the MCP agent to call `ping` and confirm the firmware is responsive. |
+| `call-command` | `name` (required), `args` (optional) | Produces a user message asking the MCP agent to call the named command with the provided JSON arguments. |
 
 ## Running
 
