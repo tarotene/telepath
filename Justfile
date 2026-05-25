@@ -33,7 +33,7 @@ clippy: clippy-workspace clippy-tools
 # Verify a single commit message file against Conventional Commits (used by .githooks/commit-msg)
 # Requires: cargo install --locked cocogitto
 commit-check MSG_FILE:
-    cog verify --file {{MSG_FILE}}
+    cog verify --file '{{MSG_FILE}}'
 
 # Build firmware example (cross-compile; requires thumbv7em-none-eabi target)
 # Must cd into the example dir so .cargo/config.toml picks up target = "thumbv7em-none-eabi"
