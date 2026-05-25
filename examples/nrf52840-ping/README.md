@@ -44,6 +44,45 @@ cargo run --release
 and the probe session is released immediately. The terminal returns to the
 shell prompt — the probe is free for `telepath shell` to attach.
 
+## Resource injection
+
+This example demonstrates the `#[resource]` mechanism for type-safe peripheral
+access.  LED and button GPIO handles are made available to RPC command handlers
+without passing them over the wire.
+
+**Why newtypes?** The injection system resolves resources by `TypeId`.
+Embassy GPIO types such as `Output<'_>` carry a lifetime parameter that
+prevents them from being `'static`.  Each peripheral is wrapped in a
+dedicated newtype (e.g. `Led1`, `Btn3`) that erases the lifetime via
+`transmute` inside its `new()` constructor — the transmute is sound
+because the lifetime parameter is `PhantomData`-only on nRF GPIO tokens.
+
+```rust
+pub struct Led1(pub Output<'static>);
+impl Led1 {
+    pub fn new(pin: Output<'_>) -> Self {
+        Self(unsafe { core::mem::transmute::<Output<'_>, Output<'static>>(pin) })
+    }
+}
+
+#[command]
+fn led_set(#[resource] led1: &mut Led1, id: u8, on: bool) -> bool { /* … */ }
+```
+
+Resources are registered on the server builder — one `.resource()` call per
+type:
+
+```rust
+let mut server = TelepathServer::<RttTransport, 512>::new(transport, commands())
+    .resource(Led1::new(Output::new(p.P0_13, Level::High, OutputDrive::Standard)))
+    .resource(Btn1::new(Input::new(p.P0_11, Pull::Up)));
+    // …
+```
+
+See [`src/main.rs`](src/main.rs) for the complete eight-peripheral example
+(four LEDs + four buttons, lines 49–89 for newtype definitions and lines
+375–382 for the builder chain).
+
 ## Commands
 
 Commands are registered via the `#[command]` macro and auto-discovered at
