@@ -8,6 +8,7 @@ const STORAGE_SIZE: usize = 128;
 struct Entry {
     type_id: TypeId,
     offset: usize,
+    drop_fn: unsafe fn(*mut u8),
 }
 
 // Guarantees the storage buffer is at least 8-byte aligned so that casting
@@ -29,6 +30,15 @@ impl Default for ResourceRegistry {
     }
 }
 
+// Monomorphised drop shim: restores the concrete type from a raw byte pointer
+// and calls its destructor. Stored once per Entry at insert time so the
+// registry can drop values without retaining generic type information.
+unsafe fn drop_in_place_erased<T>(ptr: *mut u8) {
+    // SAFETY: caller guarantees `ptr` was produced by `core::ptr::write::<T>`
+    // into aligned storage owned by this registry and is still initialised.
+    unsafe { core::ptr::drop_in_place(ptr as *mut T) }
+}
+
 impl ResourceRegistry {
     pub const fn new() -> Self {
         Self {
@@ -43,20 +53,21 @@ impl ResourceRegistry {
 
     /// Move `val` into the registry, keyed by its `TypeId`.
     ///
-    /// # Resource lifetime
+    /// Inserted resources are dropped in reverse insertion order when the
+    /// registry itself is dropped, matching Rust's standard field/local
+    /// destruction order.
     ///
-    /// Inserted resources are **NOT dropped**: `ResourceRegistry` has no `Drop`
-    /// impl. This is intentional for the embedded use-case where resources are
-    /// `'static` peripheral handles (e.g. `Twim`, `Saadc`) whose lifetime equals
-    /// the device lifetime. Dropping them via `ResourceRegistry` is outside scope
-    /// for the current MVP; per-entry `Drop` support is tracked in a dedicated
-    /// follow-up issue.
+    /// # Alignment
+    ///
+    /// `T` must have `align_of::<T>() <= 8`. `AlignedStorage` guarantees an
+    /// 8-byte-aligned base; types with stricter alignment requirements cannot be
+    /// stored safely and will cause a panic at insertion time.
     ///
     /// # Panics
     ///
-    /// Panics if a resource of the same `TypeId` has already been inserted, or if
+    /// Panics if a resource of the same `TypeId` has already been inserted, if
     /// the registry is full (more than `MAX_RESOURCES` entries or `STORAGE_SIZE`
-    /// bytes used).
+    /// bytes used), or if `align_of::<T>() > 8`.
     pub fn insert<T: 'static>(&mut self, val: T) {
         // Duplicate TypeId check — fail-fast so silent shadowing is impossible.
         // This also acts as a runtime backstop for compile-time dedup checks in
@@ -72,6 +83,15 @@ impl ResourceRegistry {
 
         let align = mem::align_of::<T>();
         let size = mem::size_of::<T>();
+
+        // AlignedStorage is repr(align(8)); types with stricter alignment would
+        // produce mis-aligned pointers. Catch this at insertion time.
+        assert!(
+            align <= 8,
+            "resource type alignment {} exceeds AlignedStorage alignment (8)",
+            align,
+        );
+
         let offset = (self.used + align - 1) & !(align - 1);
 
         assert!(
@@ -89,7 +109,7 @@ impl ResourceRegistry {
 
         // SAFETY: `offset` is within the buffer and `offset % align_of::<T>() == 0`.
         // AlignedStorage guarantees the base pointer is 8-byte aligned; T's alignment
-        // is at most 8 for all types expected in embedded/no_std use (u64, *const _).
+        // is at most 8 (asserted above).
         unsafe {
             let base = (*self.storage.get()).0.as_mut_ptr();
             let dst = base.add(offset) as *mut T;
@@ -99,6 +119,7 @@ impl ResourceRegistry {
         self.entries[self.count].write(Entry {
             type_id: TypeId::of::<T>(),
             offset,
+            drop_fn: drop_in_place_erased::<T>,
         });
         self.count += 1;
         self.used = offset + size;
@@ -132,9 +153,30 @@ impl ResourceRegistry {
     }
 }
 
+impl Drop for ResourceRegistry {
+    fn drop(&mut self) {
+        // Drop in reverse insertion order — matches Rust's standard destruction
+        // order for fields/locals so that resources registered later (which may
+        // logically depend on earlier ones) are torn down first.
+        for i in (0..self.count).rev() {
+            // SAFETY: entries[0..self.count] were all initialised by insert().
+            let entry = unsafe { self.entries[i].assume_init_ref() };
+            // SAFETY: storage at entry.offset holds an initialised T whose
+            // drop_fn was recorded by insert(). The registry has exclusive
+            // ownership at drop time — no shim borrow can overlap because
+            // `&mut self` is required and dispatch only holds `&self`.
+            unsafe {
+                let base = (*self.storage.get()).0.as_mut_ptr() as *mut u8;
+                (entry.drop_fn)(base.add(entry.offset));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn insert_and_get_ptr() {
@@ -202,5 +244,102 @@ mod tests {
         let mut reg = ResourceRegistry::new();
         reg.insert(0u32);
         reg.insert(1u32); // same TypeId — should panic
+    }
+
+    // ── Drop tests ────────────────────────────────────────────────────────────
+
+    // Each newtype is a distinct TypeId so all three can coexist in the registry.
+    // The Drop impl records the global sequence position into a per-type slot.
+    static DROP_SEQ: AtomicUsize = AtomicUsize::new(0);
+    static DROP_POS_A: AtomicUsize = AtomicUsize::new(0);
+    static DROP_POS_B: AtomicUsize = AtomicUsize::new(0);
+    static DROP_POS_C: AtomicUsize = AtomicUsize::new(0);
+
+    struct CounterA;
+    struct CounterB;
+    struct CounterC;
+
+    impl Drop for CounterA {
+        fn drop(&mut self) {
+            DROP_POS_A.store(
+                DROP_SEQ.fetch_add(1, Ordering::SeqCst) + 1,
+                Ordering::SeqCst,
+            );
+        }
+    }
+    impl Drop for CounterB {
+        fn drop(&mut self) {
+            DROP_POS_B.store(
+                DROP_SEQ.fetch_add(1, Ordering::SeqCst) + 1,
+                Ordering::SeqCst,
+            );
+        }
+    }
+    impl Drop for CounterC {
+        fn drop(&mut self) {
+            DROP_POS_C.store(
+                DROP_SEQ.fetch_add(1, Ordering::SeqCst) + 1,
+                Ordering::SeqCst,
+            );
+        }
+    }
+
+    #[test]
+    fn drops_in_reverse_insertion_order() {
+        // Reset shared atomics — tests may run in any order.
+        DROP_SEQ.store(0, Ordering::SeqCst);
+        DROP_POS_A.store(0, Ordering::SeqCst);
+        DROP_POS_B.store(0, Ordering::SeqCst);
+        DROP_POS_C.store(0, Ordering::SeqCst);
+
+        {
+            let mut reg = ResourceRegistry::new();
+            reg.insert(CounterA); // inserted 1st
+            reg.insert(CounterB); // inserted 2nd
+            reg.insert(CounterC); // inserted 3rd
+        } // reg dropped here → C first, then B, then A
+
+        // Sequence positions: C=1, B=2, A=3 (smaller = earlier in drop order)
+        let pos_a = DROP_POS_A.load(Ordering::SeqCst);
+        let pos_b = DROP_POS_B.load(Ordering::SeqCst);
+        let pos_c = DROP_POS_C.load(Ordering::SeqCst);
+        assert!(pos_c < pos_b, "C must be dropped before B");
+        assert!(pos_b < pos_a, "B must be dropped before A");
+    }
+
+    static DROP_RAN: AtomicUsize = AtomicUsize::new(0);
+
+    struct DropWitness;
+    impl Drop for DropWitness {
+        fn drop(&mut self) {
+            DROP_RAN.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn drop_runs_for_single_entry() {
+        DROP_RAN.store(0, Ordering::SeqCst);
+        {
+            let mut reg = ResourceRegistry::new();
+            reg.insert(DropWitness);
+        }
+        assert_eq!(DROP_RAN.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn empty_registry_drop_is_noop() {
+        // Must not panic or exhibit UB.
+        drop(ResourceRegistry::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "alignment")]
+    fn panics_on_overalign() {
+        #[repr(align(16))]
+        #[allow(dead_code)]
+        struct OverAligned(u64);
+
+        let mut reg = ResourceRegistry::new();
+        reg.insert(OverAligned(0));
     }
 }
