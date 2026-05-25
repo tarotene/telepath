@@ -1,11 +1,13 @@
+#![cfg(feature = "mcp")]
+
 mod helpers;
 
 use helpers::{make_pair, spawn_fw};
 use rmcp::model::PromptMessageRole;
 use rmcp::ServerHandler;
+use telepath::mcp::server::{firmware_commands_resource, render_prompt, static_prompts};
+use telepath::TelepathMcpServer;
 use telepath_client::TelepathClient;
-use telepath_mcp_server::server::{firmware_commands_resource, render_prompt, static_prompts};
-use telepath_mcp_server::TelepathMcpServer;
 use telepath_server::{command, TelepathServer};
 
 #[command]

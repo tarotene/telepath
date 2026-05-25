@@ -1,31 +1,7 @@
-//! Telepath host-side CLI.
-//!
-//! Connects to a target running `telepath-server` and issues Telepath RPC calls.
-//! Transport is selected at build time via Cargo features:
-//!
-//! - `--features rtt` (default): probe-rs RTT over J-Link / CMSIS-DAP.
-//! - `--no-default-features --features serial`: CDC-ACM serial port (USB or physical UART).
-//!
-//! Exactly one transport feature must be enabled; enabling both or neither is a compile error.
-
-#[cfg(all(feature = "rtt", feature = "serial"))]
-compile_error!("telepath-shell: enable exactly one of `rtt`/`serial`; use --no-default-features --features serial for serial-only.");
-
-#[cfg(not(any(feature = "rtt", feature = "serial")))]
-compile_error!(
-    "telepath-shell: at least one transport feature must be enabled (`rtt` or `serial`)."
-);
-
-mod json_to_postcard;
-mod postcard_to_json;
-
 use anyhow::bail;
 #[cfg(feature = "rtt")]
 use anyhow::Context;
-use clap::Parser;
-use json_to_postcard::json_to_postcard;
 use postcard_schema::schema::owned::{OwnedDataModelType, OwnedNamedType};
-use postcard_to_json::postcard_to_json;
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -36,216 +12,16 @@ use std::io::{self, Write};
 #[cfg(feature = "rtt")]
 use std::path::PathBuf;
 use std::time::Duration;
-#[cfg(feature = "rtt")]
-use std::time::Instant;
 use telepath_client::{HostTransportExt, TelepathClient};
 
-#[cfg(feature = "rtt")]
-use telepath_client::rtt_transport::RttTransport;
-#[cfg(feature = "serial")]
-use telepath_client::serial_transport::SerialTransport;
+use super::super::cli::ShellArgs;
+use super::super::transport::AnyTransport;
+use telepath::bridge;
 
-// ---------------------------------------------------------------------------
-// CLI definition
-// ---------------------------------------------------------------------------
+pub fn run(args: &ShellArgs, mut client: TelepathClient<AnyTransport>) -> anyhow::Result<()> {
+    let mut log_sink: Box<dyn Write> = open_log_sink(args.log_file.as_deref(), &mut client)?;
 
-#[derive(Parser)]
-#[command(name = "telepath-shell", about = "Telepath RPC client")]
-struct Cli {
-    #[cfg(feature = "rtt")]
-    /// Target chip name.
-    #[arg(long, default_value = "nRF52840_xxAA")]
-    chip: String,
-
-    #[cfg(feature = "rtt")]
-    /// SEGGER RTT control block address in hex (e.g. 0x20000000).
-    #[arg(
-        long,
-        value_parser = parse_hex_u64,
-        env = "TELEPATH_RTT_CONTROL_BLOCK_ADDR",
-        default_value = "0x20000000"
-    )]
-    rtt_control_block_addr: u64,
-
-    #[cfg(feature = "rtt")]
-    /// Destination for RTT channel 0 (firmware debug) logs.
-    /// Use `-` for stderr, `/dev/null` to suppress.
-    /// [default: $XDG_STATE_HOME/telepath/shell.log or ~/.local/state/telepath/shell.log]
-    #[arg(long, value_name = "PATH")]
-    log_file: Option<String>,
-
-    #[cfg(feature = "rtt")]
-    /// Disable automatic chip reset when the RTT control block is not found on attach.
-    /// By default, telepath-shell issues a soft reset and retries the attach once.
-    #[arg(long)]
-    no_reset: bool,
-
-    #[cfg(feature = "serial")]
-    /// Serial port path (e.g. /dev/ttyUSB0, /dev/ttyACM0, COM3).
-    #[arg(long)]
-    port: String,
-
-    #[cfg(feature = "serial")]
-    /// Serial baud rate.
-    #[arg(long, default_value = "115200")]
-    baud: u32,
-
-    /// Execute a single command non-interactively and exit.
-    /// The argument uses the same syntax as the interactive REPL prompt:
-    /// `--exec ping`, `--exec add 1 2`, `--exec led_set 1 true`, etc.
-    /// Pass `--exec help [COMMAND]` to print help and exit.
-    /// Exit code is non-zero if discovery or the command itself fails.
-    #[arg(long, value_name = "COMMAND", num_args = 1..)]
-    exec: Vec<String>,
-}
-
-#[cfg(feature = "rtt")]
-fn parse_hex_u64(s: &str) -> Result<u64, String> {
-    let digits = s
-        .strip_prefix("0x")
-        .or_else(|| s.strip_prefix("0X"))
-        .unwrap_or(s);
-    u64::from_str_radix(digits, 16).map_err(|e| format!("invalid hex u64 '{s}': {e}"))
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-
-    #[cfg(feature = "rtt")]
-    {
-        use probe_rs::{probe::list::Lister, Permissions};
-        use std::fs::{self, File, OpenOptions};
-
-        let mut log_sink: Box<dyn Write> = open_log_sink(cli.log_file.as_deref())?;
-
-        let rtt_timing = std::env::var_os("TELEPATH_RTT_TIMING").is_some();
-        let lister = Lister::new();
-        let probes = lister.list_all();
-        if probes.is_empty() {
-            bail!("No debug probes found. Is the J-Link / CMSIS-DAP connected?");
-        }
-        let t_probe_open = Instant::now();
-        let probe = probes
-            .into_iter()
-            .next()
-            .unwrap()
-            .open()
-            .context("Failed to open debug probe")?;
-        if rtt_timing {
-            eprintln!(
-                "[telepath:rtt-timing] probe.open elapsed={:?}",
-                t_probe_open.elapsed()
-            );
-        }
-
-        let t_session = Instant::now();
-        let session = probe
-            .attach(&cli.chip, Permissions::default())
-            .with_context(|| format!("Failed to attach to target '{}'", cli.chip))?;
-        if rtt_timing {
-            eprintln!(
-                "[telepath:rtt-timing] probe.attach({}) elapsed={:?}",
-                cli.chip,
-                t_session.elapsed()
-            );
-        }
-
-        let transport =
-            RttTransport::new(session, 0, 1, 1, cli.rtt_control_block_addr, !cli.no_reset)?;
-        let mut client = TelepathClient::new(transport);
-
-        run_session(&cli, &mut client, &mut *log_sink)?;
-
-        // ----------- RTT-specific helpers (inner fns to limit scope) -----------
-
-        fn open_log_sink(spec: Option<&str>) -> anyhow::Result<Box<dyn Write>> {
-            match spec {
-                Some("-") => {
-                    println!("Firmware RTT ch0 logs -> stderr (may interleave with prompt)");
-                    Ok(Box::new(io::stderr()))
-                }
-                Some("/dev/null") => Ok(Box::new(io::sink())),
-                Some(path) => {
-                    let path = PathBuf::from(path);
-                    let (file, label) = open_log_file(&path)?;
-                    println!("Firmware RTT ch0 logs -> {} ({})", path.display(), label);
-                    println!(
-                        "Tip: run `tail -F {}` in another terminal to follow.",
-                        path.display()
-                    );
-                    Ok(Box::new(file))
-                }
-                None => {
-                    let path = default_log_path();
-                    let (file, label) = open_log_file(&path)?;
-                    println!("Firmware RTT ch0 logs -> {} ({})", path.display(), label);
-                    println!(
-                        "Tip: run `tail -F {}` in another terminal to follow.",
-                        path.display()
-                    );
-                    Ok(Box::new(file))
-                }
-            }
-        }
-
-        fn open_log_file(path: &PathBuf) -> anyhow::Result<(File, &'static str)> {
-            let label = if path.exists() { "append" } else { "new" };
-            if let Some(parent) = path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    fs::create_dir_all(parent).with_context(|| {
-                        format!("Failed to create log directory '{}'", parent.display())
-                    })?;
-                }
-            }
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .with_context(|| format!("Failed to open log file '{}'", path.display()))?;
-            Ok((file, label))
-        }
-
-        fn default_log_path() -> PathBuf {
-            if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
-                return PathBuf::from(state_home).join("telepath").join("shell.log");
-            }
-            if let Some(home) = std::env::var_os("HOME") {
-                return PathBuf::from(home)
-                    .join(".local")
-                    .join("state")
-                    .join("telepath")
-                    .join("shell.log");
-            }
-            eprintln!("Warning: $HOME not set, logging to ./telepath-shell.log");
-            PathBuf::from("telepath-shell.log")
-        }
-    }
-
-    #[cfg(feature = "serial")]
-    {
-        let transport = SerialTransport::new(&cli.port, cli.baud)?;
-        let mut client = TelepathClient::new(transport);
-        let mut log_sink: Box<dyn Write> = Box::new(io::sink());
-        run_session(&cli, &mut client, &mut *log_sink)?;
-    }
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Session logic (transport-agnostic)
-// ---------------------------------------------------------------------------
-
-fn run_session<T: HostTransportExt>(
-    cli: &Cli,
-    client: &mut TelepathClient<T>,
-    log: &mut dyn Write,
-) -> anyhow::Result<()> {
-    client.transport_mut().drain_debug_logs(log);
+    client.transport_mut().drain_debug_logs(&mut *log_sink);
     client.transport_mut().drain_rpc_rx();
 
     client
@@ -258,8 +34,8 @@ fn run_session<T: HostTransportExt>(
     })?;
     client.transport_mut().clear_read_deadline();
 
-    if !cli.exec.is_empty() {
-        let joined = cli.exec.join(" ");
+    if !args.exec.is_empty() {
+        let joined = args.exec.join(" ");
         let line = joined.trim();
         if line.is_empty() {
             bail!("--exec requires a non-empty command");
@@ -269,13 +45,13 @@ fn run_session<T: HostTransportExt>(
         let rest = parts.next().unwrap_or("").trim();
         if name == "help" {
             if rest.is_empty() {
-                print_help(client);
+                print_help(&client);
             } else {
-                print_command_help(client, rest);
+                print_command_help(&client, rest);
             }
             return Ok(());
         }
-        dispatch_command(client, name, rest)?;
+        dispatch_command(&mut client, name, rest)?;
         return Ok(());
     }
 
@@ -288,14 +64,92 @@ fn run_session<T: HostTransportExt>(
         .collect();
     commands.push(String::from("help"));
 
-    run_repl(client, log, commands)?;
+    run_repl(&mut client, &mut *log_sink, commands)?;
 
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tab completion
-// ---------------------------------------------------------------------------
+fn open_log_sink(
+    spec: Option<&str>,
+    client: &mut TelepathClient<AnyTransport>,
+) -> anyhow::Result<Box<dyn Write>> {
+    #[cfg(feature = "rtt")]
+    if matches!(client.transport_mut(), AnyTransport::Rtt(_)) {
+        return open_rtt_log_sink(spec);
+    }
+
+    let _ = (spec, client);
+    Ok(Box::new(io::sink()))
+}
+
+#[cfg(feature = "rtt")]
+fn open_rtt_log_sink(spec: Option<&str>) -> anyhow::Result<Box<dyn Write>> {
+    match spec {
+        Some("-") => {
+            println!("Firmware RTT ch0 logs -> stderr (may interleave with prompt)");
+            Ok(Box::new(io::stderr()))
+        }
+        Some("/dev/null") => Ok(Box::new(io::sink())),
+        Some(path) => {
+            let path = PathBuf::from(path);
+            let (file, label) = open_log_file(&path)?;
+            println!("Firmware RTT ch0 logs -> {} ({})", path.display(), label);
+            println!(
+                "Tip: run `tail -F {}` in another terminal to follow.",
+                path.display()
+            );
+            Ok(Box::new(file))
+        }
+        None => {
+            let path = default_log_path();
+            let (file, label) = open_log_file(&path)?;
+            println!("Firmware RTT ch0 logs -> {} ({})", path.display(), label);
+            println!(
+                "Tip: run `tail -F {}` in another terminal to follow.",
+                path.display()
+            );
+            Ok(Box::new(file))
+        }
+    }
+}
+
+#[cfg(feature = "rtt")]
+fn open_log_file(path: &PathBuf) -> anyhow::Result<(std::fs::File, &'static str)> {
+    use std::fs::{self, OpenOptions};
+
+    let label = if path.exists() { "append" } else { "new" };
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create log directory '{}'", parent.display())
+            })?;
+        }
+    }
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("Failed to open log file '{}'", path.display()))?;
+    Ok((file, label))
+}
+
+#[cfg(feature = "rtt")]
+fn default_log_path() -> PathBuf {
+    if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
+        return PathBuf::from(state_home).join("telepath").join("shell.log");
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("state")
+            .join("telepath")
+            .join("shell.log");
+    }
+    eprintln!("Warning: $HOME not set, logging to ./telepath-shell.log");
+    PathBuf::from("telepath-shell.log")
+}
+
+// ── Tab completion ──────────────────────────────────────────────────────
 
 struct CommandCompleter {
     commands: Vec<String>,
@@ -331,12 +185,10 @@ impl Hinter for CommandCompleter {
 impl Highlighter for CommandCompleter {}
 impl Validator for CommandCompleter {}
 
-// ---------------------------------------------------------------------------
-// Interactive REPL
-// ---------------------------------------------------------------------------
+// ── Interactive REPL ────────────────────────────────────────────────────
 
-fn run_repl<T: HostTransportExt>(
-    client: &mut TelepathClient<T>,
+fn run_repl(
+    client: &mut TelepathClient<AnyTransport>,
     log: &mut dyn Write,
     commands: Vec<String>,
 ) -> anyhow::Result<()> {
@@ -382,9 +234,7 @@ fn run_repl<T: HostTransportExt>(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Help
-// ---------------------------------------------------------------------------
+// ── Help ────────────────────────────────────────────────────────────────
 
 fn type_label(ty: &OwnedDataModelType) -> &'static str {
     match ty {
@@ -454,7 +304,7 @@ fn elem_name(i: usize, raw: &str) -> String {
     }
 }
 
-fn print_help<T: HostTransportExt>(client: &TelepathClient<T>) {
+fn print_help(client: &TelepathClient<AnyTransport>) {
     let mut entries: Vec<_> = client.schema_cache().iter().collect();
     entries.sort_by_key(|e| e.name.as_str());
 
@@ -491,7 +341,7 @@ fn print_help<T: HostTransportExt>(client: &TelepathClient<T>) {
     );
 }
 
-fn print_command_help<T: HostTransportExt>(client: &TelepathClient<T>, cmd_name: &str) {
+fn print_command_help(client: &TelepathClient<AnyTransport>, cmd_name: &str) {
     let cache = client.schema_cache();
     let Some(entry) = cache.iter().find(|e| e.name == cmd_name) else {
         eprintln!("Unknown command: {cmd_name}  (try 'help')");
@@ -549,12 +399,10 @@ fn print_command_help<T: HostTransportExt>(client: &TelepathClient<T>, cmd_name:
     println!("  Returns: {ret_lbl}");
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatch
-// ---------------------------------------------------------------------------
+// ── Command dispatch ────────────────────────────────────────────────────
 
-fn dispatch_command<T: HostTransportExt>(
-    client: &mut TelepathClient<T>,
+fn dispatch_command(
+    client: &mut TelepathClient<AnyTransport>,
     name: &str,
     args_str: &str,
 ) -> anyhow::Result<()> {
@@ -578,18 +426,14 @@ fn dispatch_command<T: HostTransportExt>(
         (entry.cmd_id, args, ret)
     };
 
-    let args_bytes = encode_args(&args_schema, args_str, name)?;
+    let args_json = encode_args(&args_schema, args_str, name)?;
 
     client
         .transport_mut()
         .set_read_deadline(Duration::from_secs(5));
 
-    let response = client
-        .call_raw(cmd_id, &args_bytes)
-        .map_err(|e| anyhow::anyhow!("'{name}' call failed: {e:?}"))?;
-
-    let result = postcard_to_json(&ret_schema, &response)
-        .map_err(|e| anyhow::anyhow!("Response decoding failed: {e}"))?;
+    let result = bridge::invoke(client, cmd_id, &args_schema, &ret_schema, &args_json)
+        .map_err(|e| anyhow::anyhow!("'{name}' call failed: {e}"))?;
 
     format_result(name, &ret_schema, result);
     Ok(())
@@ -610,7 +454,7 @@ fn encode_args(
     args_schema: &OwnedNamedType,
     args_str: &str,
     cmd_name: &str,
-) -> anyhow::Result<Vec<u8>> {
+) -> anyhow::Result<serde_json::Value> {
     let is_unit = matches!(
         &args_schema.ty,
         OwnedDataModelType::Unit | OwnedDataModelType::UnitStruct
@@ -620,39 +464,38 @@ fn encode_args(
         if !args_str.is_empty() {
             bail!("'{cmd_name}' takes no arguments, but got: {args_str}");
         }
-        return Ok(vec![]);
+        return Ok(serde_json::Value::Null);
     }
 
-    let json_val: serde_json::Value = if args_str.is_empty() {
+    if args_str.is_empty() {
         bail!(
             "'{cmd_name}' expects arguments ({}). \
              Each positional arg is parsed as JSON, e.g.: {cmd_name} <arg1> <arg2> ...  \
              (JSON array form also supported: {cmd_name} [<arg1>, <arg2>, ...])",
             args_schema.name
         );
-    } else {
-        match serde_json::from_str(args_str) {
-            Ok(v) => v,
-            Err(_) => {
-                let tokens: Result<Vec<serde_json::Value>, _> = args_str
-                    .split_whitespace()
-                    .map(serde_json::from_str)
-                    .collect();
-                match tokens {
-                    Ok(vals) => serde_json::Value::Array(vals),
-                    Err(e) => bail!(
-                        "Invalid arguments for '{cmd_name}': {e}. \
-                         Note: positional args are split on whitespace; \
-                         for JSON strings or objects containing spaces, use the array form: \
-                         {cmd_name} [<arg1>, <arg2>, ...]"
-                    ),
-                }
+    }
+
+    let json_val: serde_json::Value = match serde_json::from_str(args_str) {
+        Ok(v) => v,
+        Err(_) => {
+            let tokens: Result<Vec<serde_json::Value>, _> = args_str
+                .split_whitespace()
+                .map(serde_json::from_str)
+                .collect();
+            match tokens {
+                Ok(vals) => serde_json::Value::Array(vals),
+                Err(e) => bail!(
+                    "Invalid arguments for '{cmd_name}': {e}. \
+                     Note: positional args are split on whitespace; \
+                     for JSON strings or objects containing spaces, use the array form: \
+                     {cmd_name} [<arg1>, <arg2>, ...]"
+                ),
             }
         }
     };
 
-    json_to_postcard(args_schema, &json_val)
-        .map_err(|e| anyhow::anyhow!("Argument encoding failed for '{cmd_name}': {e}"))
+    Ok(json_val)
 }
 
 #[cfg(test)]
@@ -671,14 +514,16 @@ mod tests {
     fn encode_args_single_bare_scalar() {
         let schema = wrap("args", DMT::Tuple(vec![wrap("mask", DMT::U8)]));
         let result = encode_args(&schema, "10", "led_pattern").unwrap();
-        assert_eq!(result, vec![10]);
+        // Bare "10" parses as JSON Number(10); the codec's 1-element tuple
+        // unwrap accepts this without array wrapping.
+        assert_eq!(result, serde_json::json!(10));
     }
 
     #[test]
     fn encode_args_single_json_array_backward_compat() {
         let schema = wrap("args", DMT::Tuple(vec![wrap("mask", DMT::U8)]));
         let result = encode_args(&schema, "[10]", "led_pattern").unwrap();
-        assert_eq!(result, vec![10]);
+        assert_eq!(result, serde_json::json!([10]));
     }
 
     #[test]

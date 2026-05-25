@@ -2,8 +2,8 @@ use postcard_schema::schema::owned::{OwnedDataModelType as DMT, OwnedNamedType, 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use telepath_mcp_server::json_to_postcard::{json_to_postcard, ConvertError};
-use telepath_mcp_server::postcard_to_json::postcard_to_json;
+use telepath::codec::json_to_postcard::{json_to_postcard, ConvertError};
+use telepath::codec::postcard_to_json::postcard_to_json;
 
 fn wrap(name: &str, ty: DMT) -> OwnedNamedType {
     OwnedNamedType {

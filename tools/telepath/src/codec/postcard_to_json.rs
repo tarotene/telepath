@@ -1,4 +1,4 @@
-use crate::json_to_postcard::ConvertError;
+use super::json_to_postcard::ConvertError;
 use postcard_schema::schema::owned::{OwnedDataModelType, OwnedDataModelVariant, OwnedNamedType};
 use serde_json::{json, Map as JsonMap, Value};
 

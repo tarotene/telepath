@@ -18,13 +18,12 @@ fmt:
     cargo fmt --all
 
 # Run clippy; warnings are treated as errors
-# Workspace-excluded tool crates are linted explicitly with both transport feature combinations.
+# Workspace-excluded tool crate is linted explicitly with several feature combinations.
 clippy:
     cargo clippy --workspace -- -D warnings
-    cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --all-targets -- -D warnings
-    cargo clippy --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
-    cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --all-targets -- -D warnings
-    cargo clippy --manifest-path tools/telepath-mcp-server/Cargo.toml --no-default-features --features serial --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath/Cargo.toml --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath/Cargo.toml --no-default-features --features shell,serial --all-targets -- -D warnings
+    cargo clippy --manifest-path tools/telepath/Cargo.toml --no-default-features --features mcp,serial --all-targets -- -D warnings
 
 # Build firmware example (cross-compile; requires thumbv7em-none-eabi target)
 # Must cd into the example dir so .cargo/config.toml picks up target = "thumbv7em-none-eabi"
@@ -39,42 +38,38 @@ firmware-flash:
     cd examples/nrf52840-ping && cargo run --release
     probe-rs reset --chip nRF52840_xxAA
 
-# Build telepath-shell
+# Build telepath CLI (default features: shell + mcp + rtt)
 cli-build:
-    cd tools/telepath-shell && cargo build
+    cd tools/telepath && cargo build
 
-# Run telepath-shell with arguments (firmware must already be flashed)
+# Run telepath shell with arguments (firmware must already be flashed)
 cli *ARGS:
-    cd tools/telepath-shell && cargo run -- {{ARGS}}
+    cd tools/telepath && cargo run -- shell {{ARGS}}
 
 # Local end-to-end smoke: rebuild FW, flash, run `ping` once, assert sentinel.
 # Requires nRF52840-DK connected.  Catches wire-format skew between FW and host.
 firmware-ping: firmware-flash
     #!/usr/bin/env bash
     set -euo pipefail
-    cd tools/telepath-shell && cargo run -- --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
+    cd tools/telepath && cargo run -- shell --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
-# Build telepath-mcp-server
-mcp-build:
-    cd tools/telepath-mcp-server && cargo build
-
-# Run telepath-mcp-server tests
+# Run telepath tests (codec, bridge, MCP server, end-to-end loopback)
 mcp-test:
-    cd tools/telepath-mcp-server && cargo test
+    cd tools/telepath && cargo test
 
-# Run telepath-mcp-server against a flashed nRF52840-DK (firmware must already be flashed)
+# Run telepath mcp server against a flashed nRF52840-DK (firmware must already be flashed)
 mcp-run-rtt:
-    cd tools/telepath-mcp-server && cargo run
+    cd tools/telepath && cargo run -- mcp
 
-# Build everything: workspace + firmware + CLI + MCP server
-check-all: build firmware-build cli-build mcp-build
+# Build everything: workspace + firmware + CLI
+check-all: build firmware-build cli-build
 
-# Smoke test host-pty-server end-to-end via serial telepath-shell (no hardware required)
+# Smoke test host-pty-server end-to-end via serial telepath shell (no hardware required)
 host-pty-smoke:
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build -p host-pty-server
-    cargo build --manifest-path tools/telepath-shell/Cargo.toml --no-default-features --features serial
+    cargo build --manifest-path tools/telepath/Cargo.toml --no-default-features --features shell,serial
     cargo run -p host-pty-server > /tmp/host-pty-server.out &
     SERVER_PID=$!
     trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
@@ -86,9 +81,9 @@ host-pty-smoke:
     if [ -z "$SLAVE" ]; then
         echo "ERROR: host-pty-server did not print PTY path"; exit 1
     fi
-    tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
-    tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec "add 2 3" | tee /dev/stderr | grep -qF "add -> 5"
-    tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec "add [2, 3]" | tee /dev/stderr | grep -qF "add -> 5"
+    tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
+    tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec "add 2 3" | tee /dev/stderr | grep -qF "add -> 5"
+    tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec "add [2, 3]" | tee /dev/stderr | grep -qF "add -> 5"
 
-# Full CI gate: fmt-check + clippy + test + host-pty smoke + mcp-test
+# Full CI gate: fmt-check + clippy + test + host-pty smoke + telepath tests
 ci: fmt-check clippy test host-pty-smoke mcp-test

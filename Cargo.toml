@@ -7,7 +7,7 @@ members = [
     "telepath-client",
     "examples/host-pty-server",
 ]
-exclude = ["examples/nrf52840-ping", "tools/telepath-shell", "tools/telepath-mcp-server"]
+exclude = ["examples/nrf52840-ping", "tools/telepath"]
 
 [workspace.package]
 version = "0.1.0"

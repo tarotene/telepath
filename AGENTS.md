@@ -13,8 +13,7 @@
 | `telepath-client` | Host-side RPC client library; `rtt` and `serial` Cargo features select the transport | native (`std`) |
 | `examples/host-pty-server` | Host-side server deployment over a PTY pair (hardware-free regression) | native (`std`) |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
-| `tools/telepath-shell` | Interactive shell for Telepath servers; `default = ["rtt"]`, `serial` opt-in | native (`std`) |
-| `tools/telepath-mcp-server` | MCP server — discovers commands, exposes as MCP tools; `default = ["rtt"]`, `serial` opt-in | native (`std`) |
+| `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); `default = ["shell", "mcp", "rtt"]`, `serial` opt-in | native (`std`) |
 
 ## Build Commands
 
@@ -22,7 +21,7 @@
 # Host workspace (all 5 members including host-pty-server)
 cargo build --workspace
 
-# Run host-pty-server (prints slave PTY path; connect telepath-shell --features serial to that path)
+# Run host-pty-server (prints slave PTY path; connect telepath shell --transport serial to that path)
 cargo run -p host-pty-server
 
 # Full hardware-free smoke via just (spawns server + serial shell, asserts ping)
@@ -37,20 +36,17 @@ cd examples/nrf52840-ping && cargo build --release
 # Flash to nRF52840-DK (probe-rs download: flashes and exits, probe released)
 cd examples/nrf52840-ping && cargo run --release
 
-# Shell tool (excluded from workspace — requires cd)
-# Default build: RTT transport (--features rtt, the default)
-cd tools/telepath-shell && cargo build
-cd tools/telepath-shell && cargo run -- --exec ping
-cd tools/telepath-shell && cargo run
-# Serial build: CDC-ACM / PTY transport
-cd tools/telepath-shell && cargo build --no-default-features --features serial
-cd tools/telepath-shell && cargo run --no-default-features --features serial -- --port /dev/ttyACM0
-
-# MCP server (excluded from workspace — requires cd)
-cd tools/telepath-mcp-server && cargo build
-cd tools/telepath-mcp-server && cargo test
-cd tools/telepath-mcp-server && cargo run -- --chip nRF52840_xxAA
-cd tools/telepath-mcp-server && cargo run --no-default-features --features serial -- --port /dev/ttyACM0
+# Telepath unified CLI (excluded from workspace — requires cd)
+# Default build: shell + mcp + rtt
+cd tools/telepath && cargo build
+cd tools/telepath && cargo run -- shell --exec ping
+cd tools/telepath && cargo run -- shell
+# Serial build: shell subcommand with serial transport
+cd tools/telepath && cargo build --no-default-features --features shell,serial
+cd tools/telepath && cargo run --no-default-features --features shell,serial -- shell --transport serial --port /dev/ttyACM0
+# MCP server: default build includes mcp subcommand
+cd tools/telepath && cargo run -- mcp
+cd tools/telepath && cargo test
 
 # Format check
 cargo fmt --all -- --check
@@ -80,18 +76,14 @@ just ci
 - MUST exercise the full wire path including COBS framing via a real PTY transport — it is the primary hardware-free regression for `telepath-server` and the serial path of `telepath-client`.
 - MUST use only public APIs of the dependent crates; it MUST NOT poke internal state to aid the round-trip.
 - On startup, prints `HOST_PTY_SERVER_PATH=<path>` to stdout then flushes; the test harness reads this to obtain the slave device path.
-- CI spawns `host-pty-server` in background, reads the slave path, runs `telepath-shell --features serial --port <path> --exec ping`, and grep-asserts `ping -> 0xDEADBEEF`.
+- CI spawns `host-pty-server` in background, reads the slave path, runs `telepath shell --transport serial --port <path> --exec ping`, and grep-asserts `ping -> 0xDEADBEEF`.
 
-### `tools/telepath-shell`
-- MUST be built separately; it is excluded from the workspace.
-- MUST NOT be built with `cargo build -p telepath-shell` from the workspace root (not a workspace member).
-- Server MUST be flashed (and probe released) before invoking the shell.
-
-### `tools/telepath-mcp-server`
+### `tools/telepath`
 - MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
-- MUST NOT be built with `cargo build -p telepath-mcp-server` from the workspace root.
-- Pure conversion modules (`schema_to_json`, `json_to_postcard`, `postcard_to_json`) MUST remain side-effect free and sync; async lives only in `bridge.rs` and `server.rs`.
-- All logging MUST go to `stderr`; `stdout` is reserved for the MCP JSON-RPC stream.
+- MUST NOT be built with `cargo build -p telepath` from the workspace root (not a workspace member).
+- Pure conversion modules (`codec/schema_to_json`, `codec/json_to_postcard`, `codec/postcard_to_json`) MUST remain side-effect free and sync; async lives only in `mcp/server.rs`.
+- All MCP subcommand logging MUST go to `stderr`; `stdout` is reserved for the MCP JSON-RPC stream.
+- Server MUST be flashed (and probe released) before invoking the shell subcommand with RTT transport.
 
 ### `telepath-server`
 - MUST remain `#![no_std]`.
@@ -158,7 +150,7 @@ Changes to the macro MUST NOT break existing callers on stable toolchain.
   against a connected nRF52840-DK before requesting review, and the result recorded in
   the PR description's Test plan section:
   - `telepath-wire/`, `telepath-macros/`, `telepath-server/`, `telepath-client/`
-  - `tools/telepath-shell/`
+  - `tools/telepath/`
   - `examples/nrf52840-ping/`
 
   This catches FW/host wire-format skew that `just ci` alone cannot detect without hardware.

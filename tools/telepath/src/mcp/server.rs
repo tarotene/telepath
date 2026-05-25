@@ -1,5 +1,5 @@
 use crate::bridge::{self, BridgeError};
-use crate::schema_to_json::named_type_to_json_schema;
+use crate::codec::schema_to_json::named_type_to_json_schema;
 use postcard_schema::schema::owned::OwnedNamedType;
 use rmcp::model::{
     AnnotateAble, CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams,
@@ -20,7 +20,6 @@ struct ToolMeta {
     cmd_id: u16,
     args_schema: OwnedNamedType,
     ret_schema: OwnedNamedType,
-    /// Argument names in declaration order (empty for zero-arg commands).
     arg_names: Vec<String>,
 }
 
@@ -45,15 +44,6 @@ where
         })
     }
 
-    /// Re-run the Command Discovery Protocol and rebuild the tool list.
-    ///
-    /// Call this after a firmware reflash or transport reconnect to pick up
-    /// new or changed `#[command]` registrations. Automatically triggers
-    /// [`TelepathClient::rediscover`] on the underlying client.
-    ///
-    /// If schema rebuild fails after the client cache has been refreshed,
-    /// the local tool list is cleared so subsequent `list_tools`/`call_tool`
-    /// requests fail closed instead of dispatching to stale `cmd_id`s.
     pub async fn rediscover(&mut self) -> Result<(), HostError> {
         let entries = {
             let mut client = self.client.lock().await;
@@ -72,7 +62,6 @@ where
         }
     }
 
-    /// Returns the commands catalog JSON. Exposed for integration tests.
     #[doc(hidden)]
     pub fn catalog_json_for_test(&self) -> String {
         commands_catalog_json(&self.tools)
@@ -178,19 +167,17 @@ where
         let args_json: Value = named_to_positional(request.arguments, &meta.arg_names);
 
         let mut client = self.client.lock().await;
-        let result = bridge::invoke(
-            &mut *client,
-            meta.cmd_id,
-            &meta.args_schema,
-            &meta.ret_schema,
-            &args_json,
-        )
-        .await
+        let result = tokio::task::block_in_place(|| {
+            bridge::invoke(
+                &mut *client,
+                meta.cmd_id,
+                &meta.args_schema,
+                &meta.ret_schema,
+                &args_json,
+            )
+        })
         .map_err(bridge_to_mcp_error)?;
 
-        // structured() sets structuredContent to a raw Value, which fails MCP
-        // spec Zod validation when the value is not an object.  Return the
-        // JSON representation as plain text instead.
         Ok(CallToolResult::success(vec![Content::text(
             result.to_string(),
         )]))
@@ -228,11 +215,6 @@ fn bridge_to_mcp_error(e: BridgeError) -> ErrorData {
     ErrorData::new(code, e.to_string(), None)
 }
 
-/// Build an MCP-compliant `inputSchema` (`"type": "object"`) from the raw tuple schema
-/// and the declared argument names.
-///
-/// - 0 args  → `{"type": "object"}`
-/// - N args  → `{"type":"object","properties":{"<name>": <elem_schema>, ...},"required":[...]}`
 fn build_input_schema(raw_schema: &Value, arg_names: &[String]) -> Value {
     if arg_names.is_empty() {
         return serde_json::json!({"type": "object"});
@@ -256,10 +238,6 @@ fn build_input_schema(raw_schema: &Value, arg_names: &[String]) -> Value {
     })
 }
 
-/// Convert a named-argument MCP object (`{"a": 2, "b": 3}`) into the positional
-/// JSON array expected by `json_to_postcard` (`[2, 3]`).
-///
-/// Returns `Value::Null` for zero-argument commands (empty `arg_names`).
 fn named_to_positional(
     arguments: Option<serde_json::Map<String, Value>>,
     arg_names: &[String],
@@ -274,10 +252,6 @@ fn named_to_positional(
         .collect();
     Value::Array(arr)
 }
-
-// ---------------------------------------------------------------------------
-// Resource / prompt helpers (pure, sync — testable without ServerHandler context)
-// ---------------------------------------------------------------------------
 
 pub fn firmware_commands_resource() -> rmcp::model::Resource {
     RawResource::new("telepath://firmware/commands", "Discovered commands")
