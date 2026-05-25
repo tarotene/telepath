@@ -294,6 +294,8 @@ cargo clippy --workspace -- -D warnings
 just ci
 ```
 
+See [CHANGELOG.md](./CHANGELOG.md) for the project history.
+
 ## Supported Rust Version
 
 Telepath declares a Minimum Supported Rust Version (MSRV) of **1.88**.

@@ -1,0 +1,48 @@
+# release-plz changelog body template (DRAFT — Phase 4 pending)
+
+This file contains the Tera template to be embedded into `release-plz.toml`'s
+`[changelog]` `body` field in Phase 4 of Issue #30.
+
+**Do not rename or render this file directly.**
+Phase 4 will lift its content into `release-plz.toml` and delete this file.
+
+## Template
+
+```tera
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] \
+{%- if previous %}\
+{%- if previous.version %}\
+([`{{ version | trim_start_matches(pat="v") }}`](https://github.com/tarotene/telepath/compare/{{ previous.version }}..{{ version }}))\
+{% endif %}\
+{% endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits | filter(attribute="merge_commit", value=false) %}
+- {% if commit.breaking %}**[BREAKING]** {% endif %}\
+{% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
+{{ commit.message | upper_first }}\
+{% if commit.github.pr_number %} \
+([#{{ commit.github.pr_number }}](https://github.com/tarotene/telepath/pull/{{ commit.github.pr_number }}))\
+{% endif %}
+{% endfor %}
+{% endfor %}
+```
+
+## Notes
+
+- `group_by(attribute="group")` uses commit type as the section key.
+- `filter(attribute="merge_commit", value=false)` excludes merge commits
+  (consistent with `ignore_merge_commits = true` in `cog.toml`).
+- Breaking changes appear inline with a `**[BREAKING]**` prefix within
+  each commit's group section (e.g. `### Added`).
+  Note: the seeded pre-0.1.0 `CHANGELOG.md` collects breaking changes in
+  a dedicated `### BREAKING CHANGES` section as a one-off hand-curated
+  convention; from v0.1.0 onward this template's inline style supersedes
+  that.
+- The workspace uses unified versioning: one `vX.Y.Z` tag covers all
+  five workspace members. The `[[package]]` section in `release-plz.toml`
+  (Phase 4) wires the tag to `telepath-wire` as the canonical source.
