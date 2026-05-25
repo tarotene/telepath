@@ -2,6 +2,7 @@
 name = "nrf52840-ping"
 version = "0.1.0"
 edition = "2021"
+resolver = "3"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tarotene/telepath"
 publish = false
