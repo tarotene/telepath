@@ -25,9 +25,6 @@ inputs:
   install-libudev:
     description: 'Install libudev-dev and pkg-config (required by serialport crate on Linux)'
     default: 'false'
-  install-mold:
-    description: 'Install and activate mold linker via rui314/setup-mold (Linux only)'
-    default: 'false'
 
 runs:
   using: composite
@@ -45,12 +42,6 @@ runs:
       with:
         packages: libudev-dev pkg-config
         version: 1.0
-
-    - name: Install mold linker
-      if: inputs.install-mold == 'true'
-      uses: rui314/setup-mold@v1
-      with:
-        make-default: true
 
     - name: Install just
       uses: taiki-e/install-action@v2
