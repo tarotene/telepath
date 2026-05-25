@@ -144,6 +144,11 @@ hardware. Switching to an MCU is purely a transport swap.
 | `probe-rs` | Flash and run firmware on nRF52840-DK |
 | `just` | Task runner (optional but recommended) |
 
+> **MSRV:** `rust-version` is not yet declared in `Cargo.toml`. Builds use
+> whichever `stable` toolchain is installed; CI does not gate on a fixed
+> floor. An explicit Minimum Supported Rust Version is planned in
+> [#74](https://github.com/tarotene/telepath/issues/74).
+
 ## Git hooks setup
 
 The repository ships hooks under `.githooks/` that enforce quality gates at
@@ -203,6 +208,11 @@ cd tools/telepath && cargo run -- shell --exec ping
 # Interactive REPL
 cd tools/telepath && cargo run -- shell
 ```
+
+> **Pre-built binaries:** Host-side tools (`telepath shell`, `telepath mcp`)
+> are currently distributed as source only. Pre-built binary distribution
+> via GitHub Releases is planned in
+> [#52](https://github.com/tarotene/telepath/issues/52).
 
 ## Real hardware: nRF52840-DK
 
