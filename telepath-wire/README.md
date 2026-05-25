@@ -91,7 +91,7 @@ bytes (`0xFF`, `0xFE`, …) until the result is non-zero — guaranteeing that
 (Birthday-paradox approximation: P ≈ 1 − e^(−N²/131072).)
 
 Keep one device's command count **≤ 64** for a comfortable collision margin.
-The reserved `0x0000` ID collision is detected at compile time (Stage B2 complete).
+The reserved `0x0000` ID is avoided by rehashing the preimage with a `0xFF` salt byte when the raw hash equals `0x0000`; the discovery ID is never emitted by user commands.
 Cross-command duplicate ID detection is not yet implemented — see [#3](https://github.com/tarotene/telepath/issues/3).
 
 ### Usage

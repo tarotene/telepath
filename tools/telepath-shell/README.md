@@ -47,7 +47,7 @@ telepath-shell --port PORT [--baud RATE] [--exec COMMAND...]
 | `--chip` | RTT | `nRF52840_xxAA` | probe-rs chip name |
 | `--rtt-control-block-addr` | RTT | `0x20000000` | RTT control block address (hex); also via `TELEPATH_RTT_CONTROL_BLOCK_ADDR` |
 | `--no-reset` | RTT | disabled | Skip automatic chip reset retry when RTT control block is missing on attach |
-| `--log-file` | RTT | `~/.local/state/telepath/shell.log` | Destination for RTT ch0 debug logs; `-` for stderr, `/dev/null` to suppress |
+| `--log-file` | RTT | `$XDG_STATE_HOME/telepath/shell.log` or `~/.local/state/telepath/shell.log` | Destination for RTT ch0 debug logs; `-` for stderr, `/dev/null` to suppress |
 | `--port` | serial | *(required)* | Serial port path (e.g. `/dev/ttyACM0`, `/dev/pts/N`) |
 | `--baud` | serial | `115200` | Serial baud rate |
 | `--exec` | both | — | Execute a single command non-interactively and exit (same syntax as REPL) |
@@ -111,8 +111,11 @@ Exit with `quit`, `exit`, Ctrl-C, or Ctrl-D.
 Build the serial variant and point it at the slave PTY exposed by `host-pty-server`:
 
 ```
-cd tools/telepath-shell && cargo build --no-default-features --features serial
+# Terminal 1 — from the repo root (host-pty-server is a workspace member):
 cargo run -p host-pty-server   # prints HOST_PTY_SERVER_PATH=/dev/pts/N
+
+# Terminal 2:
+cd tools/telepath-shell && cargo build --no-default-features --features serial
 cd tools/telepath-shell && cargo run --no-default-features --features serial -- --port /dev/pts/N
 ```
 

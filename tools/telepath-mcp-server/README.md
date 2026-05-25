@@ -59,7 +59,7 @@ cargo test
 |---|---|
 | `schema_to_json_table` | All `OwnedDataModelType` variants → JSON Schema mapping |
 | `json_postcard_roundtrip` | encode → decode identity; native postcard oracle comparison |
-| `end_to_end_loopback` | discover + invoke `ping` and `add` via full bridge stack (uses `host-pty-server`) |
+| `end_to_end_loopback` | discover + invoke `ping` and `add` via full bridge stack over in-process mpsc transport pair |
 | `cpu_commands_e2e` | CPU-only commands (add, crc32, echo) via full bridge |
 | `nrf52840_sensors_e2e` | Sensor commands end-to-end |
 | `resources_prompts` | MCP resources and prompts capabilities |
@@ -103,7 +103,7 @@ cd examples/nrf52840-ping && cargo run --release
 #### Serial — hardware-free via `host-pty-server`
 
 ```bash
-# Run host-pty-server in a separate terminal; it prints the slave PTY path
+# From the repo root in a separate terminal (host-pty-server is a workspace member):
 cargo run -p host-pty-server
 # HOST_PTY_SERVER_PATH=/dev/pts/N  ← use this path below
 ```
