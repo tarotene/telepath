@@ -438,6 +438,7 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         // incremental builds and cross-crate collisions.
         #[doc(hidden)]
         #[allow(non_upper_case_globals, dead_code)]
+        #[used]
         #[export_name = #collision_export]
         pub static #guard_ident: u8 = 0;
 
