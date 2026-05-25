@@ -45,8 +45,8 @@ The original function body is preserved unchanged and remains directly callable.
 
 - Free functions only (no `self` receiver)
 - Any number of positional arguments with simple identifier patterns
-- Argument and return types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
-- `()` return type (zero-byte payload)
+- Argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- Return type: any `T: Serialize + postcard_schema::Schema` (owned, no references); `()` means "no payload"
 
 **Rejected at compile time:**
 
@@ -61,7 +61,7 @@ The original function body is preserved unchanged and remains directly callable.
 - **Args:** serialized as a postcard tuple — `()` (zero args), `(T,)` (one arg), `(T1, T2, …)` (N args)
 - **Return value:** serialized standalone (no wrapper tuple)
 - **`cmd_id`:** derived deterministically from `(name, args_type_str, ret_type_str)` via FNV-1a 16-bit — renaming a function or changing a type signature is a **breaking wire change**
-- Reserved `cmd_id = 0x0000` is detected at compile time and causes a `compile_error!`
+- Reserved `cmd_id = 0x0000` is avoided by deterministic salt rehashing in `derive_cmd_id`; the discovery ID is never emitted by user commands
 
 ## Build
 
@@ -69,8 +69,8 @@ The original function body is preserved unchanged and remains directly callable.
 # Built automatically as part of the workspace
 cargo build --workspace
 
-# Test the macro expansion (requires cargo-expand)
-cd telepath-macros && cargo expand --test '*'
+# Inspect macro expansion in a consumer crate (requires cargo-expand)
+cd telepath-server && cargo expand --test macro_smoke
 ```
 
 `telepath-macros` is a workspace member targeting the native host (proc-macro crates
