@@ -17,7 +17,9 @@ compile_error!("telepath-shell: at least one transport feature must be enabled (
 mod json_to_postcard;
 mod postcard_to_json;
 
-use anyhow::{bail, Context};
+use anyhow::bail;
+#[cfg(feature = "rtt")]
+use anyhow::Context;
 use clap::Parser;
 use json_to_postcard::json_to_postcard;
 use postcard_schema::schema::owned::{OwnedDataModelType, OwnedNamedType};
