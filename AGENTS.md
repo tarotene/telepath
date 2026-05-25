@@ -40,7 +40,7 @@ cd examples/nrf52840-ping && cargo run --release
 # Shell tool (excluded from workspace — requires cd)
 # Default build: RTT transport (--features rtt, the default)
 cd tools/telepath-shell && cargo build
-cd tools/telepath-shell && cargo run -- ping
+cd tools/telepath-shell && cargo run -- --exec ping
 cd tools/telepath-shell && cargo run
 # Serial build: CDC-ACM / PTY transport
 cd tools/telepath-shell && cargo build --no-default-features --features serial
@@ -49,7 +49,7 @@ cd tools/telepath-shell && cargo run --no-default-features --features serial -- 
 # MCP server (excluded from workspace — requires cd)
 cd tools/telepath-mcp-server && cargo build
 cd tools/telepath-mcp-server && cargo test
-cd tools/telepath-mcp-server && cargo run
+cd tools/telepath-mcp-server && cargo run -- --chip nRF52840_xxAA
 cd tools/telepath-mcp-server && cargo run --no-default-features --features serial -- --port /dev/ttyACM0
 
 # Format check

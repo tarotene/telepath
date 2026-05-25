@@ -15,7 +15,7 @@ flowchart TB
         J2P["json_to_postcard.rs<br/>serde_json::Value + schema → postcard (pure, sync)"]
         P2J["postcard_to_json.rs<br/>postcard + schema → serde_json::Value (pure, sync)"]
     end
-    TS[Telepath server<br/>loopback or RTT]
+    TS[Telepath server<br/>RTT or serial]
 
     MC <-->|stdio JSON-RPC| Bridge
     Bridge <-->|TelepathClient::call_raw| TS
@@ -116,13 +116,19 @@ Two built-in prompts are available:
 ## Running
 
 ```bash
-# Loopback mode — no hardware required (demo ping command built in)
+# RTT mode (default build) — connects to a flashed device
 cd tools/telepath-mcp-server
-cargo run -- --transport loopback
+cargo run -- --chip nRF52840_xxAA
+
+# Serial mode — CDC-ACM device or host-pty-server PTY
+cd tools/telepath-mcp-server
+cargo run --no-default-features --features serial -- --port /dev/ttyACM0
 ```
+
+For a hardware-free smoke test, run `host-pty-server` in a separate terminal first,
+then use the slave PTY path printed as `HOST_PTY_SERVER_PATH=...` with `--port`.
 
 ## Known limitations and followups
 
-- serialport transport (`--transport serial`) — see #36
 - Schema cache invalidation on firmware reconnect — see #37
-- Shared `telepath-testing` crate to consolidate loopback infrastructure — see #40
+- Inspector E2E browser test removed during initial PR; recovery tracked in #42

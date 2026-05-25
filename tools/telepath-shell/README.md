@@ -1,12 +1,16 @@
 # telepath-shell
 
-**Interactive shell** for a Telepath server: RTT-attached REPL and one-shot commands.
+**Interactive shell** for a Telepath server: REPL and one-shot commands.
 
-Host-side interactive shell for the Telepath RPC system. Connects to a target running
-`telepath-server` (e.g. nRF52840-DK) via a J-Link or CMSIS-DAP debug
-probe using probe-rs, attaches to RTT, and issues Telepath RPC calls.
+Host-side interactive shell for the Telepath RPC system. Transport is selected
+**at build time** via Cargo features:
 
-RTT channel 0 debug output (firmware `rprintln!` calls) is forwarded to
+| Feature | Transport | Build command |
+|---------|-----------|---------------|
+| `rtt` *(default)* | probe-rs RTT to a flashed device | `cargo build` |
+| `serial` | CDC-ACM serial port or PTY | `cargo build --no-default-features --features serial` |
+
+In RTT mode, channel 0 debug output (firmware `rprintln!` calls) is forwarded to
 stderr automatically. RTT channel 1 carries Telepath RPC traffic.
 
 ## Prerequisites
@@ -26,31 +30,49 @@ cd tools/telepath-shell && cargo build
 
 ## Usage
 
+**RTT build** (default):
+
 ```
-telepath-shell [--chip CHIP] [COMMAND]
+telepath-shell [--chip CHIP] [--rtt-control-block-addr ADDR] [--no-reset] [--log-file PATH] [--exec COMMAND...]
 ```
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--chip` | `nRF52840_xxAA` | probe-rs chip name |
-| `--no-reset` | (disabled) | Skip the automatic chip reset retry when the RTT control block is missing on attach |
+**Serial build** (`--no-default-features --features serial`):
 
-If the firmware has not yet initialized the SEGGER RTT control block when `telepath-shell` attaches
-(common right after `cargo run --release` in `examples/nrf52840-ping`), the shell issues a soft chip
-reset and retries the attach once. Pass `--no-reset` to disable this behavior.
+```
+telepath-shell --port PORT [--baud RATE] [--exec COMMAND...]
+```
+
+| Option | Transport | Default | Description |
+|--------|-----------|---------|-------------|
+| `--chip` | RTT | `nRF52840_xxAA` | probe-rs chip name |
+| `--rtt-control-block-addr` | RTT | `0x20000000` | RTT control block address (hex); also via `TELEPATH_RTT_CONTROL_BLOCK_ADDR` |
+| `--no-reset` | RTT | disabled | Skip automatic chip reset retry when RTT control block is missing on attach |
+| `--log-file` | RTT | `$XDG_STATE_HOME/telepath/shell.log` or `~/.local/state/telepath/shell.log` | Destination for RTT ch0 debug logs; `-` for stderr, `/dev/null` to suppress |
+| `--port` | serial | *(required)* | Serial port path (e.g. `/dev/ttyACM0`, `/dev/pts/N`) |
+| `--baud` | serial | `115200` | Serial baud rate |
+| `--exec` | both | — | Execute a single command non-interactively and exit (same syntax as REPL) |
+
+In RTT mode, if the firmware has not yet initialized the SEGGER RTT control block when `telepath-shell`
+attaches, the shell issues a soft chip reset and retries once. Pass `--no-reset` to disable this.
 
 ### 1-shot mode
 
-Pass a subcommand to execute it and exit:
+Use `--exec` to run a single command non-interactively and exit:
 
 ```
-cd tools/telepath-shell && cargo run -- ping
+cd tools/telepath-shell && cargo run -- --exec ping
 ```
 
 With a non-default chip:
 
 ```
-cd tools/telepath-shell && cargo run -- --chip nRF52840_xxAA ping
+cd tools/telepath-shell && cargo run -- --chip nRF52840_xxAA --exec ping
+```
+
+Multi-argument commands use the same syntax as the REPL prompt:
+
+```
+cd tools/telepath-shell && cargo run -- --exec add 2 3
 ```
 
 Any probe-rs chip identifier is accepted; run `probe-rs chip list` to find yours.
@@ -84,16 +106,17 @@ add -> 5
 RTT debug output from the firmware appears on stderr before each prompt.
 Exit with `quit`, `exit`, Ctrl-C, or Ctrl-D.
 
-### Subcommands
+### Serial REPL (hardware-free via `host-pty-server`)
 
-#### `ping`
-
-Send a ping request (CmdID `0x0001`) and print the returned `u32`.
-
-Expected output:
+Build the serial variant and point it at the slave PTY exposed by `host-pty-server`:
 
 ```
-ping -> 0xDEADBEEF
+# Terminal 1 — from the repo root (host-pty-server is a workspace member):
+cargo run -p host-pty-server   # prints HOST_PTY_SERVER_PATH=/dev/pts/N
+
+# Terminal 2:
+cd tools/telepath-shell && cargo build --no-default-features --features serial
+cd tools/telepath-shell && cargo run --no-default-features --features serial -- --port /dev/pts/N
 ```
 
 ## RTT channel layout
