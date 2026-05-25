@@ -166,6 +166,20 @@ fn tuple_roundtrip() {
 }
 
 #[test]
+fn tuple_single_element_bare_scalar() {
+    let s = wrap("tup", DMT::Tuple(vec![wrap("0", DMT::U32)]));
+    let from_array = json_to_postcard(&s, &json!([42u32])).expect("array encode");
+    let from_scalar = json_to_postcard(&s, &json!(42u32)).expect("bare scalar encode");
+    assert_eq!(from_array, from_scalar);
+}
+
+#[test]
+fn tuple_single_element_array_still_works() {
+    let s = wrap("tup", DMT::Tuple(vec![wrap("0", DMT::U32)]));
+    roundtrip_schema(&s, json!([42u32]));
+}
+
+#[test]
 fn tuple_arity_mismatch_is_error() {
     let s = wrap(
         "tup",

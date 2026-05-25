@@ -234,7 +234,9 @@ fn encode_value(
             }
         }
         Tuple(elems) | TupleStruct(elems) => {
-            // elems: Vec<OwnedNamedType>; sch.ty is OwnedDataModelType
+            if elems.len() == 1 && !v.is_array() {
+                return encode_value(&elems[0].ty, v, out, &format!("{path}.0"), depth + 1);
+            }
             let arr = require_array(v, path)?;
             if arr.len() != elems.len() {
                 return Err(ConvertError::ArityMismatch {
