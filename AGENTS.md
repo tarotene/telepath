@@ -140,6 +140,57 @@ For each `#[command] fn foo(…) -> R`, the macro emits:
 
 Changes to the macro MUST NOT break existing callers on stable toolchain.
 
+### Peripheral Access
+
+`#[resource]` is the recommended — and idiomatic — mechanism for giving
+`#[command]` functions access to peripherals and other global mutable state.
+Prefer it for all new code.
+
+```rust
+// 1. Newtype wrapper — gives each peripheral a unique TypeId.
+//    HAL types are often lifetime-parametric (Output<'d>), so erasing the
+//    lifetime via transmute is necessary.  The transmute is sound when the
+//    peripheral token is a 'static ZST that owns no borrowed data.
+pub struct Led1(pub Output<'static>);
+impl Led1 {
+    pub fn new(pin: Output<'_>) -> Self {
+        // SAFETY: Output<'d> stores AnyPin by value; 'd is PhantomData only.
+        Self(unsafe { core::mem::transmute::<Output<'_>, Output<'static>>(pin) })
+    }
+}
+
+// 2. Declare resource parameters with #[resource]; wire args appear in any order.
+#[command]
+fn led_set(#[resource] led1: &mut Led1, id: u8, on: bool) -> bool {
+    // led1 is injected by the server; id and on are decoded from the wire.
+    // …
+}
+
+// 3. Register resources on the server builder — one .resource() call per type.
+let mut server = TelepathServer::<MyTransport, 512>::new(transport, telepath_server::commands())
+    .resource(Led1::new(Output::new(pin, Level::High, OutputDrive::Standard)));
+```
+
+See [`examples/nrf52840-ping/src/main.rs`](examples/nrf52840-ping/src/main.rs) for a
+complete multi-peripheral example.
+
+**Runtime invariants:**
+
+- Each resource type may appear **at most once** in the registry; registering a
+  second value of the same type panics at runtime (fail-fast to prevent silent
+  shadowing). Duplicate `#[resource]` arguments within a single `#[command]`
+  signature are additionally rejected at compile time by the proc-macro.
+- `T: 'static` is required — HAL types with lifetime parameters must be newtype-wrapped
+  and `transmute`d to `'static` (the soundness obligation rests with the crate author).
+- Resource arguments are **wire-transparent**: they are not serialized into the wire
+  payload and do not affect the `cmd_id` calculation.  Adding or removing a
+  `#[resource]` argument is therefore **not a breaking wire change**.
+
+**Legacy pattern:** If `#[resource]` cannot be adopted (e.g. the peripheral is already
+shared via a `static Mutex<RefCell<Option<T>>>` elsewhere in the firmware), that pattern
+remains valid and is equally wire-transparent — `#[command]` functions may close over
+global statics directly.  New code SHOULD prefer `#[resource]`.
+
 ## Commit and PR Rules
 
 - Follow Conventional Commits: `feat(wire): add CRC field to Request`
