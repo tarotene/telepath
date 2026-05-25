@@ -1,0 +1,72 @@
+name: MSRV
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+  RUSTUP_TOOLCHAIN: "1.88.0"
+
+jobs:
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # MSRV covers all manifest groups; any source or Cargo.{toml,lock} change is relevant
+          PATTERNS='^(telepath-(wire|server|client|macros)/|examples/(host-pty-server|nrf52840-ping)/|tools/telepath/|Justfile$|rust-toolchain\.toml$|\.github/(workflows/msrv\.yml|actions/rust-setup/))|Cargo\.(toml|lock)$'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No MSRV-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment (MSRV 1.88)
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: '1.88.0'
+          targets: thumbv7em-none-eabi
+          cache-key: msrv-1-88
+          install-libudev: 'true'
+
+      - name: Verify MSRV builds (workspace + cli + firmware)
+        if: steps.guard.outputs.run == 'true'
+        run: just check-all

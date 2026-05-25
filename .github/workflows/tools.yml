@@ -1,0 +1,76 @@
+name: Tools
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  tools:
+    name: Tools (telepath CLI clippy + tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # tools/telepath + its upstream deps (wire, client, macros) + shared manifests
+          PATTERNS='^(telepath-(wire|client|macros)/|tools/telepath/|Justfile$|rust-toolchain\.toml$|\.github/(workflows/tools\.yml|actions/rust-setup/))|Cargo\.(toml|lock)$'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tools-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          components: clippy
+          cache-key: tools-telepath
+          cache-workspaces: tools/telepath
+          install-libudev: 'true'
+          install-mold: 'true'
+
+      - name: Clippy (tools/telepath — all feature combos)
+        if: steps.guard.outputs.run == 'true'
+        run: just clippy-tools
+
+      - name: Test telepath tool (default + mcp,serial)
+        if: steps.guard.outputs.run == 'true'
+        run: just mcp-test

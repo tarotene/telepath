@@ -231,6 +231,7 @@ Ruleset (`id=13908758`, applies to `main`):
 | `Host (clippy + test + smoke)` | Correctness + Smoke | YES |
 | `MSRV (1.88)` | Policy gate | YES |
 | `Firmware (cross-compile nRF52840-DK)` | Cross-compile correctness | YES |
+| `Tools (telepath CLI clippy + tests)` | Correctness (tools/telepath) | YES (added PR #110) |
 
 **Decision criteria for promoting a job to Required:**
 - Correctness / Style / Policy gates → SHOULD be required
@@ -238,6 +239,46 @@ Ruleset (`id=13908758`, applies to `main`):
 - Experimental or known-flaky jobs → NOT required until stable across ≥5 consecutive PRs
 - Ruleset updates MUST be applied via API (`gh api -X PUT repos/.../rulesets/13908758`)
   so changes are auditable
+
+### CI tool installation policy
+
+When adding new tooling to CI workflows, choose the delivery mechanism in this order:
+
+1. **Dedicated setup-action** — e.g. `rui314/setup-mold`, `dtolnay/rust-toolchain`. Fastest; no compile step.
+2. **`taiki-e/install-action`** — for tools listed in its manifest (e.g. `just`, `nextest`). Pre-built binary download.
+3. **`cargo-binstall`** — for crates with published binaries not covered above.
+4. **`cargo install --locked` from source** — last resort only; adds minutes of compile time to every run.
+
+`cargo install` from source MUST NOT be used in CI unless the tool has no binary distribution.
+
+### CI workflow file layout
+
+CI is split into five independent workflows plus one composite action:
+
+| File | Required check name | Trigger scope |
+|------|---------------------|---------------|
+| `.github/workflows/fmt.yml` | `Format check` | Any `.rs`, `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml` |
+| `.github/workflows/host.yml` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, `Cargo.*` |
+| `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, `Cargo.*` |
+| `.github/workflows/msrv.yml` | `MSRV (1.88)` | All source, all `Cargo.{toml,lock}`, `rust-toolchain.toml` |
+| `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `Cargo.*` |
+
+Common setup (toolchain, libudev, mold, just, rust-cache) lives in
+`.github/actions/rust-setup/action.yml` (composite action). Modify it to apply
+changes uniformly across all workflows.
+
+### Path-filtering and job skip strategy
+
+Each CI workflow contains a `Detect relevant changes` step that runs `git diff`
+between the PR base SHA (or push `before` SHA) and HEAD. If no relevant files changed,
+all subsequent steps are skipped and the workflow still exits **successfully** — required
+status checks remain satisfied because GHA reports a job with all steps skipped as success.
+
+No external path-filter action is used; `permissions: contents: read` is sufficient.
+`git fetch origin "$BASE" --depth=1` in the guard ensures the base commit is available
+on shallow checkouts. If the base is unavailable (new branch / zero SHA / fetch error),
+the guard defaults to `run=true` (**safe-by-default** principle — prefer false positives
+over silently skipping valid checks).
 
 ## Lockfile Policy
 
