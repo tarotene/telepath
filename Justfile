@@ -53,9 +53,10 @@ firmware-ping: firmware-flash
     set -euo pipefail
     cd tools/telepath && cargo run -- shell --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
 
-# Run telepath tests (codec, bridge, MCP server, end-to-end loopback)
+# Run telepath tests across feature matrices (codec, bridge, MCP server, serial PTY smoke)
 mcp-test:
     cd tools/telepath && cargo test
+    cd tools/telepath && cargo test --no-default-features --features mcp,serial
 
 # Run telepath mcp server against a flashed nRF52840-DK (firmware must already be flashed)
 mcp-run-rtt:
