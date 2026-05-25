@@ -14,7 +14,9 @@ Host-side Telepath RPC client (`std`). Connects to a target running
 | `new(transport)` | Wrap a transport (e.g. serialport, RTT adapter) |
 | `call_raw(cmd_id, args)` | Send a request, block until response; returns payload bytes |
 | `discover()` | Run the Command Discovery Protocol (CDP); populates schema cache |
+| `rediscover()` | Clear the schema cache and re-run CDP (e.g. after firmware reconnect) |
 | `schema_cache()` | Borrow the in-memory schema cache |
+| `schema_cache_mut().clear()` | Invalidate the schema cache without re-discovering |
 
 `T` must implement `std::io::Read + std::io::Write`.
 
@@ -63,10 +65,11 @@ cargo test -p telepath-client
 ## Limitations
 
 - No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
-  (see #3).
-- Upstream rzCOBS is not yet supported; both framing directions are COBS.
+  (see [#75](https://github.com/tarotene/telepath/issues/75)).
+- Upstream rzCOBS is not yet supported; both framing directions are COBS
+  (see [#76](https://github.com/tarotene/telepath/issues/76)).
 - `HostError::SerdeError` is opaque — the original `postcard::Error` is
-  discarded (see #3).
+  discarded (see [#77](https://github.com/tarotene/telepath/issues/77)).
 - `SchemaCache` stores schema bytes as `Vec<u8>`; use
   `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` to obtain
   `postcard_schema::schema::owned::OwnedNamedType`. MCP tool descriptors are

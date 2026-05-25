@@ -139,8 +139,10 @@ cargo test -p telepath-wire
 ## Limitations
 
 - Upstream (target → host) framing uses COBS in this MVP. rzCOBS is
-  planned for Stage C of the [MVP roadmap](https://github.com/tarotene/telepath/issues/3).
+  planned for Stage C2 (see [#76](https://github.com/tarotene/telepath/issues/76)).
 - `WireError` does not carry the underlying `postcard::Error`. A
-  `From<postcard::Error> for WireError` impl is planned (roadmap C3).
-- `AppError` payload format is unspecified. Until C4 is resolved, callers
-  must agree on an out-of-band convention.
+  `From<postcard::Error> for WireError` impl is planned
+  (see [#77](https://github.com/tarotene/telepath/issues/77)).
+- `AppError` payload format is unspecified. Until resolved, callers must
+  agree on an out-of-band convention
+  (see [#78](https://github.com/tarotene/telepath/issues/78)).
