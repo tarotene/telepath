@@ -65,6 +65,16 @@ jobs:
           cache-key: host-stable
           install-libudev: 'true'
 
+      - name: Assert no Cargo manifest warnings
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          out=$(cargo metadata --locked --format-version=1 2>&1 >/dev/null || true)
+          if echo "$out" | grep -qE "^warning:"; then
+            echo "$out" | grep -E "^warning:"
+            echo "::error::Cargo manifest emitted warnings (will become hard errors in a future Cargo release)."
+            exit 1
+          fi
+
       - name: Clippy (workspace)
         if: steps.guard.outputs.run == 'true'
         run: just clippy-workspace

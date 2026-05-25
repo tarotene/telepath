@@ -18,7 +18,7 @@ publish = false
 rust-version = "1.88"
 
 [workspace.dependencies]
-telepath-wire = { path = "telepath-wire" }
+telepath-wire = { path = "telepath-wire", default-features = false }
 telepath-macros = { path = "telepath-macros" }
 telepath-server = { path = "telepath-server" }
 telepath-client = { path = "telepath-client" }
