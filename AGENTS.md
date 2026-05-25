@@ -194,6 +194,7 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 ## Commit and PR Rules
 
 - Follow Conventional Commits: `feat(wire): add CRC field to Request`
+  Enforced locally by the `commit-msg` hook via cocogitto (`cog verify`).
 - Feature branches MUST be created before any code change.
 - PRs MUST reference the corresponding GitHub Issue.
 - `examples/nrf52840-ping/` changes SHOULD be a separate commit from workspace changes.
@@ -212,7 +213,7 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 - MSRV: `1.88` (declared via `rust-version` in all `Cargo.toml` files and `constraints.rust` in `renovate.json`)
 - When bumping MSRV, update `rust-version` in all manifests **and** `constraints.rust` in `renovate.json` in the same PR.
 - Additional target: `thumbv7em-none-eabi`
-- Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
+- Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging), `cocogitto` (commit-msg validation)
 
 ### MSRV policy
 
@@ -311,6 +312,7 @@ After cloning, contributors MUST run:
 git config --local core.hooksPath .githooks
 ```
 
+- `commit-msg` → `cog verify` (instant; runs on every commit message)
 - `pre-commit` → `just fmt-check` (sub-second; runs on every commit)
 - `pre-push` → `just clippy` + `just test` (~30 s; runs before every push)
 - `just ci` (fmt-check + clippy + test + host-pty-smoke + mcp-test) SHOULD be run before opening a PR.

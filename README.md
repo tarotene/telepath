@@ -143,6 +143,7 @@ hardware. Switching to an MCU is purely a transport swap.
 | `rustup target add thumbv7em-none-eabi` | Firmware cross-compilation |
 | `probe-rs` | Flash and run firmware on nRF52840-DK |
 | `just` | Task runner (optional but recommended) |
+| `cocogitto` | Conventional Commits enforcement (commit-msg hook) |
 
 > **MSRV:** See [Supported Rust Version](#supported-rust-version) below for the
 > declared Minimum Supported Rust Version and policy.
@@ -161,6 +162,7 @@ git config --local core.hooksPath .githooks
 
 | Hook | Runs on | Action | Typical wall time |
 |------|---------|--------|-------------------|
+| `commit-msg` | every `git commit` | `cog verify` (Conventional Commits) | < 1 s |
 | `pre-commit` | every `git commit` | `just fmt-check` | < 1 s |
 | `pre-push` | every `git push` | `just clippy` + `just test` | ~30 s |
 
@@ -168,7 +170,7 @@ git config --local core.hooksPath .githooks
 instant format check. Pushes are less frequent and signal intent to share code,
 so `pre-push` runs the slower static analysis and test suite. The full CI gate
 (`just ci`) additionally runs the PTY-based `host-pty-server` smoke and is intentionally left
-to CI — see [CI / Quality gates](#ci--quality-gates).
+to CI — see [CI / Quality gates](#ci--quality-gates). `commit-msg` fires before `pre-commit` and validates only the message format via cocogitto — instant feedback with no build step.
 
 ### Troubleshooting
 
@@ -178,6 +180,8 @@ repo-local setting above overrides it once you run the command.
 
 **`just: command not found`.** Install via `cargo install just` or your OS
 package manager.
+
+**`cog: command not found`.** Install cocogitto via `cargo install --locked cocogitto`.
 
 **Bypass in an emergency.** Pass `--no-verify` to skip hooks:
 `git commit --no-verify`. The CI gate still applies on every PR.
