@@ -1,3 +1,9 @@
+#[cfg(not(any(feature = "rtt", feature = "serial")))]
+compile_error!(
+    "telepath requires at least one transport feature: \
+     enable `rtt` and/or `serial`"
+);
+
 use super::cli::{TransportArgs, TransportKind};
 use std::io::{self, Read, Write};
 use std::time::Duration;
