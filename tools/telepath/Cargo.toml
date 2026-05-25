@@ -46,5 +46,5 @@ probe-rs = { version = "0.31", optional = true }
 
 [dev-dependencies]
 telepath-server = { path = "../../telepath-server" }
-tokio           = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tokio           = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "time", "io-util"] }
 rmcp            = { version = "1", features = ["client", "transport-child-process"] }

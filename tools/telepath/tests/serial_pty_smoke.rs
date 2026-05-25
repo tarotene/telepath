@@ -28,7 +28,12 @@ fn ensure_host_pty_server_built() -> PathBuf {
         .status()
         .expect("invoke cargo build -p host-pty-server");
     assert!(status.success(), "cargo build -p host-pty-server failed");
-    ws.join("target/debug/host-pty-server")
+    // Respect CARGO_TARGET_DIR when set (common in CI caches); fall back to
+    // the workspace-default `<repo>/target`.
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| ws.join("target"));
+    target_dir.join("debug/host-pty-server")
 }
 
 /// Exercises the full PTY → serial transport → MCP bridge path without hardware.
@@ -117,7 +122,8 @@ async fn serial_pty_mcp_ping_round_trip() {
         "ping must return 0xDEADBEEF (3735928559)"
     );
 
-    // 5. Shut down cleanly.
+    // 5. Shut down cleanly; wait() reaps the child to avoid zombie processes.
     client.cancel().await.ok();
     let _ = server_proc.kill().await;
+    let _ = server_proc.wait().await;
 }
