@@ -3,6 +3,7 @@ name = "telepath-macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Proc-macro crate for Telepath (#[command] attribute)"
 
 [lib]

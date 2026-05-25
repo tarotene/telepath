@@ -209,8 +209,35 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 ## Toolchain
 
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
+- MSRV: **1.88** — declared via `rust-version = "1.88"` in `[workspace.package]`
+  and in each excluded crate (`tools/telepath`, `examples/nrf52840-ping`)
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
+
+### MSRV policy
+
+The MSRV is verified in CI (`msrv` job, `dtolnay/rust-toolchain@1.88.0`).
+Bumping the MSRV is a MINOR change for pre-1.0 releases and MUST use the
+commit convention `feat(toolchain)!: bump MSRV to 1.XX`.
+
+### Required CI gates
+
+The following jobs are registered as **required status checks** in the repository
+Ruleset (`id=13908758`, applies to `main`):
+
+| Job name | Category | Required |
+|----------|----------|----------|
+| `Format check` | Style gate | YES |
+| `Host (clippy + test + smoke)` | Correctness + Smoke | YES |
+| `MSRV (1.88)` | Policy gate | YES |
+| `Firmware (cross-compile nRF52840-DK)` | Cross-compile correctness | YES |
+
+**Decision criteria for promoting a job to Required:**
+- Correctness / Style / Policy gates → SHOULD be required
+- Hardware-dependent jobs (e.g. `firmware-ping`) → NOT required without a self-hosted runner
+- Experimental or known-flaky jobs → NOT required until stable across ≥5 consecutive PRs
+- Ruleset updates MUST be applied via API (`gh api -X PUT repos/.../rulesets/13908758`)
+  so changes are auditable
 
 ## Git Hooks
 

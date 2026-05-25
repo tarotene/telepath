@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "telepath-wire",
     "telepath-macros",
@@ -15,6 +15,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tarotene/telepath"
 publish = false
+rust-version = "1.88"
 
 [workspace.dependencies]
 telepath-wire = { path = "telepath-wire" }
