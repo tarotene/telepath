@@ -80,8 +80,8 @@ let mut server = TelepathServer::<RttTransport, 512>::new(transport, commands())
 ```
 
 See [`src/main.rs`](src/main.rs) for the complete eight-peripheral example
-(four LEDs + four buttons, lines 49–89 for newtype definitions and lines
-375–382 for the builder chain).
+(four LEDs + four buttons, lines 48–102 for newtype definitions and constructors,
+lines 375–382 for the builder chain).
 
 ## Commands
 
