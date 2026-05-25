@@ -209,8 +209,8 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 ## Toolchain
 
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
-- MSRV: **1.88** — declared via `rust-version = "1.88"` in `[workspace.package]`
-  and in each excluded crate (`tools/telepath`, `examples/nrf52840-ping`)
+- MSRV: `1.88` (declared via `rust-version` in all `Cargo.toml` files and `constraints.rust` in `renovate.json`)
+- When bumping MSRV, update `rust-version` in all manifests **and** `constraints.rust` in `renovate.json` in the same PR.
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
 

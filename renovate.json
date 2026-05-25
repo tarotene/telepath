@@ -6,6 +6,9 @@
     ":semanticCommitTypeAll(chore)",
     ":timezone(Asia/Tokyo)"
   ],
+  "constraints": {
+    "rust": "1.88"
+  },
   "schedule": ["before 6am on monday"],
   "commitMessagePrefix": "chore(deps):",
   "rangeStrategy": "auto",
@@ -27,15 +30,16 @@
   },
   "github-actions": {
     "enabled": true,
+    "pinDigests": true,
     "managerFilePatterns": ["/\\.github/workflows/[^/]+\\.ya?ml$/"]
   },
   "packageRules": [
     {
-      "description": "probe-rs: pinned to 0.31.x in two manifests; block automatic minor/major bumps",
+      "description": "probe-rs: pinned to 0.31.x; surface minor/major bumps on Dependency Dashboard for manual re-evaluation (e.g. when 0.32 ships)",
       "matchManagers": ["cargo"],
       "matchPackageNames": ["probe-rs"],
       "matchUpdateTypes": ["major", "minor"],
-      "enabled": false
+      "dependencyDashboardApproval": true
     },
     {
       "description": "probe-rs: allow patch updates synced across both manifests",
