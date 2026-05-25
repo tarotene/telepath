@@ -144,10 +144,8 @@ hardware. Switching to an MCU is purely a transport swap.
 | `probe-rs` | Flash and run firmware on nRF52840-DK |
 | `just` | Task runner (optional but recommended) |
 
-> **MSRV:** `rust-version` is not yet declared in `Cargo.toml`. Builds use
-> whichever `stable` toolchain is installed; CI does not gate on a fixed
-> floor. An explicit Minimum Supported Rust Version is planned in
-> [#74](https://github.com/tarotene/telepath/issues/74).
+> **MSRV:** See [Supported Rust Version](#supported-rust-version) below for the
+> declared Minimum Supported Rust Version and policy.
 
 ## Git hooks setup
 
@@ -295,7 +293,8 @@ just ci
 ## Supported Rust Version
 
 Telepath declares a Minimum Supported Rust Version (MSRV) of **1.88**.
-This applies to all workspace members and the excluded `tools/telepath` crate.
+This applies to all workspace members and the excluded crates
+(`tools/telepath`, `examples/nrf52840-ping`).
 The MSRV is verified in CI via the `msrv` job (`dtolnay/rust-toolchain@1.88.0`).
 
 A bump to the MSRV is treated as a `MINOR` change under SemVer for pre-1.0
