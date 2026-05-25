@@ -37,9 +37,12 @@ Phase 4 will lift its content into `release-plz.toml` and delete this file.
 - `group_by(attribute="group")` uses commit type as the section key.
 - `filter(attribute="merge_commit", value=false)` excludes merge commits
   (consistent with `ignore_merge_commits = true` in `cog.toml`).
-- Breaking changes appear inline with a `**[BREAKING]**` prefix rather
-  than in a separate section — this matches the pre-0.1.0 `CHANGELOG.md`
-  hand-curated style.
+- Breaking changes appear inline with a `**[BREAKING]**` prefix within
+  each commit's group section (e.g. `### Added`).
+  Note: the seeded pre-0.1.0 `CHANGELOG.md` collects breaking changes in
+  a dedicated `### BREAKING CHANGES` section as a one-off hand-curated
+  convention; from v0.1.0 onward this template's inline style supersedes
+  that.
 - The workspace uses unified versioning: one `vX.Y.Z` tag covers all
   five workspace members. The `[[package]]` section in `release-plz.toml`
   (Phase 4) wires the tag to `telepath-wire` as the canonical source.
