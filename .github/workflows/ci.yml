@@ -11,10 +11,10 @@ env:
 
 jobs:
   # -------------------------------------------------------------------------
-  # Job 1: host — format, clippy, test on native target
+  # Job 1: fmt — lightweight format check for immediate PR feedback
   # -------------------------------------------------------------------------
-  host:
-    name: Host (fmt + clippy + test)
+  fmt:
+    name: Format check
     runs-on: ubuntu-latest
 
     steps:
@@ -23,60 +23,59 @@ jobs:
       - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Check formatting
+        run: just fmt-check
+
+  # -------------------------------------------------------------------------
+  # Job 2: host — clippy + test + integration smoke on native target
+  # -------------------------------------------------------------------------
+  host:
+    name: Host (clippy + test + smoke)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Install system libudev (required by serialport on Linux)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: libudev-dev pkg-config
+          version: 1.0
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
       - name: Clippy (warnings as errors)
-        run: cargo clippy --workspace -- -D warnings
-
-      - name: Clippy tools/telepath (default features)
-        run: cargo clippy --manifest-path tools/telepath/Cargo.toml --all-targets -- -D warnings
-
-      - name: Clippy tools/telepath (shell + serial)
-        run: cargo clippy --manifest-path tools/telepath/Cargo.toml --no-default-features --features shell,serial --all-targets -- -D warnings
-
-      - name: Clippy tools/telepath (mcp + serial)
-        run: cargo clippy --manifest-path tools/telepath/Cargo.toml --no-default-features --features mcp,serial --all-targets -- -D warnings
+        run: just clippy
 
       - name: Run tests
-        run: cargo test --workspace
+        run: just test
 
       - name: Smoke test host-pty-server
-        run: |
-          cargo build -p host-pty-server
-          cargo build --manifest-path tools/telepath/Cargo.toml --no-default-features --features shell,serial
-          cargo run -p host-pty-server > /tmp/server.out &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
-          for i in $(seq 1 15); do
-            SLAVE=$(grep 'HOST_PTY_SERVER_PATH=' /tmp/server.out 2>/dev/null | sed 's/HOST_PTY_SERVER_PATH=//' | head -1 || true)
-            if [ -n "$SLAVE" ]; then break; fi
-            sleep 1
-          done
-          if [ -z "$SLAVE" ]; then
-            echo "host-pty-server did not print PTY path within 15s"
-            cat /tmp/server.out
-            exit 1
-          fi
-          tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec ping | tee /tmp/shell.out
-          grep -qF "ping -> 0xDEADBEEF" /tmp/shell.out
+        run: just host-pty-smoke
 
-      - name: Test telepath tool (workspace-excluded)
-        working-directory: tools/telepath
-        run: cargo test
+      - name: Test telepath tool (default + mcp,serial)
+        run: just mcp-test
 
   # -------------------------------------------------------------------------
-  # Job 2: firmware — cross-compile check + release build for nRF52840-DK
+  # Job 3: firmware — cross-compile release build for nRF52840-DK
   # -------------------------------------------------------------------------
   firmware:
     name: Firmware (cross-compile nRF52840-DK)
@@ -87,15 +86,9 @@ jobs:
 
       - name: Install Rust stable toolchain with embedded target
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: thumbv7em-none-eabi
 
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Check firmware (no linking)
-        working-directory: examples/nrf52840-ping
-        run: cargo check
 
       - name: Build firmware (release)
         working-directory: examples/nrf52840-ping
