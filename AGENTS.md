@@ -118,20 +118,25 @@ just ci
 Allowed:
 - Free function only (no `self` or methods)
 - Any number of positional arguments (simple identifier patterns only)
-- Argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- Wire argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- `#[resource]`-annotated arguments: `&T` or `&mut T` where `T: 'static` — injected from the server's `ResourceRegistry`, not deserialized from the wire
+- Wire and resource arguments may appear in any order
 - Return type: any `T: Serialize + postcard_schema::Schema` (owned, no references); `()` means "no payload"
 
 Rejected at compile time (`syn::Error`):
 - `async fn`, `unsafe fn`
 - Generic parameters and `where` clauses
-- `&T` / `&mut T` argument or return type
+- `&T` / `&mut T` argument WITHOUT `#[resource]` attribute
+- `&T` / `&mut T` return type
 - Methods (`fn foo(&self, …)`)
 - Non-identifier argument patterns (e.g. tuple destructuring)
+- Duplicate `#[resource]` types (each resource type may appear at most once)
 
 Wire encoding:
+- Only non-`#[resource]` arguments are serialized; resource arguments are server-side only
 - Args serialized as a postcard tuple: `()` (0-arg), `(T,)` (1-arg), `(T1, T2, …)` (N-arg)
 - Return value serialized standalone (no wrapper tuple)
-- CmdID derived deterministically from `(name, args_type_str, ret_type_str)` — renaming a function or changing a type is a breaking wire change
+- CmdID derived deterministically from `(name, args_type_str, ret_type_str)` using wire args only — adding or removing a `#[resource]` argument does NOT change the wire CmdID
 
 ### Generated items
 

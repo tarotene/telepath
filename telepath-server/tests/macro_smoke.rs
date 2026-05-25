@@ -76,7 +76,8 @@ fn unary_cmd_id_matches_canonical_tuple() {
 #[test]
 fn shim_nullary_roundtrip() {
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[], &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[], &mut out, &reg).unwrap();
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0xDEAD_BEEF);
 }
@@ -86,7 +87,8 @@ fn shim_multiarg_roundtrip() {
     let mut input_buf = [0u8; 16];
     let serialized = postcard::to_slice(&(3u32, 4u32), &mut input_buf).unwrap();
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_ADD.invoke)(serialized, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_ADD.invoke)(serialized, &mut out, &reg).unwrap();
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 7);
 }
@@ -96,7 +98,8 @@ fn shim_unary_roundtrip() {
     let mut input_buf = [0u8; 4];
     let serialized = postcard::to_slice(&(42u8,), &mut input_buf).unwrap();
     let mut out = [0u8; 4];
-    let n = (__TELEPATH_CMD_UNARY_ECHO.invoke)(serialized, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_UNARY_ECHO.invoke)(serialized, &mut out, &reg).unwrap();
     let val: u8 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 42);
 }
@@ -104,7 +107,8 @@ fn shim_unary_roundtrip() {
 #[test]
 fn shim_nullary_rejects_nonempty_input() {
     let mut out = [0u8; 16];
-    let result = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[0xAB], &mut out);
+    let reg = telepath_server::ResourceRegistry::new();
+    let result = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[0xAB], &mut out, &reg);
     assert!(matches!(
         result,
         Err(telepath_server::DispatchError::DeserializeError)

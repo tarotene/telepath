@@ -96,7 +96,8 @@ fn shim_add_two_plus_three() {
     let mut input_buf = [0u8; 16];
     let args = postcard::to_slice(&(2i32, 3i32), &mut input_buf).unwrap();
     let mut out = [0u8; 8];
-    let n = (__TELEPATH_CMD_ADD.invoke)(args, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_ADD.invoke)(args, &mut out, &reg).unwrap();
     let val: i32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 5);
 }
@@ -106,7 +107,8 @@ fn shim_add_neg_plus_one() {
     let mut input_buf = [0u8; 16];
     let args = postcard::to_slice(&(-1i32, 1i32), &mut input_buf).unwrap();
     let mut out = [0u8; 8];
-    let n = (__TELEPATH_CMD_ADD.invoke)(args, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_ADD.invoke)(args, &mut out, &reg).unwrap();
     let val: i32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0);
 }
@@ -135,7 +137,8 @@ fn shim_crc32_zero_payload() {
     let mut input_buf = [0u8; 200];
     let args = postcard::to_slice(&(payload,), &mut input_buf).unwrap();
     let mut out = [0u8; 8];
-    let n = (__TELEPATH_CMD_CRC32.invoke)(args, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_CRC32.invoke)(args, &mut out, &reg).unwrap();
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0xC2A8_FA9D, "CRC-32/ISO-HDLC over 128 zero bytes");
 }
@@ -148,7 +151,8 @@ fn shim_crc32_sequential_payload() {
     let mut input_buf = [0u8; 200];
     let args = postcard::to_slice(&(payload,), &mut input_buf).unwrap();
     let mut out = [0u8; 8];
-    let n = (__TELEPATH_CMD_CRC32.invoke)(args, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_CRC32.invoke)(args, &mut out, &reg).unwrap();
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0x2465_0D57, "CRC-32/ISO-HDLC over bytes 0..128");
 }
@@ -159,7 +163,8 @@ fn shim_echo_round_trip() {
     let mut input_buf = [0u8; 200];
     let args = postcard::to_slice(&(payload.clone(),), &mut input_buf).unwrap();
     let mut out = [0u8; 200];
-    let n = (__TELEPATH_CMD_ECHO.invoke)(args, &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_ECHO.invoke)(args, &mut out, &reg).unwrap();
     let returned: HVec<u8, 128> = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(returned, payload);
 }

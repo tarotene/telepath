@@ -29,6 +29,9 @@
 
 pub mod transport;
 
+mod resource;
+pub use resource::ResourceRegistry;
+
 pub use telepath_macros::command;
 use telepath_wire::{
     framing::{cobs_decode, cobs_encode, FrameAccumulator},
@@ -54,8 +57,13 @@ pub use telepath_wire::cmd_id::derive_cmd_id as __derive_cmd_id;
 /// Type-erased shim function signature.
 ///
 /// Receives a postcard-serialized argument slice, writes a postcard-serialized
-/// result into `output`, and returns the number of bytes written.
-pub type ShimFn = fn(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>;
+/// result into `output`, and returns the number of bytes written. The
+/// `resources` parameter provides access to injected `#[resource]` values.
+pub type ShimFn = fn(
+    input: &[u8],
+    output: &mut [u8],
+    resources: &ResourceRegistry,
+) -> Result<usize, DispatchError>;
 
 /// Type alias for schema-writer function pointers.
 ///
@@ -114,6 +122,9 @@ pub enum DispatchError {
     SerializeError,
     /// The request payload exceeded [`MAX_PAYLOAD_SIZE`].
     PayloadTooLarge,
+    /// A `#[resource]`-annotated argument could not be resolved from the
+    /// server's [`ResourceRegistry`].
+    ResourceUnavailable,
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +146,8 @@ pub struct TelepathServer<T, const N: usize> {
     /// Command registry slice. Pass `telepath_server::commands()` for the
     /// full linkme-populated registry, or a manual slice for testing.
     commands: &'static [CommandMetadata],
+    /// Type-keyed resource registry for `#[resource]` injection.
+    resources: ResourceRegistry,
 }
 
 impl<T, const N: usize> TelepathServer<T, N> {
@@ -145,7 +158,18 @@ impl<T, const N: usize> TelepathServer<T, N> {
             rx_accum: FrameAccumulator::new(),
             tx_buf: [0u8; N],
             commands,
+            resources: ResourceRegistry::new(),
         }
+    }
+
+    /// Register a resource for `#[resource]` injection.
+    ///
+    /// The value is moved into the server's internal registry and made
+    /// available to command shims that declare a matching `#[resource]`
+    /// parameter.
+    pub fn resource<R: 'static>(mut self, val: R) -> Self {
+        self.resources.insert(val);
+        self
     }
 
     /// Look up a command by its ID using linear scan.
@@ -171,7 +195,7 @@ impl<T, const N: usize> TelepathServer<T, N> {
         let cmd = self
             .find_command(cmd_id)
             .ok_or(DispatchError::UnknownCommand)?;
-        (cmd.invoke)(input, output)
+        (cmd.invoke)(input, output, &self.resources)
     }
 
     /// Handle a Discovery request (CmdID 0x0000) with offset-based pagination.
@@ -369,7 +393,11 @@ mod tests {
     extern crate std;
     use super::*;
 
-    fn noop_shim(_input: &[u8], _output: &mut [u8]) -> Result<usize, DispatchError> {
+    fn noop_shim(
+        _input: &[u8],
+        _output: &mut [u8],
+        _resources: &ResourceRegistry,
+    ) -> Result<usize, DispatchError> {
         Ok(0)
     }
 
@@ -418,7 +446,11 @@ mod tests {
     use telepath_wire::{PacketType, Request, Response, ResponseStatus};
 
     /// A ping shim that writes `0xDEADBEEFu32` as postcard to output.
-    fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+    fn ping_shim(
+        _input: &[u8],
+        output: &mut [u8],
+        _resources: &ResourceRegistry,
+    ) -> Result<usize, DispatchError> {
         let val: u32 = 0xDEAD_BEEF;
         let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
         Ok(s.len())

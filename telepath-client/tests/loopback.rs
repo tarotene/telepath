@@ -112,7 +112,11 @@ impl std::io::Write for HostSide {
 // Test
 // ---------------------------------------------------------------------------
 
-fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+fn ping_shim(
+    _input: &[u8],
+    output: &mut [u8],
+    _resources: &telepath_server::ResourceRegistry,
+) -> Result<usize, DispatchError> {
     let val: u32 = 0xDEAD_BEEF;
     let written = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
     Ok(written.len())

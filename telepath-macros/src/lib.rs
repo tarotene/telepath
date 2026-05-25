@@ -5,7 +5,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type};
+use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type, TypeReference};
 
 /// Marks a function as a Telepath RPC command.
 ///
@@ -105,9 +105,21 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
 
     // --- Parse arguments ---
 
-    let mut arg_idents = Vec::new();
-    let mut arg_types: Vec<Box<Type>> = Vec::new();
-    let mut arg_type_strs = Vec::new();
+    // Wire arguments: deserialized from the postcard request payload.
+    let mut wire_idents = Vec::new();
+    let mut wire_types: Vec<Box<Type>> = Vec::new();
+    let mut wire_type_strs = Vec::new();
+
+    // Resource arguments: injected from the ResourceRegistry.
+    struct ResourceArg {
+        ident: syn::Ident,
+        inner_ty: Box<Type>,
+        is_mut: bool,
+    }
+    let mut resource_args: Vec<ResourceArg> = Vec::new();
+
+    // All argument idents in declaration order, for calling the original function.
+    let mut all_arg_idents: Vec<syn::Ident> = Vec::new();
 
     for fn_arg in &func.sig.inputs {
         match fn_arg {
@@ -127,16 +139,52 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                         ));
                     }
                 };
-                if let Type::Reference(r) = pat_type.ty.as_ref() {
-                    return Err(syn::Error::new_spanned(
-                        r,
-                        "#[command] does not support reference arguments",
-                    ));
+
+                let is_resource = pat_type.attrs.iter().any(|a| a.path().is_ident("resource"));
+
+                if is_resource {
+                    let Type::Reference(TypeReference {
+                        elem, mutability, ..
+                    }) = pat_type.ty.as_ref()
+                    else {
+                        return Err(syn::Error::new_spanned(
+                            &pat_type.ty,
+                            "#[resource] arguments must be &T or &mut T",
+                        ));
+                    };
+
+                    let inner_str = quote! { #elem }.to_string();
+                    for existing in &resource_args {
+                        let existing_ty = &existing.inner_ty;
+                        let existing_str = quote! { #existing_ty }.to_string();
+                        if existing_str == inner_str {
+                            return Err(syn::Error::new_spanned(
+                                &pat_type.ty,
+                                "duplicate #[resource] type; each resource type may appear at most once",
+                            ));
+                        }
+                    }
+
+                    resource_args.push(ResourceArg {
+                        ident: ident.clone(),
+                        inner_ty: elem.clone(),
+                        is_mut: mutability.is_some(),
+                    });
+                    all_arg_idents.push(ident);
+                } else {
+                    if let Type::Reference(r) = pat_type.ty.as_ref() {
+                        return Err(syn::Error::new_spanned(
+                            r,
+                            "#[command] does not support reference arguments \
+                             (use #[resource] for injected references)",
+                        ));
+                    }
+                    let ty = &*pat_type.ty;
+                    wire_type_strs.push(quote! { #ty }.to_string());
+                    wire_idents.push(ident.clone());
+                    wire_types.push(pat_type.ty.clone());
+                    all_arg_idents.push(ident);
                 }
-                let ty = &*pat_type.ty;
-                arg_type_strs.push(quote! { #ty }.to_string());
-                arg_idents.push(ident);
-                arg_types.push(pat_type.ty.clone());
             }
         }
     }
@@ -157,24 +205,24 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
     };
 
     // --- Build arg_names_str ---
-    // Comma-joined argument names for runtime introspection (e.g. "a,b" for fn foo(a, b)).
-    // Empty for zero-argument commands. Carried in CommandMetadata and forwarded via CDP.
-    let arg_names_str: String = arg_idents
+    // Comma-joined wire argument names for runtime introspection (e.g. "a,b").
+    // Resource arguments are excluded — they are server-side only.
+    let arg_names_str: String = wire_idents
         .iter()
         .map(|id| id.to_string())
         .collect::<Vec<_>>()
         .join(",");
 
     // --- Build args_type_str ---
-    // Canonical tuple format matching Rust syntax: "()" for 0-arg, "(T,)" for 1-arg,
-    // "(T1, T2)" for 2-arg. Must match the tuple type used for postcard deserialization.
+    // Canonical tuple format of wire arguments matching Rust syntax: "()" for 0-arg,
+    // "(T,)" for 1-arg, "(T1, T2)" for 2-arg. Resource arguments are excluded.
 
-    let args_type_str = if arg_type_strs.is_empty() {
+    let args_type_str = if wire_type_strs.is_empty() {
         "()".to_string()
-    } else if arg_type_strs.len() == 1 {
-        format!("({},)", arg_type_strs[0])
+    } else if wire_type_strs.len() == 1 {
+        format!("({},)", wire_type_strs[0])
     } else {
-        format!("({})", arg_type_strs.join(", "))
+        format!("({})", wire_type_strs.join(", "))
     };
 
     // --- Generated identifiers ---
@@ -186,14 +234,15 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
     let reg_ident = format_ident!("__TELEPATH_REG_{}", fn_name_str.to_uppercase());
 
     // --- Compute args tuple type and ret type tokens for schema writers ---
+    // Only wire arguments participate in schemas and CmdID derivation.
 
-    let args_schema_type = if arg_types.is_empty() {
+    let args_schema_type = if wire_types.is_empty() {
         quote! { () }
-    } else if arg_types.len() == 1 {
-        let t = &*arg_types[0];
+    } else if wire_types.len() == 1 {
+        let t = &*wire_types[0];
         quote! { (#t,) }
     } else {
-        quote! { (#(#arg_types),*) }
+        quote! { (#(#wire_types),*) }
     };
 
     let ret_schema_type = match &func.sig.output {
@@ -203,60 +252,97 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
 
     // --- Build shim body ---
 
-    let shim_body = if arg_idents.is_empty() {
+    // Wire-arg deserialization
+    let wire_deser = if wire_idents.is_empty() {
         quote! {
             if !input.is_empty() {
                 return ::core::result::Result::Err(
                     ::telepath_server::DispatchError::DeserializeError
                 );
             }
-            let __ret = #fn_ident();
-            match ::postcard::to_slice(&__ret, output) {
-                Ok(s) => ::core::result::Result::Ok(s.len()),
-                Err(_) => ::core::result::Result::Err(
-                    ::telepath_server::DispatchError::SerializeError
-                ),
-            }
         }
     } else {
-        // Tuple type for deserialization: (T,) for 1-element, (T1, T2) for multi.
-        let args_tuple_type = if arg_types.len() == 1 {
-            let t = &*arg_types[0];
+        let wire_tuple_type = if wire_types.len() == 1 {
+            let t = &*wire_types[0];
             quote! { (#t,) }
         } else {
-            quote! { (#(#arg_types),*) }
+            quote! { (#(#wire_types),*) }
         };
-        // Destructuring pattern mirroring the tuple type.
-        let destructure_pat = if arg_idents.len() == 1 {
-            let id = &arg_idents[0];
+        let wire_pat = if wire_idents.len() == 1 {
+            let id = &wire_idents[0];
             quote! { (#id,) }
         } else {
-            quote! { (#(#arg_idents),*) }
+            quote! { (#(#wire_idents),*) }
         };
         quote! {
-            let #destructure_pat: #args_tuple_type = match ::postcard::from_bytes(input) {
+            let #wire_pat: #wire_tuple_type = match ::postcard::from_bytes(input) {
                 Ok(v) => v,
                 Err(_) => return ::core::result::Result::Err(
                     ::telepath_server::DispatchError::DeserializeError
                 ),
             };
-            let __ret = #fn_ident(#(#arg_idents),*);
-            match ::postcard::to_slice(&__ret, output) {
-                Ok(s) => ::core::result::Result::Ok(s.len()),
-                Err(_) => ::core::result::Result::Err(
-                    ::telepath_server::DispatchError::SerializeError
-                ),
-            }
         }
     };
 
+    // Resource lookups
+    let resource_lookups: Vec<_> = resource_args
+        .iter()
+        .map(|ra| {
+            let ident = &ra.ident;
+            let inner_ty = &ra.inner_ty;
+            if ra.is_mut {
+                quote! {
+                    let #ident: &mut #inner_ty = unsafe {
+                        &mut *__resources.get_ptr::<#inner_ty>()
+                            .ok_or(::telepath_server::DispatchError::ResourceUnavailable)?
+                    };
+                }
+            } else {
+                quote! {
+                    let #ident: &#inner_ty = unsafe {
+                        &*__resources.get_ptr::<#inner_ty>()
+                            .ok_or(::telepath_server::DispatchError::ResourceUnavailable)?
+                    };
+                }
+            }
+        })
+        .collect();
+
+    // Call arguments in declaration order
+    let call_args: Vec<_> = all_arg_idents
+        .iter()
+        .map(|ident| quote! { #ident })
+        .collect();
+
+    let shim_body = quote! {
+        #wire_deser
+        #(#resource_lookups)*
+        let __ret = #fn_ident(#(#call_args),*);
+        match ::postcard::to_slice(&__ret, output) {
+            Ok(s) => ::core::result::Result::Ok(s.len()),
+            Err(_) => ::core::result::Result::Err(
+                ::telepath_server::DispatchError::SerializeError
+            ),
+        }
+    };
+
+    // Strip #[resource] attributes from the original function so that
+    // it compiles as a normal function with reference parameters.
+    let mut clean_func = func.clone();
+    for fn_arg in &mut clean_func.sig.inputs {
+        if let FnArg::Typed(pat_type) = fn_arg {
+            pat_type.attrs.retain(|a| !a.path().is_ident("resource"));
+        }
+    }
+
     Ok(quote! {
-        #func
+        #clean_func
 
         #[allow(non_snake_case)]
         fn #shim_ident(
             input: &[u8],
             output: &mut [u8],
+            __resources: &::telepath_server::ResourceRegistry,
         ) -> ::core::result::Result<usize, ::telepath_server::DispatchError> {
             #shim_body
         }
