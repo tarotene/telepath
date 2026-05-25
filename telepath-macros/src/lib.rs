@@ -5,7 +5,15 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type, TypeReference};
+use telepath_wire::cmd_id::derive_cmd_id as compute_cmd_id;
+
+fn seen_cmd_ids() -> &'static Mutex<HashMap<u16, String>> {
+    static SEEN: OnceLock<Mutex<HashMap<u16, String>>> = OnceLock::new();
+    SEEN.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 /// Marks a function as a Telepath RPC command.
 ///
@@ -229,6 +237,34 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         format!("({})", wire_type_strs.join(", "))
     };
 
+    // --- Duplicate cmd_id detection ---
+    //
+    // Compute the cmd_id at macro-expansion time so we can:
+    // 1. Check for same-crate collisions via an in-process registry → compile_error!
+    // 2. Emit a link-time guard symbol (export_name keyed on the hex id) that causes
+    //    a "multiple definition" linker error when two commands from different crates
+    //    happen to share the same id in the final binary.
+
+    let cmd_id_value = compute_cmd_id(&fn_name_str, &args_type_str, &ret_type_str);
+
+    {
+        let mut seen = seen_cmd_ids().lock().unwrap();
+        if let Some(existing) = seen.get(&cmd_id_value) {
+            return Err(syn::Error::new_spanned(
+                fn_ident,
+                format!(
+                    "#[command] cmd_id collision: `{}` and `{}` both map to 0x{:04X}. \
+                     Rename one of the commands to avoid the collision.",
+                    fn_name_str, existing, cmd_id_value
+                ),
+            ));
+        }
+        seen.insert(cmd_id_value, fn_name_str.clone());
+    }
+
+    let collision_export = format!("__telepath_cmd_id_{:04X}", cmd_id_value);
+    let guard_ident = format_ident!("__TELEPATH_CMDID_GUARD_{}", fn_name_str.to_uppercase());
+
     // --- Generated identifiers ---
 
     let shim_ident = format_ident!("__telepath_shim_{}", fn_name_str);
@@ -390,5 +426,82 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         #[linkme(crate = ::telepath_server::__linkme)]
         static #reg_ident: ::telepath_server::CommandMetadata = #static_ident;
 
+        // Link-time duplicate cmd_id guard.
+        //
+        // If two #[command] functions in the same binary (possibly from different
+        // crates) share the same cmd_id, the linker will emit a "multiple
+        // definition" error for `__telepath_cmd_id_XXXX`, stopping the build
+        // before the firmware is ever flashed.
+        //
+        // The in-process check above already catches same-crate collisions as a
+        // nicer compile_error!; this symbol is the defense-in-depth for
+        // incremental builds and cross-crate collisions.
+        #[doc(hidden)]
+        #[allow(non_upper_case_globals, dead_code)]
+        #[used]
+        #[export_name = #collision_export]
+        pub static #guard_ident: u8 = 0;
+
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Serializes all tests that touch the global seen_cmd_ids() registry.
+    static TEST_GUARD: Mutex<()> = Mutex::new(());
+
+    fn parse_fn(src: &str) -> ItemFn {
+        syn::parse_str(src).unwrap()
+    }
+
+    #[test]
+    fn same_crate_collision_is_rejected() {
+        let _g = TEST_GUARD.lock().unwrap();
+        seen_cmd_ids().lock().unwrap().clear();
+        // cmd_446() -> u32 and cmd_470() -> u32 both map to 0x43AE (verified by brute force).
+        assert!(expand_command(parse_fn("fn cmd_446() -> u32 { 0 }")).is_ok());
+        let err = expand_command(parse_fn("fn cmd_470() -> u32 { 0 }"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cmd_id collision"),
+            "expected collision error, got: {err}"
+        );
+        assert!(
+            err.contains("0x43AE"),
+            "expected hex id 0x43AE in error, got: {err}"
+        );
+        assert!(
+            err.contains("cmd_446") && err.contains("cmd_470"),
+            "expected both command names in error, got: {err}"
+        );
+        seen_cmd_ids().lock().unwrap().clear();
+    }
+
+    #[test]
+    fn guard_symbol_has_correct_export_name() {
+        let _g = TEST_GUARD.lock().unwrap();
+        seen_cmd_ids().lock().unwrap().clear();
+        let ts = expand_command(parse_fn("fn cmd_446() -> u32 { 0 }"))
+            .unwrap()
+            .to_string();
+        // Guard static export_name encodes the cmd_id as uppercase hex.
+        assert!(
+            ts.contains("__telepath_cmd_id_43AE"),
+            "guard symbol export_name not found in generated code: {ts}"
+        );
+        seen_cmd_ids().lock().unwrap().clear();
+    }
+
+    #[test]
+    fn distinct_commands_do_not_collide() {
+        let _g = TEST_GUARD.lock().unwrap();
+        seen_cmd_ids().lock().unwrap().clear();
+        assert!(expand_command(parse_fn("fn ping() -> u32 { 0 }")).is_ok());
+        assert!(expand_command(parse_fn("fn echo(x: u32) -> u32 { x }")).is_ok());
+        seen_cmd_ids().lock().unwrap().clear();
+    }
 }

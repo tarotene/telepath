@@ -92,7 +92,7 @@ bytes (`0xFF`, `0xFE`, …) until the result is non-zero — guaranteeing that
 
 Keep one device's command count **≤ 64** for a comfortable collision margin.
 The reserved `0x0000` ID is avoided by rehashing the preimage with a `0xFF` salt byte when the raw hash equals `0x0000`; the discovery ID is never emitted by user commands.
-Cross-command duplicate ID detection is not yet implemented — see [#3](https://github.com/tarotene/telepath/issues/3).
+Cross-command duplicate ID detection is enforced at build time: two `#[command]` functions in the same crate that hash to the same ID produce a `compile_error!`, while cross-crate collisions are caught as a linker "multiple definition" error before the firmware is flashed.
 
 ### Usage
 
