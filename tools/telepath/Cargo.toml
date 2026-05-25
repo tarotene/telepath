@@ -1,20 +1,22 @@
 [package]
-name = "telepath-mcp-server"
+name = "telepath"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "MCP server that exposes Telepath commands as MCP tools (workspace-excluded)"
+description = "Unified CLI for Telepath: interactive shell and MCP server"
 
 [[bin]]
-name = "telepath-mcp-server"
+name = "telepath"
 path = "src/main.rs"
 
 [lib]
-name = "telepath_mcp_server"
+name = "telepath"
 path = "src/lib.rs"
 
 [features]
-default = ["rtt"]
+default = ["shell", "mcp", "rtt"]
+shell = ["dep:rustyline"]
+mcp = ["dep:rmcp", "dep:tokio", "dep:tracing", "dep:tracing-subscriber"]
 rtt = ["dep:probe-rs", "telepath-client/rtt"]
 serial = ["telepath-client/serial"]
 
@@ -24,18 +26,24 @@ telepath-wire   = { path = "../../telepath-wire" }
 postcard        = { version = "1", features = ["alloc"] }
 postcard-schema = { version = "0.2", features = ["use-std", "heapless-v0_8"] }
 heapless        = { version = "0.8", default-features = false, features = ["serde"] }
-rmcp            = { version = "1", features = ["server", "transport-io", "macros"] }
-tokio           = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"] }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 anyhow          = "1"
 clap            = { version = "4", features = ["derive", "env"] }
 thiserror       = "1"
-tracing         = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-# probe-rs 0.31 is the latest stable release (2026-01-17).
-# Pin to this minor to avoid unexpected API breaks.
+
+# Optional: shell
+rustyline = { version = "15", optional = true }
+
+# Optional: mcp
+rmcp               = { version = "1", features = ["server", "transport-io", "macros"], optional = true }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"], optional = true }
+tracing            = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+# Optional: rtt
 probe-rs = { version = "0.31", optional = true }
 
 [dev-dependencies]
 telepath-server = { path = "../../telepath-server" }
+tokio           = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }

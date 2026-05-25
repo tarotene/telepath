@@ -3,13 +3,9 @@ mod helpers;
 use heapless::Vec as HVec;
 use helpers::{make_pair, spawn_fw};
 use serde_json::json;
+use telepath::bridge;
 use telepath_client::TelepathClient;
-use telepath_mcp_server::bridge;
 use telepath_server::{command, TelepathServer};
-
-// ---------------------------------------------------------------------------
-// Stub CPU-only commands — same signatures as loopback-demo and nrf52840-ping.
-// ---------------------------------------------------------------------------
 
 #[command]
 fn add(a: i32, b: i32) -> i32 {
@@ -49,17 +45,8 @@ fn run_fw(fw_side: helpers::FwSide, running: std::sync::Arc<std::sync::atomic::A
     }
 }
 
-// ---------------------------------------------------------------------------
-// Discovery: all three CPU commands appear in the registry
-// ---------------------------------------------------------------------------
-//
-// Note: invoke_* tests below use bridge::invoke with a positional JSON array,
-// which is the low-level interface.  The named-argument mapping exercised by
-// TelepathMcpServer::call_tool() is tested in named_args_e2e.rs.
-// ---------------------------------------------------------------------------
-
-#[tokio::test(flavor = "multi_thread")]
-async fn discover_includes_add_crc32_echo() {
+#[test]
+fn discover_includes_add_crc32_echo() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -80,8 +67,8 @@ async fn discover_includes_add_crc32_echo() {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn discover_populates_arg_names_for_add() {
+#[test]
+fn discover_populates_arg_names_for_add() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -102,10 +89,8 @@ async fn discover_populates_arg_names_for_add() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn discover_populates_arg_names_for_single_arg_command() {
-    // crc32 and echo are 1-arg; add is 2-arg.
-    // Use crc32 (single arg "payload") to confirm single-arg extraction.
+#[test]
+fn discover_populates_arg_names_for_single_arg_command() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -126,12 +111,8 @@ async fn discover_populates_arg_names_for_single_arg_command() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// add: invoke(2, 3) → 5
-// ---------------------------------------------------------------------------
-
-#[tokio::test(flavor = "multi_thread")]
-async fn invoke_add_returns_sum() {
+#[test]
+fn invoke_add_returns_sum() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -155,19 +136,13 @@ async fn invoke_add_returns_sum() {
         &ret_schema,
         &json!([2, 3]),
     )
-    .await
     .expect("invoke add");
 
     assert_eq!(result, json!(5i32));
 }
 
-// ---------------------------------------------------------------------------
-// crc32: invoke over 128 zero bytes → 0xC2A8FA9D
-// (CRC-32/ISO-HDLC verified with Python: zlib.crc32(bytes(128)) & 0xFFFFFFFF)
-// ---------------------------------------------------------------------------
-
-#[tokio::test(flavor = "multi_thread")]
-async fn invoke_crc32_zero_payload() {
+#[test]
+fn invoke_crc32_zero_payload() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -192,18 +167,13 @@ async fn invoke_crc32_zero_payload() {
         &ret_schema,
         &json!([zeros]),
     )
-    .await
     .expect("invoke crc32");
 
     assert_eq!(result, json!(0xC2A8_FA9Du32), "crc32 over 128 zeros");
 }
 
-// ---------------------------------------------------------------------------
-// echo: payload is returned unchanged
-// ---------------------------------------------------------------------------
-
-#[tokio::test(flavor = "multi_thread")]
-async fn invoke_echo_round_trip() {
+#[test]
+fn invoke_echo_round_trip() {
     let (fw_side, host_side) = make_pair();
     let _guard = spawn_fw(fw_side, run_fw);
 
@@ -228,7 +198,6 @@ async fn invoke_echo_round_trip() {
         &ret_schema,
         &json!([seq]),
     )
-    .await
     .expect("invoke echo");
 
     let expected: Vec<serde_json::Value> = (0u8..128).map(|b| json!(b)).collect();

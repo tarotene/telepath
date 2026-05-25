@@ -3,7 +3,7 @@ use postcard_schema::schema::owned::{
     OwnedNamedVariant,
 };
 use serde_json::{json, Value};
-use telepath_mcp_server::schema_to_json::named_type_to_json_schema;
+use telepath::codec::schema_to_json::named_type_to_json_schema;
 
 fn wrap(name: &str, ty: DMT) -> OwnedNamedType {
     OwnedNamedType {
