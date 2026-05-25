@@ -301,6 +301,14 @@ A bump to the MSRV is treated as a `MINOR` change under SemVer for pre-1.0
 releases and follows the commit convention `feat(toolchain)!: bump MSRV to 1.XX`
 (see AGENTS.md § Toolchain for the full policy).
 
+## Dependency updates
+
+[Renovate](https://docs.renovatebot.com/) opens dependency-bump PRs every Monday morning (JST).
+All Renovate PRs require human review; auto-merge is disabled.
+Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, …) carry the
+`needs-smoke-test` label and require an on-device `just firmware-ping` run on
+nRF52840-DK before merging.
+
 ## License
 
 Licensed under either of
