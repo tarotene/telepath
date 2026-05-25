@@ -35,6 +35,8 @@ rtt-target = "0.6"
 
 panic-halt = "0.2"
 
+[workspace]
+
 [profile.release]
 opt-level = "s"
 lto = true
