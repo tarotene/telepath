@@ -10,10 +10,16 @@ struct Entry {
     offset: usize,
 }
 
+// Guarantees the storage buffer is at least 8-byte aligned so that casting
+// `base.add(offset)` to `*mut T` is valid for any T with align_of::<T>() <= 8,
+// which covers all primitive and peripheral-handle types used in embedded targets.
+#[repr(align(8))]
+struct AlignedStorage([MaybeUninit<u8>; STORAGE_SIZE]);
+
 pub struct ResourceRegistry {
     entries: [MaybeUninit<Entry>; MAX_RESOURCES],
     count: usize,
-    storage: UnsafeCell<[MaybeUninit<u8>; STORAGE_SIZE]>,
+    storage: UnsafeCell<AlignedStorage>,
     used: usize,
 }
 
@@ -28,12 +34,42 @@ impl ResourceRegistry {
         Self {
             entries: [const { MaybeUninit::uninit() }; MAX_RESOURCES],
             count: 0,
-            storage: UnsafeCell::new([const { MaybeUninit::uninit() }; STORAGE_SIZE]),
+            storage: UnsafeCell::new(AlignedStorage(
+                [const { MaybeUninit::uninit() }; STORAGE_SIZE],
+            )),
             used: 0,
         }
     }
 
+    /// Move `val` into the registry, keyed by its `TypeId`.
+    ///
+    /// # Resource lifetime
+    ///
+    /// Inserted resources are **NOT dropped**: `ResourceRegistry` has no `Drop`
+    /// impl. This is intentional for the embedded use-case where resources are
+    /// `'static` peripheral handles (e.g. `Twim`, `Saadc`) whose lifetime equals
+    /// the device lifetime. Dropping them via `ResourceRegistry` is outside scope
+    /// for the current MVP; per-entry `Drop` support is tracked in a dedicated
+    /// follow-up issue.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a resource of the same `TypeId` has already been inserted, or if
+    /// the registry is full (more than `MAX_RESOURCES` entries or `STORAGE_SIZE`
+    /// bytes used).
     pub fn insert<T: 'static>(&mut self, val: T) {
+        // Duplicate TypeId check — fail-fast so silent shadowing is impossible.
+        // This also acts as a runtime backstop for compile-time dedup checks in
+        // the proc-macro that may miss type aliases or differently-spelled paths.
+        let id = TypeId::of::<T>();
+        for i in 0..self.count {
+            // SAFETY: entries[0..count] are initialised by insert().
+            let entry = unsafe { self.entries[i].assume_init_ref() };
+            if entry.type_id == id {
+                panic!("duplicate resource type: each resource type may appear at most once");
+            }
+        }
+
         let align = mem::align_of::<T>();
         let size = mem::size_of::<T>();
         let offset = (self.used + align - 1) & !(align - 1);
@@ -51,9 +87,11 @@ impl ResourceRegistry {
             MAX_RESOURCES,
         );
 
-        // SAFETY: offset is within the storage buffer and properly aligned for T.
+        // SAFETY: `offset` is within the buffer and `offset % align_of::<T>() == 0`.
+        // AlignedStorage guarantees the base pointer is 8-byte aligned; T's alignment
+        // is at most 8 for all types expected in embedded/no_std use (u64, *const _).
         unsafe {
-            let base = (*self.storage.get()).as_mut_ptr();
+            let base = (*self.storage.get()).0.as_mut_ptr();
             let dst = base.add(offset) as *mut T;
             core::ptr::write(dst, val);
         }
@@ -72,7 +110,7 @@ impl ResourceRegistry {
     ///
     /// The returned pointer is valid for the lifetime of the registry. Creating
     /// a `&mut T` from it is safe provided:
-    /// - Each concrete type is registered at most once (enforced by convention).
+    /// - Each concrete type is registered at most once (enforced by `insert`).
     /// - No two live `&mut` references alias the same entry.
     /// - Dispatch is single-threaded (one shim runs at a time).
     pub fn get_ptr<T: 'static>(&self) -> Option<*mut T> {
@@ -84,7 +122,7 @@ impl ResourceRegistry {
                 // SAFETY: offset was recorded by insert(); UnsafeCell allows
                 // interior mutation through a shared reference.
                 let ptr = unsafe {
-                    let base = (*self.storage.get()).as_mut_ptr();
+                    let base = (*self.storage.get()).0.as_mut_ptr();
                     base.add(entry.offset) as *mut T
                 };
                 return Some(ptr);
@@ -93,12 +131,6 @@ impl ResourceRegistry {
         None
     }
 }
-
-// SAFETY: ResourceRegistry protects its interior UnsafeCell via the
-// single-threaded dispatch contract documented on get_ptr. On embedded
-// targets the server runs in one task; in tests each server is local to
-// a single test function.
-unsafe impl Sync for ResourceRegistry {}
 
 #[cfg(test)]
 mod tests {
@@ -153,7 +185,6 @@ mod tests {
     #[should_panic(expected = "too many resources")]
     fn panics_on_overflow() {
         let mut reg = ResourceRegistry::new();
-        // Register 8 different types to hit MAX_RESOURCES
         reg.insert(0u8);
         reg.insert(0u16);
         reg.insert(0u32);
@@ -162,7 +193,14 @@ mod tests {
         reg.insert(0i16);
         reg.insert(0i32);
         reg.insert(0i64);
-        // 9th should panic
-        reg.insert(0f32);
+        reg.insert(0f32); // 9th — should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate")]
+    fn panics_on_duplicate_typeid() {
+        let mut reg = ResourceRegistry::new();
+        reg.insert(0u32);
+        reg.insert(1u32); // same TypeId — should panic
     }
 }
