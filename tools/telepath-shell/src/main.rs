@@ -12,7 +12,9 @@
 compile_error!("telepath-shell: enable exactly one of `rtt`/`serial`; use --no-default-features --features serial for serial-only.");
 
 #[cfg(not(any(feature = "rtt", feature = "serial")))]
-compile_error!("telepath-shell: at least one transport feature must be enabled (`rtt` or `serial`).");
+compile_error!(
+    "telepath-shell: at least one transport feature must be enabled (`rtt` or `serial`)."
+);
 
 mod json_to_postcard;
 mod postcard_to_json;
@@ -623,7 +625,9 @@ fn encode_args(
 
     let json_val: serde_json::Value = if args_str.is_empty() {
         bail!(
-            "'{cmd_name}' expects arguments ({}).  Usage: {cmd_name} <arg1> <arg2> ...",
+            "'{cmd_name}' expects arguments ({}). \
+             Each positional arg is parsed as JSON, e.g.: {cmd_name} <arg1> <arg2> ...  \
+             (JSON array form also supported: {cmd_name} [<arg1>, <arg2>, ...])",
             args_schema.name
         );
     } else {
@@ -635,9 +639,13 @@ fn encode_args(
                     .map(serde_json::from_str)
                     .collect();
                 match tokens {
-                    Ok(vals) if vals.len() == 1 => vals.into_iter().next().unwrap(),
                     Ok(vals) => serde_json::Value::Array(vals),
-                    Err(e) => bail!("Invalid arguments for '{cmd_name}': {e}"),
+                    Err(e) => bail!(
+                        "Invalid arguments for '{cmd_name}': {e}. \
+                         Note: positional args are split on whitespace; \
+                         for JSON strings or objects containing spaces, use the array form: \
+                         {cmd_name} [<arg1>, <arg2>, ...]"
+                    ),
                 }
             }
         }
@@ -705,5 +713,35 @@ mod tests {
         let positional = encode_args(&schema, "-2 3", "add").unwrap();
         let array = encode_args(&schema, "[-2, 3]", "add").unwrap();
         assert_eq!(positional, array);
+    }
+
+    #[test]
+    fn encode_args_empty_string_error_mentions_json_array_form() {
+        let schema = wrap("args", DMT::Tuple(vec![wrap("a", DMT::U8)]));
+        let err = encode_args(&schema, "", "cmd").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("JSON"),
+            "error should mention JSON parsing: {msg}"
+        );
+        assert!(
+            msg.contains("[<arg1>"),
+            "error should hint at array form: {msg}"
+        );
+    }
+
+    #[test]
+    fn encode_args_invalid_token_error_mentions_whitespace_limitation() {
+        let schema = wrap("args", DMT::Tuple(vec![wrap("a", DMT::U8)]));
+        let err = encode_args(&schema, "foo bar", "cmd").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("whitespace"),
+            "error should mention whitespace tokenisation: {msg}"
+        );
+        assert!(
+            msg.contains("array form"),
+            "error should hint at array form fallback: {msg}"
+        );
     }
 }
