@@ -51,13 +51,28 @@ Both methods are non-blocking and return the number of bytes transferred.
 pub struct CommandMetadata {
     pub name: &'static str,
     pub id: u16,
-    pub invoke: ShimFn,   // fn(&[u8], &mut [u8]) -> Result<usize, DispatchError>
+    pub invoke: ShimFn,         // fn(&[u8], &mut [u8], &ResourceRegistry) -> Result<usize, DispatchError>
+    pub args_schema: SchemaFn,  // fn(&mut [u8]) -> Result<usize, ()>
+    pub ret_schema: SchemaFn,   // fn(&mut [u8]) -> Result<usize, ()>
+    pub arg_names: &'static str, // comma-separated, e.g. "a,b"
 }
 ```
+
+`args_schema` / `ret_schema` write postcard-encoded `NamedType` bytes; `arg_names`
+exposes the original parameter identifiers so the discovery protocol can surface
+human-readable signatures.
 
 Register commands by passing a `&'static [CommandMetadata]` to `new()`.
 Use `telepath_server::commands()` (linkme-collected at link time) to
 pass all `#[command]`-annotated functions automatically.
+
+### `ResourceRegistry`
+
+Type-keyed container for `#[resource]`-injected values. Re-exported as
+`telepath_server::ResourceRegistry`. Each resource type may appear at most
+once; registering a second value of the same type panics at runtime
+(fail-fast to prevent silent shadowing). Resources are added via the
+`TelepathServer::resource(value)` builder method — see Usage below.
 
 ## Usage
 
@@ -67,15 +82,15 @@ use telepath_server::{command, TelepathServer};
 #[command]
 fn ping() -> u32 { 0xDEAD_BEEF }
 
-// Peripheral state can be injected type-safely with #[resource].
-// Resource args are not serialized; they are provided by the server's ResourceRegistry.
+// Resource args are injected from the server's ResourceRegistry, not over the wire.
 #[command]
 fn set_led(#[resource] led: &mut MyLed, on: bool) -> bool { led.set(on) }
 
 let mut server = TelepathServer::<MyTransport, 512>::new(
     transport,
     telepath_server::commands(),
-);
+)
+.resource(MyLed::new(pin));  // register each #[resource] type before polling
 loop {
     server.poll();
 }
