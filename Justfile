@@ -69,7 +69,6 @@ check-all: build firmware-build cli-build
 host-pty-smoke:
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build -p host-pty-server
     cargo build --manifest-path tools/telepath/Cargo.toml --no-default-features --features shell,serial
     cargo run -p host-pty-server > /tmp/host-pty-server.out &
     SERVER_PID=$!
