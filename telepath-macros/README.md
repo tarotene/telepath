@@ -11,6 +11,7 @@ appear in device firmware at runtime.
 ```rust
 use telepath_server::command;
 
+// Plain command — all args are wire args
 #[command]
 fn ping() -> u32 {
     0xDEAD_BEEF
@@ -19,6 +20,12 @@ fn ping() -> u32 {
 #[command]
 fn add(a: i32, b: i32) -> i32 {
     a + b
+}
+
+// Resource injection — peripheral state passed from ResourceRegistry, not over the wire
+#[command]
+fn set_led(#[resource] led: &mut MyLed, on: bool) -> bool {
+    led.set(on)
 }
 ```
 
@@ -45,22 +52,26 @@ The original function body is preserved unchanged and remains directly callable.
 
 - Free functions only (no `self` receiver)
 - Any number of positional arguments with simple identifier patterns
-- Argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- Wire argument types: any `T: Serialize + DeserializeOwned + postcard_schema::Schema` (owned, no references)
+- `#[resource]`-annotated arguments: `&T` or `&mut T` where `T: 'static` — injected from the server's `ResourceRegistry`, **not** deserialized from the wire
+- Wire and resource arguments may appear in any order
 - Return type: any `T: Serialize + postcard_schema::Schema` (owned, no references); `()` means "no payload"
 
 **Rejected at compile time:**
 
 - `async fn`, `unsafe fn`
 - Generic parameters or `where` clauses
-- `&T` / `&mut T` arguments or return types
+- `&T` / `&mut T` argument **without** the `#[resource]` attribute
+- `&T` / `&mut T` return type
 - Methods (`fn foo(&self, …)`)
 - Non-identifier argument patterns (e.g. tuple destructuring `(a, b): (i32, i32)`)
+- Duplicate `#[resource]` types (each resource type may appear at most once)
 
 ## Wire encoding
 
-- **Args:** serialized as a postcard tuple — `()` (zero args), `(T,)` (one arg), `(T1, T2, …)` (N args)
+- **Args:** only non-`#[resource]` arguments are serialized; resource arguments are server-side only. Serialized as a postcard tuple — `()` (zero wire args), `(T,)` (one wire arg), `(T1, T2, …)` (N wire args).
 - **Return value:** serialized standalone (no wrapper tuple)
-- **`cmd_id`:** derived deterministically from `(name, args_type_str, ret_type_str)` via FNV-1a 16-bit — renaming a function or changing a type signature is a **breaking wire change**
+- **`cmd_id`:** derived deterministically from `(name, args_type_str, ret_type_str)` using **wire args only** via FNV-1a 16-bit. Adding or removing a `#[resource]` argument does **not** change the wire `cmd_id`. Renaming a function or changing a wire argument type is a **breaking wire change**.
 - Reserved `cmd_id = 0x0000` is avoided by deterministic salt rehashing in `derive_cmd_id`; the discovery ID is never emitted by user commands
 
 ## Build

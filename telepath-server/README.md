@@ -9,11 +9,15 @@ registered command handlers, and sends COBS-framed postcard responses back.
 
 ## Architecture
 
-```
-Transport
-  └─► FrameAccumulator ─► cobs_decode ─► postcard::from_bytes ─► dispatch()
-                                                                       │
-Transport ◄── cobs_encode ◄── postcard::to_slice ◄──────────────── handler
+```mermaid
+flowchart LR
+    T[Transport] -->|bytes| FA[FrameAccumulator]
+    FA -->|COBS frame| CD[cobs_decode]
+    CD -->|raw bytes| PD["postcard::from_bytes"]
+    PD -->|typed args| D[dispatch]
+    D -->|result| PS["postcard::to_slice"]
+    PS -->|raw bytes| CE[cobs_encode]
+    CE -->|COBS frame| T
 ```
 
 ## Key API
@@ -62,6 +66,11 @@ use telepath_server::{command, TelepathServer};
 
 #[command]
 fn ping() -> u32 { 0xDEAD_BEEF }
+
+// Peripheral state can be injected type-safely with #[resource].
+// Resource args are not serialized; they are provided by the server's ResourceRegistry.
+#[command]
+fn set_led(#[resource] led: &mut MyLed, on: bool) -> bool { led.set(on) }
 
 let mut server = TelepathServer::<MyTransport, 512>::new(
     transport,
