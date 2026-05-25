@@ -49,7 +49,7 @@ jobs:
           components: clippy
 
       - name: Install system libudev (required by serialport on Linux)
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: libudev-dev pkg-config
           version: 1.0
@@ -71,7 +71,7 @@ jobs:
       - name: Smoke test host-pty-server
         run: just host-pty-smoke
 
-      - name: Test telepath tool (all feature combinations)
+      - name: Test telepath tool (default + mcp,serial)
         run: just mcp-test
 
   # -------------------------------------------------------------------------
