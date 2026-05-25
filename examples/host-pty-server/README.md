@@ -3,10 +3,10 @@
 Hardware-free regression server: full wire round-trip over a real PTY pair.
 
 Opens a PTY with `openpty(3)`, prints the slave device path, then runs a
-`TelepathServer` on the master side in a poll loop. A client (e.g.
-`telepath shell --transport serial`) connects to the slave end and speaks the
-full Telepath wire protocol — COBS framing + postcard serialization — over
-the PTY byte stream.
+`TelepathServer` on the master side in a poll loop. A client (e.g. `telepath shell --transport serial`, built with the `serial`
+feature — see Usage) connects to the slave end and speaks the full Telepath
+wire protocol — COBS framing + postcard serialization — over the PTY byte
+stream.
 
 ## Run
 

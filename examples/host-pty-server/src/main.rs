@@ -2,8 +2,9 @@
 //!
 //! Opens a PTY with `openpty(3)`, prints the slave device path to stdout so
 //! that a test harness or human operator can connect a `telepath shell
-//! --transport serial --port <path>` client, then runs `TelepathServer` on
-//! the master end in a blocking loop.
+//! --transport serial --port <path>` client (`telepath` must be built with the
+//! `serial` feature — see Usage below), then runs `TelepathServer` on the
+//! master end in a blocking loop.
 //!
 //! This is structurally identical to `examples/nrf52840-ping`: both are
 //! server-side deployments that expose the same registered `#[command]` set;
