@@ -64,7 +64,6 @@ jobs:
           components: clippy
           cache-key: host-stable
           install-libudev: 'true'
-          install-mold: 'true'
 
       - name: Clippy (workspace)
         if: steps.guard.outputs.run == 'true'

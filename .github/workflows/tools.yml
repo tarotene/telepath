@@ -65,7 +65,6 @@ jobs:
           cache-key: tools-telepath
           cache-workspaces: tools/telepath
           install-libudev: 'true'
-          install-mold: 'true'
 
       - name: Clippy (tools/telepath — all feature combos)
         if: steps.guard.outputs.run == 'true'
