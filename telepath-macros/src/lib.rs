@@ -13,9 +13,9 @@ use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type, TypeReference
 ///
 /// For every annotated function the macro emits five additional items:
 ///
-/// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError>`** —
-///    deserializes `input` via postcard, calls the original function, and serializes the result
-///    into `output`.
+/// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8], resources: &ResourceRegistry) -> Result<usize, DispatchError>`** —
+///    deserializes `input` via postcard, resolves `#[resource]`-annotated arguments from
+///    `resources`, calls the original function, and serializes the result into `output`.
 /// 2. **`fn __telepath_args_schema_<name>(out: &mut [u8]) -> Result<usize, ()>`** —
 ///    writes a postcard-encoded `postcard_schema::schema::NamedType` for the argument tuple
 ///    into `out` and returns the byte count.
@@ -153,6 +153,10 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
                         ));
                     };
 
+                    // Best-effort compile-time uniqueness check via token-string comparison.
+                    // Type aliases or differently-spelled paths for the same concrete type
+                    // may slip through; `ResourceRegistry::insert` panics at runtime as a
+                    // fallback in those cases.
                     let inner_str = quote! { #elem }.to_string();
                     for existing in &resource_args {
                         let existing_ty = &existing.inner_ty;
