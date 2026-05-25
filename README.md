@@ -292,6 +292,16 @@ cargo clippy --workspace -- -D warnings
 just ci
 ```
 
+## Supported Rust Version
+
+Telepath declares a Minimum Supported Rust Version (MSRV) of **1.88**.
+This applies to all workspace members and the excluded `tools/telepath` crate.
+The MSRV is verified in CI via the `msrv` job (`dtolnay/rust-toolchain@1.88.0`).
+
+A bump to the MSRV is treated as a `MINOR` change under SemVer for pre-1.0
+releases and follows the commit convention `feat(toolchain)!: bump MSRV to 1.XX`
+(see AGENTS.md § Toolchain for the full policy).
+
 ## License
 
 Licensed under either of

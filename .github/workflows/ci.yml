@@ -75,7 +75,41 @@ jobs:
         run: just mcp-test
 
   # -------------------------------------------------------------------------
-  # Job 3: firmware — cross-compile release build for nRF52840-DK
+  # Job 3: msrv — verify workspace and excluded tools build on declared MSRV
+  # -------------------------------------------------------------------------
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: "1.88.0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.88 toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: thumbv7em-none-eabi
+
+      - name: Install system libudev (required by serialport on Linux)
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: libudev-dev pkg-config
+          version: 1.0
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify MSRV builds (workspace + cli + firmware)
+        run: just check-all
+
+  # -------------------------------------------------------------------------
+  # Job 4: firmware — cross-compile release build for nRF52840-DK
   # -------------------------------------------------------------------------
   firmware:
     name: Firmware (cross-compile nRF52840-DK)

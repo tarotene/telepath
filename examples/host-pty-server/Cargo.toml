@@ -3,6 +3,7 @@ name = "host-pty-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Host-side Telepath server deployment over a PTY pair (parallel to nrf52840-ping)"
 
 [[bin]]

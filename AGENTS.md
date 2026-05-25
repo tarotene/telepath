@@ -209,8 +209,16 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 ## Toolchain
 
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
+- MSRV: **1.88** — declared via `rust-version = "1.88"` in `[workspace.package]`
+  and in each excluded crate (`tools/telepath`, `examples/nrf52840-ping`)
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
+
+### MSRV policy
+
+The MSRV is verified in CI (`msrv` job, `dtolnay/rust-toolchain@1.88.0`).
+Bumping the MSRV is a MINOR change for pre-1.0 releases and MUST use the
+commit convention `feat(toolchain)!: bump MSRV to 1.XX`.
 
 ## Git Hooks
 
