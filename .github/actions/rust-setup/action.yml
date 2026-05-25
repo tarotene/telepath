@@ -1,0 +1,55 @@
+name: 'Rust Setup'
+description: >
+  Install Rust toolchain, optional system libs (libudev) and mold linker,
+  just task runner, and configure Swatinem/rust-cache.
+  Used by host, tools, msrv, and firmware workflows.
+
+inputs:
+  toolchain:
+    description: 'Rust toolchain channel or version (e.g. stable, 1.88.0)'
+    default: 'stable'
+  targets:
+    description: 'Comma-separated additional rustup targets'
+    default: ''
+  components:
+    description: 'Comma-separated Rust components (e.g. clippy,rustfmt)'
+    default: ''
+  cache-key:
+    description: 'shared-key for Swatinem/rust-cache — must be unique per job'
+    required: true
+  cache-workspaces:
+    description: >
+      Workspace path(s) for Swatinem/rust-cache in "path[:target]" format.
+      Leave empty to auto-detect all Cargo.lock files in the repo.
+    default: ''
+  install-libudev:
+    description: 'Install libudev-dev and pkg-config (required by serialport crate on Linux)'
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        targets: ${{ inputs.targets }}
+        components: ${{ inputs.components }}
+
+    - name: Install libudev-dev (serialport)
+      if: inputs.install-libudev == 'true'
+      uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+      with:
+        packages: libudev-dev pkg-config
+        version: 1.0
+
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
+    - name: Cache Cargo artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        workspaces: ${{ inputs.cache-workspaces }}

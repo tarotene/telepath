@@ -1,0 +1,75 @@
+name: Fmt
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fmt:
+    name: Format check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Skip if no Rust source, manifest, or fmt-related config changed.
+      # The job always runs so the required status check is always reported.
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          # New branch or unavailable base: safe-by-default → run
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          # Empty diff (no changes / re-push): safe-by-default → run
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PATTERNS='^(.*\.rs$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|Justfile$|\.github/(workflows/fmt\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No fmt-relevant changes; skipping."
+          fi
+
+      - name: Install Rust stable toolchain
+        if: steps.guard.outputs.run == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install just
+        if: steps.guard.outputs.run == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Check formatting
+        if: steps.guard.outputs.run == 'true'
+        run: just fmt-check
