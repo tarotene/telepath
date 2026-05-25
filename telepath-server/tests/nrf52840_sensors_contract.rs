@@ -105,7 +105,8 @@ fn saadc_vdd_mv_cmd_id_deterministic() {
 #[test]
 fn shim_temp_read_roundtrip() {
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_TEMP_READ.invoke)(&[], &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_TEMP_READ.invoke)(&[], &mut out, &reg).unwrap();
     let val: i16 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 100);
 }
@@ -113,7 +114,8 @@ fn shim_temp_read_roundtrip() {
 #[test]
 fn shim_rng_u32_roundtrip() {
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_RNG_U32.invoke)(&[], &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_RNG_U32.invoke)(&[], &mut out, &reg).unwrap();
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0xCAFE_BABE);
 }
@@ -121,7 +123,8 @@ fn shim_rng_u32_roundtrip() {
 #[test]
 fn shim_ficr_uid_roundtrip() {
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_FICR_UID.invoke)(&[], &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_FICR_UID.invoke)(&[], &mut out, &reg).unwrap();
     let val: (u32, u32) = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, (0xAAAA_AAAA, 0x5555_5555));
 }
@@ -129,7 +132,8 @@ fn shim_ficr_uid_roundtrip() {
 #[test]
 fn shim_saadc_vdd_mv_roundtrip() {
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_SAADC_VDD_MV.invoke)(&[], &mut out).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_SAADC_VDD_MV.invoke)(&[], &mut out, &reg).unwrap();
     let val: u16 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 3300);
 }
@@ -142,7 +146,8 @@ fn shim_saadc_vdd_mv_roundtrip() {
 #[test]
 fn ficr_uid_postcard_byte_width() {
     let mut buf = [0u8; 16];
-    let n = (__TELEPATH_CMD_FICR_UID.invoke)(&[], &mut buf).unwrap();
+    let reg = telepath_server::ResourceRegistry::new();
+    let n = (__TELEPATH_CMD_FICR_UID.invoke)(&[], &mut buf, &reg).unwrap();
     let mut oracle_buf = [0u8; 16];
     let expected = postcard::to_slice(&(0xAAAA_AAAAu32, 0x5555_5555u32), &mut oracle_buf)
         .unwrap()

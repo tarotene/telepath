@@ -22,7 +22,6 @@ embassy-nrf = { version = "0.3", features = [
 nrf-pac = { version = "0.1", features = ["nrf52840"] }
 
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
-critical-section = "1"
 cortex-m-rt = "0.7"
 
 # RTT for both debug printing and Telepath transport.

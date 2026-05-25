@@ -497,7 +497,11 @@ mod tests {
         use telepath_server::{CommandMetadata, DispatchError, TelepathServer};
         use telepath_wire::framing::MAX_FRAME_SIZE;
 
-        fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+        fn ping_shim(
+            _input: &[u8],
+            output: &mut [u8],
+            _resources: &telepath_server::ResourceRegistry,
+        ) -> Result<usize, DispatchError> {
             let s = postcard::to_slice(&0xDEAD_BEEFu32, output)
                 .map_err(|_| DispatchError::SerializeError)?;
             Ok(s.len())
@@ -747,7 +751,11 @@ mod tests {
         use telepath_server::transport::Transport as FwTransport;
         use telepath_server::{CommandMetadata, DispatchError, TelepathServer};
 
-        fn ping_shim(_input: &[u8], output: &mut [u8]) -> Result<usize, DispatchError> {
+        fn ping_shim(
+            _input: &[u8],
+            output: &mut [u8],
+            _resources: &telepath_server::ResourceRegistry,
+        ) -> Result<usize, DispatchError> {
             let val: u32 = 0xDEAD_BEEF;
             let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
             Ok(s.len())
