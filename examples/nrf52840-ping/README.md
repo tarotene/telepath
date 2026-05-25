@@ -42,7 +42,7 @@ cargo run --release
 `cargo run` invokes `probe-rs download` via the runner configured in
 `.cargo/config.toml`. The firmware is written to flash, the chip resets,
 and the probe session is released immediately. The terminal returns to the
-shell prompt — the probe is free for `telepath-shell` to attach.
+shell prompt — the probe is free for `telepath shell` to attach.
 
 ## Commands
 
@@ -82,20 +82,20 @@ Channel 0 is connected to `rtt-target`'s print channel.  Approximately once
 per second the firmware emits `hb {n}` (incrementing counter) as a liveness
 indicator.  Channel 1 carries COBS-framed postcard-serialized Telepath frames.
 
-## Verify with telepath-shell
+## Verify with telepath shell
 
 Flash the firmware first (probe is released immediately after `cargo run --release` exits):
 
-```
+```bash
 cd examples/nrf52840-ping && cargo run --release
 ```
 
-Then launch the discovery-driven REPL.  `telepath-shell` calls the Command
+Then launch the discovery-driven REPL.  `telepath shell` calls the Command
 Discovery Protocol (CmdID `0x0000`) at startup and builds a schema-aware
 prompt from the registered commands — no hardcoded subcommands required.
 
-```
-telepath-shell
+```bash
+cd tools/telepath && cargo run -- shell
 ```
 
 **Regression — `ping`:**
@@ -107,18 +107,19 @@ ping -> 0xDEADBEEF
 
 **CPU-only commands — `add` / `crc32` / `echo`:**
 
-Commands with multiple arguments use JSON array syntax (`[arg1, arg2, ...]`).
-Commands whose argument is itself an array (e.g. `crc32`, `echo`) wrap it in an
-outer array: `[[byte0, byte1, ...]]`.
+Positional syntax is canonical (space-separated args). JSON-array syntax
+(`[arg1, arg2, ...]`) is also accepted for backwards compatibility. For
+commands whose single argument is a byte array (`crc32`, `echo`), pass the
+array as a JSON literal.
 
 ```
-telepath> add [2, 3]
+telepath> add 2 3
 add -> 5
-telepath> add [-1, 1]
+telepath> add -1 1
 add -> 0
-telepath> crc32 [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+telepath> crc32 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 crc32 -> 0xC2A8FA9D
-telepath> echo [[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127]]
+telepath> echo [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127]
 echo -> [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127]
 ```
 
@@ -127,20 +128,18 @@ verified independently with `python3 -c "import zlib; print(hex(zlib.crc32(bytes
 
 **LED set/get closed loop:**
 
-Commands with arguments use JSON array syntax (`[arg1, arg2, ...]`).
-
 ```
 telepath> led_pattern_get
 led_pattern_get -> 0x00
-telepath> led_pattern [10]
+telepath> led_pattern 10
 led_pattern -> 0x0A
 telepath> led_pattern_get
 led_pattern_get -> 0x0A
-telepath> led_set [1, true]
+telepath> led_set 1 true
 led_set -> true
 telepath> led_pattern_get
 led_pattern_get -> 0x0B
-telepath> led_pattern [0]
+telepath> led_pattern 0
 led_pattern -> 0x00
 telepath> led_pattern_get
 led_pattern_get -> 0x00
@@ -156,11 +155,6 @@ button_read -> 0x00
 (Hold a button, then call `button_read` again — the corresponding bit will be set.)
 
 **Chip ID — `ficr_uid`:**
-
-```
-telepath> ficr_uid
-ficr_uid -> [0x12345678, 0x9ABCDEF0]
-```
 
 The two `u32` values form a 64-bit unique ID.  They are factory-programmed and
 stable across reboots.  A different board will show different values.

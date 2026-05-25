@@ -1,6 +1,6 @@
-# MCP Integration — `tools/telepath-mcp-server`
+# MCP Integration — `telepath mcp` subcommand
 
-`telepath-mcp-server` exposes every `#[command]` function on a connected
+The `telepath mcp` subcommand (`tools/telepath`) exposes every `#[command]` function on a connected
 Telepath server as an MCP tool, with zero hand-written tool descriptors.
 
 ## Architecture
@@ -8,7 +8,7 @@ Telepath server as an MCP tool, with zero hand-written tool descriptors.
 ```mermaid
 flowchart TB
     MC[MCP Client<br/>AI agent]
-    subgraph Bridge["telepath-mcp-server bin"]
+    subgraph Bridge["telepath mcp"]
         SRV["server.rs<br/>rmcp::ServerHandler<br/>list_tools / call_tool<br/>list_resources / read_resource<br/>list_prompts / get_prompt"]
         BR["bridge.rs<br/>async invoke(): JSON ↔ postcard via call_raw"]
         S2J["schema_to_json.rs<br/>OwnedNamedType → JSON Schema (pure, sync)"]
@@ -95,7 +95,7 @@ Encoding follows the postcard wire format exactly:
 
 ## Resources
 
-`telepath-mcp-server` advertises one resource:
+`telepath mcp` advertises one resource:
 
 | URI | MIME | Description |
 |-----|------|-------------|
@@ -117,12 +117,12 @@ Two built-in prompts are available:
 
 ```bash
 # RTT mode (default build) — connects to a flashed device
-cd tools/telepath-mcp-server
-cargo run -- --chip nRF52840_xxAA
+cd tools/telepath
+cargo run -- mcp --chip nRF52840_xxAA
 
 # Serial mode — CDC-ACM device or host-pty-server PTY
-cd tools/telepath-mcp-server
-cargo run --no-default-features --features serial -- --port /dev/ttyACM0
+cd tools/telepath
+cargo run --no-default-features --features mcp,serial -- mcp --transport serial --port /dev/ttyACM0
 ```
 
 For a hardware-free smoke test, run `host-pty-server` in a separate terminal first,

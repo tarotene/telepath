@@ -145,8 +145,8 @@ fn default_log_path() -> PathBuf {
             .join("telepath")
             .join("shell.log");
     }
-    eprintln!("Warning: $HOME not set, logging to ./telepath-shell.log");
-    PathBuf::from("telepath-shell.log")
+    eprintln!("Warning: $HOME not set, logging to ./telepath.log");
+    PathBuf::from("telepath.log")
 }
 
 // ── Tab completion ──────────────────────────────────────────────────────

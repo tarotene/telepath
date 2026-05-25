@@ -1,8 +1,8 @@
 //! Host-side Telepath server over a PTY pair — no hardware required.
 //!
 //! Opens a PTY with `openpty(3)`, prints the slave device path to stdout so
-//! that a test harness or human operator can connect a `telepath-shell
-//! --no-default-features --features serial --port <path>` client, then runs `TelepathServer` on
+//! that a test harness or human operator can connect a `telepath shell
+//! --transport serial --port <path>` client, then runs `TelepathServer` on
 //! the master end in a blocking loop.
 //!
 //! This is structurally identical to `examples/nrf52840-ping`: both are
@@ -14,7 +14,7 @@
 //! ```text
 //! cargo run -p host-pty-server
 //! # In another terminal, using the printed path:
-//! cd tools/telepath-shell && cargo run --no-default-features --features serial -- --port /dev/pts/N --exec ping
+//! cd tools/telepath && cargo run --no-default-features --features shell,serial -- shell --transport serial --port /dev/pts/N --exec ping
 //! ```
 
 use heapless::Vec as HVec;
