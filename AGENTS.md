@@ -176,8 +176,10 @@ complete multi-peripheral example.
 
 **Runtime invariants:**
 
-- Each resource type may appear **at most once** in the registry; registering a second
-  value of the same type replaces the first silently.
+- Each resource type may appear **at most once** in the registry; registering a
+  second value of the same type panics at runtime (fail-fast to prevent silent
+  shadowing). Duplicate `#[resource]` arguments within a single `#[command]`
+  signature are additionally rejected at compile time by the proc-macro.
 - `T: 'static` is required — HAL types with lifetime parameters must be newtype-wrapped
   and `transmute`d to `'static` (the soundness obligation rests with the crate author).
 - Resource arguments are **wire-transparent**: they are not serialized into the wire
