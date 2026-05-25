@@ -209,8 +209,8 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
 ## Toolchain
 
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
-- MSRV: **1.88** — declared via `rust-version = "1.88"` in `[workspace.package]`
-  and in each excluded crate (`tools/telepath`, `examples/nrf52840-ping`)
+- MSRV: `1.88` (declared via `rust-version` in all `Cargo.toml` files and `constraints.rust` in `renovate.json`)
+- When bumping MSRV, update `rust-version` in all manifests **and** `constraints.rust` in `renovate.json` in the same PR.
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging)
 
@@ -248,6 +248,19 @@ Ruleset (`id=13908758`, applies to `main`):
   this lockfile for dependency resolution — that is standard Cargo behaviour.
 - `tools/telepath/Cargo.toml` and `examples/nrf52840-ping/Cargo.toml` carry an empty `[workspace]` table
   to make them self-contained workspaces, stopping Cargo's upward traversal at their own manifest.
+
+## Dependency Management
+
+- Renovate (`renovate.json`) opens dependency-bump PRs every Monday 06:00 JST. Monthly lockfile maintenance PR on the first of the month.
+- All Renovate PRs require human review; automerge is disabled.
+- `rangeStrategy: "auto"` (= `update-lockfile`) keeps `Cargo.toml` semver ranges stable; only `Cargo.lock` is bumped.
+- `probe-rs` is intentionally pinned to `0.31.x` in `telepath-client/Cargo.toml` and `tools/telepath/Cargo.toml`.
+  Patch updates are PR'd as a synchronized group. Major/minor bumps are suppressed. To lift the pin, remove
+  the two `enabled: false` packageRules in `renovate.json` and update both manifests together.
+- Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, etc.) carry the `needs-smoke-test` label.
+  Run `just firmware-ping` on a connected nRF52840-DK and record the result in the PR before merging.
+- `dtolnay/rust-toolchain@stable` is excluded from Renovate (channel reference, not a version tag).
+- Dependency Dashboard Issue lists all suppressed updates for visibility.
 
 ## Git Hooks
 

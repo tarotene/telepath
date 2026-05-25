@@ -1,0 +1,120 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitTypeAll(chore)",
+    ":timezone(Asia/Tokyo)"
+  ],
+  "constraints": {
+    "rust": "1.88"
+  },
+  "schedule": ["before 6am on monday"],
+  "commitMessagePrefix": "chore(deps):",
+  "rangeStrategy": "auto",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on the first day of the month"]
+  },
+  "rebaseWhen": "behind-base-branch",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "cargo": {
+    "enabled": true,
+    "managerFilePatterns": [
+      "/Cargo\\.toml$/",
+      "/tools/telepath/Cargo\\.toml$/",
+      "/examples/nrf52840-ping/Cargo\\.toml$/"
+    ]
+  },
+  "github-actions": {
+    "enabled": true,
+    "pinDigests": true,
+    "managerFilePatterns": ["/\\.github/workflows/[^/]+\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "probe-rs: pinned to 0.31.x; surface minor/major bumps on Dependency Dashboard for manual re-evaluation (e.g. when 0.32 ships)",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["probe-rs"],
+      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "probe-rs: allow patch updates synced across both manifests",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["probe-rs"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "probe-rs (synchronized)"
+    },
+    {
+      "description": "Embedded HAL (0.x): split minor from patch for careful review; firmware smoke test required",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "embassy-executor",
+        "embassy-nrf",
+        "embassy-time",
+        "embassy-sync",
+        "embassy-futures",
+        "embassy-hal-internal",
+        "nrf-pac",
+        "cortex-m",
+        "cortex-m-rt",
+        "rtt-target",
+        "panic-halt"
+      ],
+      "separateMinorPatch": true,
+      "groupName": "embedded HAL",
+      "labels": ["dependencies", "firmware", "needs-smoke-test"]
+    },
+    {
+      "description": "Wire protocol deps: group postcard/serde family together",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "serde",
+        "postcard",
+        "postcard-schema",
+        "heapless",
+        "linkme",
+        "cobs"
+      ],
+      "groupName": "wire protocol deps"
+    },
+    {
+      "description": "Proc-macro toolchain",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["syn", "quote", "proc-macro2"],
+      "groupName": "proc-macro toolchain"
+    },
+    {
+      "description": "Host CLI deps in tools/telepath: separate minor from patch",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "clap",
+        "rustyline",
+        "tokio",
+        "tracing",
+        "tracing-subscriber",
+        "rmcp",
+        "serde_json",
+        "thiserror",
+        "anyhow",
+        "nix"
+      ],
+      "separateMinorPatch": true
+    },
+    {
+      "description": "GitHub Actions: group all action upgrades into one PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "labels": ["dependencies", "ci"]
+    },
+    {
+      "description": "dtolnay/rust-toolchain uses a channel name (@stable), not a tag — Renovate cannot version-bump it",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["dtolnay/rust-toolchain"],
+      "enabled": false
+    }
+  ]
+}
