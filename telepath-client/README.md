@@ -65,7 +65,7 @@ cargo test -p telepath-client
 ## Limitations
 
 - No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
-  (see #3).
+  (see [#75](https://github.com/tarotene/telepath/issues/75)).
 - Upstream rzCOBS is not yet supported; both framing directions are COBS
   (see [#76](https://github.com/tarotene/telepath/issues/76)).
 - `HostError::SerdeError` is opaque — the original `postcard::Error` is

@@ -94,5 +94,4 @@ cargo build -p telepath-server --target thumbv7em-none-eabi
 
 - Upstream (target → host) framing uses COBS in this MVP. rzCOBS is planned
   for Stage C (see [#76](https://github.com/tarotene/telepath/issues/76)).
-- No typed `call::<Args, Ret>` on the server side yet
-  (see [#75](https://github.com/tarotene/telepath/issues/75)).
+
