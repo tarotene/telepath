@@ -35,9 +35,6 @@
 
 mod rtt_transport;
 
-use core::cell::RefCell;
-
-use critical_section::Mutex;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use nrf_pac as pac;
@@ -49,37 +46,60 @@ use telepath_server::{command, TelepathServer};
 use rtt_transport::RttTransport;
 
 // ---------------------------------------------------------------------------
-// Per-pin GPIO statics
+// Resource newtypes
 //
-// #[command] shims are plain free functions — they cannot capture locals from
-// main.  GPIO handles are stored as individual module-level statics, one per
-// pin.  Each static wraps its handle in critical_section::Mutex<RefCell<Option<T>>>
-// to satisfy the Sync bound (critical-section-single-core disables interrupts).
+// Each GPIO pin is wrapped in a dedicated newtype so the `#[resource]`
+// injection system can distinguish them by `TypeId`. The `new()` constructors
+// encapsulate the `transmute` that erases the HAL lifetime parameter.
 //
-// Pins are stored individually rather than as a single bundled array because
-// each GPIO pin is an independent hardware resource.  The nRF52840 uses
-// OUTSET/OUTCLR registers for atomic per-bit writes, so there is no contention
-// between different pins and no reason to serialise access to all four under
-// a single lock.
-//
-// Safety invariant for the `transmute` calls in `main`:
+// Safety invariant for the `transmute` inside `new()`:
 //   Output<'d> / Input<'d> store their AnyPin **by value** inside
 //   PeripheralRef<'d, AnyPin>.  The lifetime parameter 'd is phantom
 //   (PhantomData<&'d mut AnyPin>) — it has no runtime representation.
 //   Transmuting Output<'_> → Output<'static> is therefore sound: the
 //   nRF52840 peripheral tokens are 'static ZSTs, AnyPin carries no
-//   borrowed data, and ownership is fully transferred into the static.
+//   borrowed data, and ownership is fully transferred into the newtype.
 // ---------------------------------------------------------------------------
 
-static LED1: Mutex<RefCell<Option<Output<'static>>>> = Mutex::new(RefCell::new(None));
-static LED2: Mutex<RefCell<Option<Output<'static>>>> = Mutex::new(RefCell::new(None));
-static LED3: Mutex<RefCell<Option<Output<'static>>>> = Mutex::new(RefCell::new(None));
-static LED4: Mutex<RefCell<Option<Output<'static>>>> = Mutex::new(RefCell::new(None));
+pub struct Led1(pub Output<'static>);
+pub struct Led2(pub Output<'static>);
+pub struct Led3(pub Output<'static>);
+pub struct Led4(pub Output<'static>);
+pub struct Btn1(pub Input<'static>);
+pub struct Btn2(pub Input<'static>);
+pub struct Btn3(pub Input<'static>);
+pub struct Btn4(pub Input<'static>);
 
-static BTN1: Mutex<RefCell<Option<Input<'static>>>> = Mutex::new(RefCell::new(None));
-static BTN2: Mutex<RefCell<Option<Input<'static>>>> = Mutex::new(RefCell::new(None));
-static BTN3: Mutex<RefCell<Option<Input<'static>>>> = Mutex::new(RefCell::new(None));
-static BTN4: Mutex<RefCell<Option<Input<'static>>>> = Mutex::new(RefCell::new(None));
+macro_rules! impl_led_newtype {
+    ($name:ident) => {
+        impl $name {
+            pub fn new(pin: Output<'_>) -> Self {
+                // SAFETY: see "Safety invariant" comment above.
+                Self(unsafe { core::mem::transmute::<Output<'_>, Output<'static>>(pin) })
+            }
+        }
+    };
+}
+
+macro_rules! impl_btn_newtype {
+    ($name:ident) => {
+        impl $name {
+            pub fn new(pin: Input<'_>) -> Self {
+                // SAFETY: see "Safety invariant" comment above.
+                Self(unsafe { core::mem::transmute::<Input<'_>, Input<'static>>(pin) })
+            }
+        }
+    };
+}
+
+impl_led_newtype!(Led1);
+impl_led_newtype!(Led2);
+impl_led_newtype!(Led3);
+impl_led_newtype!(Led4);
+impl_btn_newtype!(Btn1);
+impl_btn_newtype!(Btn2);
+impl_btn_newtype!(Btn3);
+impl_btn_newtype!(Btn4);
 
 // ---------------------------------------------------------------------------
 // Commands
@@ -126,102 +146,92 @@ fn echo(payload: HVec<u8, 128>) -> HVec<u8, 128> {
     payload
 }
 
-fn led_mux(id: u8) -> Option<&'static Mutex<RefCell<Option<Output<'static>>>>> {
-    Some(match id {
-        1 => &LED1,
-        2 => &LED2,
-        3 => &LED3,
-        4 => &LED4,
-        _ => return None,
-    })
-}
-
 /// Set one LED.  `id` must be 1–4; returns `false` and does nothing if out of range.
 /// Active-low hardware: `on = true` drives the pin low to illuminate the LED.
 #[command]
-fn led_set(id: u8, on: bool) -> bool {
-    let Some(mux) = led_mux(id) else {
-        return false;
+fn led_set(
+    #[resource] led1: &mut Led1,
+    #[resource] led2: &mut Led2,
+    #[resource] led3: &mut Led3,
+    #[resource] led4: &mut Led4,
+    id: u8,
+    on: bool,
+) -> bool {
+    let led = match id {
+        1 => &mut led1.0,
+        2 => &mut led2.0,
+        3 => &mut led3.0,
+        4 => &mut led4.0,
+        _ => return false,
     };
-    critical_section::with(|cs| {
-        let mut guard = mux.borrow(cs).borrow_mut();
-        if let Some(led) = guard.as_mut() {
-            if on {
-                led.set_low();
-            } else {
-                led.set_high();
-            }
-            true
-        } else {
-            false
-        }
-    })
+    if on {
+        led.set_low();
+    } else {
+        led.set_high();
+    }
+    true
 }
 
 /// Set all four LEDs in one round trip.  Bit 0 = LED1, bit 3 = LED4.
-/// Upper nibble is ignored.  Returns the applied mask (bits 0–3 only),
-/// or `0` if any LED has not been initialised.
+/// Upper nibble is ignored.  Returns the applied mask (bits 0–3 only).
 #[command]
-fn led_pattern(mask: u8) -> u8 {
+fn led_pattern(
+    #[resource] led1: &mut Led1,
+    #[resource] led2: &mut Led2,
+    #[resource] led3: &mut Led3,
+    #[resource] led4: &mut Led4,
+    mask: u8,
+) -> u8 {
     let m = mask & 0x0F;
-    let leds = [&LED1, &LED2, &LED3, &LED4];
-    critical_section::with(|cs| {
-        for (i, mux) in leds.iter().enumerate() {
-            let mut guard = mux.borrow(cs).borrow_mut();
-            let Some(led) = guard.as_mut() else {
-                return 0;
-            };
-            // active-low: bit set → illuminate (set_low); bit clear → extinguish
-            if (m >> i) & 1 == 1 {
-                led.set_low();
-            } else {
-                led.set_high();
-            }
+    let mut leds: [&mut Output<'static>; 4] = [&mut led1.0, &mut led2.0, &mut led3.0, &mut led4.0];
+    for (i, led) in leds.iter_mut().enumerate() {
+        if (m >> i) & 1 == 1 {
+            led.set_low();
+        } else {
+            led.set_high();
         }
-        m
-    })
+    }
+    m
 }
 
 /// Read back the current driven state of all four LEDs.
 /// Bit 0 = LED1, bit 3 = LED4.  On (illuminated) = 1, Off = 0
-/// (active-low hardware is inverted here).  Returns `0` if any LED is uninitialised.
+/// (active-low hardware is inverted here).
 #[command]
-fn led_pattern_get() -> u8 {
-    let leds = [&LED1, &LED2, &LED3, &LED4];
-    critical_section::with(|cs| {
-        let mut state = 0u8;
-        for (i, mux) in leds.iter().enumerate() {
-            let guard = mux.borrow(cs).borrow();
-            let Some(led) = guard.as_ref() else {
-                return 0;
-            };
-            if led.is_set_low() {
-                state |= 1 << i;
-            }
+fn led_pattern_get(
+    #[resource] led1: &Led1,
+    #[resource] led2: &Led2,
+    #[resource] led3: &Led3,
+    #[resource] led4: &Led4,
+) -> u8 {
+    let leds: [&Output<'static>; 4] = [&led1.0, &led2.0, &led3.0, &led4.0];
+    let mut state = 0u8;
+    for (i, led) in leds.iter().enumerate() {
+        if led.is_set_low() {
+            state |= 1 << i;
         }
-        state
-    })
+    }
+    state
 }
 
 /// Instantaneous snapshot of all four button states.
 /// Bit 0 = BTN1, bit 3 = BTN4.  Pressed = 1 (active-low hardware, inverted here).
 /// No wait semantics: the caller polls at its own rate.
 #[command]
-fn button_read() -> u8 {
-    let btns = [&BTN1, &BTN2, &BTN3, &BTN4];
-    critical_section::with(|cs| {
-        let mut state = 0u8;
-        for (i, mux) in btns.iter().enumerate() {
-            let guard = mux.borrow(cs).borrow();
-            let Some(btn) = guard.as_ref() else {
-                return 0;
-            };
-            if btn.is_low() {
-                state |= 1 << i; // active-low: pin low → button pressed
-            }
+fn button_read(
+    #[resource] btn1: &Btn1,
+    #[resource] btn2: &Btn2,
+    #[resource] btn3: &Btn3,
+    #[resource] btn4: &Btn4,
+) -> u8 {
+    let btns: [&Input<'static>; 4] = [&btn1.0, &btn2.0, &btn3.0, &btn4.0];
+    let mut state = 0u8;
+    for (i, btn) in btns.iter().enumerate() {
+        if btn.is_low() {
+            state |= 1 << i;
         }
-        state
-    })
+    }
+    state
 }
 
 /// Unique 64-bit chip ID from FICR.DEVICEID[0..1].
@@ -357,34 +367,19 @@ async fn main(_spawner: Spawner) {
 
     // LED1=P0.13, LED2=P0.14, LED3=P0.15, LED4=P0.16 (nRF52840-DK PCA10056, active-low).
     // Initial level High = all LEDs off at startup.
-    let led1: Output<'static> =
-        unsafe { core::mem::transmute(Output::new(p.P0_13, Level::High, OutputDrive::Standard)) };
-    let led2: Output<'static> =
-        unsafe { core::mem::transmute(Output::new(p.P0_14, Level::High, OutputDrive::Standard)) };
-    let led3: Output<'static> =
-        unsafe { core::mem::transmute(Output::new(p.P0_15, Level::High, OutputDrive::Standard)) };
-    let led4: Output<'static> =
-        unsafe { core::mem::transmute(Output::new(p.P0_16, Level::High, OutputDrive::Standard)) };
-
     // BTN1=P0.11, BTN2=P0.12, BTN3=P0.24, BTN4=P0.25 (active-low, pull-up).
-    let btn1: Input<'static> = unsafe { core::mem::transmute(Input::new(p.P0_11, Pull::Up)) };
-    let btn2: Input<'static> = unsafe { core::mem::transmute(Input::new(p.P0_12, Pull::Up)) };
-    let btn3: Input<'static> = unsafe { core::mem::transmute(Input::new(p.P0_24, Pull::Up)) };
-    let btn4: Input<'static> = unsafe { core::mem::transmute(Input::new(p.P0_25, Pull::Up)) };
-
-    critical_section::with(|cs| {
-        *LED1.borrow(cs).borrow_mut() = Some(led1);
-        *LED2.borrow(cs).borrow_mut() = Some(led2);
-        *LED3.borrow(cs).borrow_mut() = Some(led3);
-        *LED4.borrow(cs).borrow_mut() = Some(led4);
-        *BTN1.borrow(cs).borrow_mut() = Some(btn1);
-        *BTN2.borrow(cs).borrow_mut() = Some(btn2);
-        *BTN3.borrow(cs).borrow_mut() = Some(btn3);
-        *BTN4.borrow(cs).borrow_mut() = Some(btn4);
-    });
-
-    let mut server =
-        TelepathServer::<RttTransport, 512>::new(rtt_transport, telepath_server::commands());
+    let mut server = TelepathServer::<RttTransport, 512>::new(
+        rtt_transport,
+        telepath_server::commands(),
+    )
+    .resource(Led1::new(Output::new(p.P0_13, Level::High, OutputDrive::Standard)))
+    .resource(Led2::new(Output::new(p.P0_14, Level::High, OutputDrive::Standard)))
+    .resource(Led3::new(Output::new(p.P0_15, Level::High, OutputDrive::Standard)))
+    .resource(Led4::new(Output::new(p.P0_16, Level::High, OutputDrive::Standard)))
+    .resource(Btn1::new(Input::new(p.P0_11, Pull::Up)))
+    .resource(Btn2::new(Input::new(p.P0_12, Pull::Up)))
+    .resource(Btn3::new(Input::new(p.P0_24, Pull::Up)))
+    .resource(Btn4::new(Input::new(p.P0_25, Pull::Up)));
 
     let mut tick: u32 = 0;
     let mut hb: u32 = 0;
