@@ -357,7 +357,7 @@ async fn main(_spawner: Spawner) {
         }
         // Pin the control block to .segger_rtt so _SEGGER_RTT lands at
         // 0x20000000 (RTT_CTRL in memory.x). The host CLI attaches there
-        // directly via ScanRegion::Exact — see tools/telepath-shell/src/rtt_transport.rs.
+        // directly via ScanRegion::Exact — see telepath-client/src/rtt_transport.rs.
         section_cb: ".segger_rtt"
     };
     rtt_target::set_print_channel(channels.up.0);

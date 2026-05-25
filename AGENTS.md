@@ -69,7 +69,7 @@ just ci
 - MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
 - MUST NOT be added to the workspace `members` list; it has its own `target` directory and Cargo config.
 - Cross-compilation REQUIRES `rustup target add thumbv7em-none-eabi`.
-- `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath-shell` can attach.
+- `cargo run --release` invokes `probe-rs download` (flash + exit). The probe is released immediately so `telepath shell` (with RTT transport) can attach.
 
 ### `examples/host-pty-server`
 - IS a workspace member (`std` target, no cross-compile). Build with `cargo build --workspace`.

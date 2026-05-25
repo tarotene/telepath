@@ -8,7 +8,7 @@ validating behaviour and API ergonomics without instrumenting tests.
 
 It splits the problem in two:
 - **Server (target):** command definitions and a poll loop. No shell, no scheduler integration, no allocator.
-- **Client (host):** `telepath-shell` for interactive use; `telepath-client` lib for building your own host or MCP server frontend.
+- **Client (host):** `telepath shell` (the unified CLI) for interactive use; `telepath-client` lib for building your own host or MCP server frontend.
 
 Three things make it unusual:
 1. **One attribute, zero boilerplate.** `#[command]` generates the wire shim, schema metadata, and link-time registration. No IDL, no manual sync.
@@ -54,8 +54,7 @@ sequenceDiagram
 | `telepath-client` | Host-side RPC client — `std` |
 | `examples/host-pty-server` | Host-side server deployment over a PTY pair — hardware-free regression |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK (workspace-excluded) |
-| `tools/telepath-shell` | Interactive shell for Telepath servers — REPL and one-shot commands (workspace-excluded) |
-| `tools/telepath-mcp-server` | MCP server — exposes discovered commands as MCP tools (workspace-excluded) |
+| `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); workspace-excluded |
 
 ### Framing
 
@@ -88,7 +87,7 @@ from an AI agent without hand-written tool descriptors.
 
 ### MCP tool auto-generation
 
-`tools/telepath-mcp-server` auto-generates MCP tool descriptors from live
+The `telepath mcp` subcommand (`tools/telepath`) auto-generates MCP tool descriptors from live
 `#[command]` metadata — zero hand-written tool definitions required:
 
 1. `client.discover()` fetches all commands; each `SchemaEntry` holds
@@ -111,14 +110,15 @@ for entry in client.schema_cache().iter() {
 // MCP tool call → bridge::invoke → call_raw → JSON response
 ```
 
-See [`tools/telepath-mcp-server/README.md`](tools/telepath-mcp-server/README.md)
+See [`docs/mcp-integration.md`](docs/mcp-integration.md) and
+[`tools/telepath/README.md`](tools/telepath/README.md)
 for setup instructions, including using it from Claude Code.
 
 ## Quickstart
 
 The fastest way to see Telepath in action requires no hardware.
 
-```
+```bash
 git clone https://github.com/tarotene/telepath.git
 cd telepath
 just host-pty-smoke
@@ -131,7 +131,7 @@ ping -> 0xDEADBEEF
 ```
 
 `host-pty-smoke` starts `examples/host-pty-server` (a `TelepathServer` over a PTY
-master), then drives it from `telepath-shell --features serial` via the slave end.
+master), then drives it from `telepath shell --transport serial` via the slave end.
 The full wire path (postcard serialization + COBS framing) runs identically to real
 hardware. Switching to an MCU is purely a transport swap.
 
@@ -164,7 +164,7 @@ git config --local core.hooksPath .githooks
 **Why this split?** Commits happen frequently, so `pre-commit` runs only the
 instant format check. Pushes are less frequent and signal intent to share code,
 so `pre-push` runs the slower static analysis and test suite. The full CI gate
-(`just ci`) additionally runs the in-process emulator and is intentionally left
+(`just ci`) additionally runs the PTY-based `host-pty-server` smoke and is intentionally left
 to CI — see [CI / Quality gates](#ci--quality-gates).
 
 ### Troubleshooting
@@ -181,7 +181,7 @@ package manager.
 
 ## Build
 
-```
+```bash
 # Host workspace
 cargo build --workspace
 
@@ -194,14 +194,14 @@ cd examples/nrf52840-ping && cargo build --release
 # Flash to hardware (downloads and exits; probe is released immediately)
 cd examples/nrf52840-ping && cargo run --release
 
-# CLI tool — must cd because it is workspace-excluded
-cd tools/telepath-shell && cargo build
+# Unified CLI — must cd because it is workspace-excluded
+cd tools/telepath && cargo build
 
 # 1-shot ping (firmware must already be flashed)
-cd tools/telepath-shell && cargo run -- ping
+cd tools/telepath && cargo run -- shell --exec ping
 
 # Interactive REPL
-cd tools/telepath-shell && cargo run
+cd tools/telepath && cargo run -- shell
 ```
 
 ## Real hardware: nRF52840-DK
@@ -209,12 +209,12 @@ cd tools/telepath-shell && cargo run
 See [`examples/nrf52840-ping/README.md`](examples/nrf52840-ping/README.md) for the
 full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
 
-```
+```bash
 # Flash firmware (downloads and exits; probe is released)
 cd examples/nrf52840-ping && cargo run --release
 
 # Ping over RTT (RPC traffic on channel 1)
-cd tools/telepath-shell && cargo run -- ping
+cd tools/telepath && cargo run -- shell --exec ping
 ```
 
 ## Using telepath as a library
@@ -235,6 +235,10 @@ use telepath_server::{command, TelepathServer};
 //    a CommandMetadata const, and a linkme registration — no boilerplate required.
 #[command]
 fn ping() -> u32 { 0xDEAD_BEEF }
+
+// Peripheral state can be injected type-safely with #[resource]:
+// #[command]
+// fn set_led(#[resource] led: &mut MyLed, on: bool) -> bool { led.set(on) }
 
 // 2. Implement `transport::Transport` for your byte-stream peripheral
 //    (UART, RTT, USB …).
@@ -267,7 +271,7 @@ println!("ping -> 0x{:08X}", val);
 
 ## CI / Quality gates
 
-```
+```bash
 # Format check
 cargo fmt --all -- --check
 
