@@ -239,6 +239,16 @@ Ruleset (`id=13908758`, applies to `main`):
 - Ruleset updates MUST be applied via API (`gh api -X PUT repos/.../rulesets/13908758`)
   so changes are auditable
 
+## Lockfile Policy
+
+- `Cargo.lock` is committed for all manifest groups: workspace root, `tools/telepath`, and `examples/nrf52840-ping`.
+- Rationale: (1) current Cargo FAQ defaults to committing; (2) `tools/telepath` and `nrf52840-ping` are
+  binary crates where reproducible builds matter; (3) firmware requires deterministic binaries.
+- Downstream consumers of the library crates (`telepath-wire`, `telepath-client`, etc.) do **not** use
+  this lockfile for dependency resolution — that is standard Cargo behaviour.
+- `tools/telepath/Cargo.toml` and `examples/nrf52840-ping/Cargo.toml` carry an empty `[workspace]` table
+  to make them self-contained workspaces, stopping Cargo's upward traversal at their own manifest.
+
 ## Git Hooks
 
 After cloning, contributors MUST run:
