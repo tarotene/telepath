@@ -1,0 +1,7 @@
+ignore_merge_commits = true
+tag_prefix = "v"
+branch_whitelist = ["main"]
+
+[commit_types]
+chore = { changelog_title = "Miscellaneous Chores", omit_from_changelog = true }
+ci    = { changelog_title = "CI",                    omit_from_changelog = true }

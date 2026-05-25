@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v just >/dev/null 2>&1; then
+    echo "[commit-msg] 'just' not found on PATH."
+    echo "  Install via 'cargo install just' (see README.md -> Prerequisites)."
+    echo "  Then re-run the failing git command."
+    exit 1
+fi
+
+if ! command -v cog >/dev/null 2>&1; then
+    echo "[commit-msg] 'cog' (cocogitto) not found on PATH."
+    echo "  Install via 'cargo install --locked cocogitto' (see README.md -> Prerequisites)."
+    echo "  Then re-run the failing git command."
+    exit 1
+fi
+
+just commit-check "$1" || {
+    echo ""
+    echo "  Commit message rejected. Use Conventional Commits format:"
+    echo "    feat(scope): description       # new feature"
+    echo "    fix(scope): description        # bug fix"
+    echo "    docs(scope): description       # docs only"
+    echo "    feat(scope)!: description      # breaking change"
+    echo "  Fix with 'git commit --amend' and try again."
+    exit 1
+}
+
+echo "[commit-msg] OK"
