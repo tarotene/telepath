@@ -86,7 +86,13 @@ impl HostTransportExt for AnyTransport {
 }
 
 pub fn build_transport(args: &TransportArgs) -> anyhow::Result<AnyTransport> {
-    match args.transport {
+    // Infer serial when --port is given without an explicit --transport serial,
+    // so `telepath shell --port /dev/ttyACM0` works without extra flags.
+    let effective = match (&args.transport, &args.port) {
+        (TransportKind::Rtt, Some(_)) => TransportKind::Serial,
+        _ => args.transport,
+    };
+    match effective {
         TransportKind::Rtt => build_rtt(args),
         TransportKind::Serial => build_serial(args),
     }
