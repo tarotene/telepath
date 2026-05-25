@@ -621,14 +621,87 @@ fn encode_args(
 
     let json_val: serde_json::Value = if args_str.is_empty() {
         bail!(
-            "'{cmd_name}' expects arguments ({}).  Pass them as a JSON array, e.g.: telepath> {cmd_name} [<arg1>, <arg2>, ...]",
+            "'{cmd_name}' expects arguments ({}).  Usage: {cmd_name} <arg1> <arg2> ...",
             args_schema.name
         );
     } else {
-        serde_json::from_str(args_str)
-            .with_context(|| format!("Invalid JSON arguments for '{cmd_name}': {args_str}"))?
+        match serde_json::from_str(args_str) {
+            Ok(v) => v,
+            Err(_) => {
+                let tokens: Result<Vec<serde_json::Value>, _> = args_str
+                    .split_whitespace()
+                    .map(serde_json::from_str)
+                    .collect();
+                match tokens {
+                    Ok(vals) if vals.len() == 1 => vals.into_iter().next().unwrap(),
+                    Ok(vals) => serde_json::Value::Array(vals),
+                    Err(e) => bail!("Invalid arguments for '{cmd_name}': {e}"),
+                }
+            }
+        }
     };
 
     json_to_postcard(args_schema, &json_val)
         .map_err(|e| anyhow::anyhow!("Argument encoding failed for '{cmd_name}': {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use postcard_schema::schema::owned::{OwnedDataModelType as DMT, OwnedNamedType};
+
+    fn wrap(name: &str, ty: DMT) -> OwnedNamedType {
+        OwnedNamedType {
+            name: name.to_string(),
+            ty,
+        }
+    }
+
+    #[test]
+    fn encode_args_single_bare_scalar() {
+        let schema = wrap("args", DMT::Tuple(vec![wrap("mask", DMT::U8)]));
+        let result = encode_args(&schema, "10", "led_pattern").unwrap();
+        assert_eq!(result, vec![10]);
+    }
+
+    #[test]
+    fn encode_args_single_json_array_backward_compat() {
+        let schema = wrap("args", DMT::Tuple(vec![wrap("mask", DMT::U8)]));
+        let result = encode_args(&schema, "[10]", "led_pattern").unwrap();
+        assert_eq!(result, vec![10]);
+    }
+
+    #[test]
+    fn encode_args_multi_positional() {
+        let schema = wrap(
+            "args",
+            DMT::Tuple(vec![wrap("a", DMT::I32), wrap("b", DMT::I32)]),
+        );
+        let positional = encode_args(&schema, "2 3", "add").unwrap();
+        let array = encode_args(&schema, "[2, 3]", "add").unwrap();
+        assert_eq!(positional, array);
+    }
+
+    #[test]
+    fn encode_args_unit_rejects_args() {
+        let schema = wrap("args", DMT::Unit);
+        assert!(encode_args(&schema, "10", "ping").is_err());
+    }
+
+    #[test]
+    fn encode_args_empty_string_is_error() {
+        let schema = wrap("args", DMT::Tuple(vec![wrap("a", DMT::U8)]));
+        assert!(encode_args(&schema, "", "cmd").is_err());
+    }
+
+    #[test]
+    fn encode_args_negative_numbers() {
+        let schema = wrap(
+            "args",
+            DMT::Tuple(vec![wrap("a", DMT::I32), wrap("b", DMT::I32)]),
+        );
+        let positional = encode_args(&schema, "-2 3", "add").unwrap();
+        let array = encode_args(&schema, "[-2, 3]", "add").unwrap();
+        assert_eq!(positional, array);
+    }
 }

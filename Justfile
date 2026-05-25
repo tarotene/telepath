@@ -87,6 +87,8 @@ host-pty-smoke:
         echo "ERROR: host-pty-server did not print PTY path"; exit 1
     fi
     tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec ping | tee /dev/stderr | grep -qF "ping -> 0xDEADBEEF"
+    tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec "add 2 3" | tee /dev/stderr | grep -qF "add -> 5"
+    tools/telepath-shell/target/debug/telepath-shell --port "$SLAVE" --exec "add [2, 3]" | tee /dev/stderr | grep -qF "add -> 5"
 
 # Full CI gate: fmt-check + clippy + test + host-pty smoke + mcp-test
 ci: fmt-check clippy test host-pty-smoke mcp-test
