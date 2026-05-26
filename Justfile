@@ -98,3 +98,15 @@ host-pty-smoke:
 
 # Full CI gate: fmt-check + clippy + test + host-pty smoke + telepath tests
 ci: fmt-check clippy test host-pty-smoke mcp-test
+
+# Generate a dry-run plan for the next release (no files modified)
+# Requires: cargo install --locked release-plz
+release-dry-run:
+    release-plz update --dry-run
+
+# Bump excluded crates' versions to match the upcoming workspace release.
+# Usage: just bump-excluded 0.1.1
+# Run as the final commit on the release-plz PR before merge.
+bump-excluded VERSION:
+    sed -i 's/^version = "[^"]*"/version = "{{VERSION}}"/' tools/telepath/Cargo.toml
+    sed -i 's/^version = "[^"]*"/version = "{{VERSION}}"/' examples/nrf52840-ping/Cargo.toml

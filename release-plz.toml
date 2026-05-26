@@ -1,0 +1,41 @@
+[workspace]
+publish = false
+git_release_enable = true
+git_tag_enable = false
+changelog_update = true
+changelog_path = "./CHANGELOG.md"
+pr_labels = ["release"]
+dependencies_update = false
+release_commits = "^(feat|fix|perf|refactor)"
+
+[changelog]
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] \
+{%- if previous %}\
+{%- if previous.version %}\
+([`{{ version | trim_start_matches(pat="v") }}`](https://github.com/tarotene/telepath/compare/{{ previous.version }}..{{ version }}))\
+{% endif %}\
+{% endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits | filter(attribute="merge_commit", value=false) %}
+- {% if commit.breaking %}**[BREAKING]** {% endif %}\
+{% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
+{{ commit.message | upper_first }}\
+{% if commit.github.pr_number %} \
+([#{{ commit.github.pr_number }}](https://github.com/tarotene/telepath/pull/{{ commit.github.pr_number }}))\
+{% endif %}
+{% endfor %}
+{% endfor %}
+"""
+
+# Single-tag pattern: telepath-wire is the canonical tag owner.
+# One vX.Y.Z tag covers all five workspace members (unified versioning).
+[[package]]
+name = "telepath-wire"
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
