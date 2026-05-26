@@ -108,5 +108,9 @@ release-dry-run:
 # Usage: just bump-excluded 0.1.1
 # Run as the final commit on the release-plz PR before merge.
 bump-excluded VERSION:
-    sed -i 's/^version = "[^"]*"/version = "{{VERSION}}"/' tools/telepath/Cargo.toml
-    sed -i 's/^version = "[^"]*"/version = "{{VERSION}}"/' examples/nrf52840-ping/Cargo.toml
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for f in tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml; do
+        sed 's/^version = "[^"]*"/version = "{{VERSION}}"/' "$f" > "$f.tmp" \
+            && mv "$f.tmp" "$f"
+    done
