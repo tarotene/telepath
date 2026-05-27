@@ -60,6 +60,8 @@ cd tools/telepath && cargo run -- shell --chip STM32F4
 |------|---------|-------------|
 | `--transport rtt\|serial` | `rtt` | Transport backend |
 | `--chip <NAME>` | `nRF52840_xxAA` | Chip name (RTT only) |
+| `--rtt-control-block-addr <HEX>` | `0x20000000` | RTT control block address (RTT only); overridable via `TELEPATH_RTT_CONTROL_BLOCK_ADDR` |
+| `--no-reset` | — | Disable automatic chip reset when RTT control block is not found on attach (RTT only) |
 | `--port <PATH>` | — | Serial port path (serial only) |
 | `--baud <N>` | `115200` | Baud rate (serial only) |
 
