@@ -212,6 +212,8 @@ cd tools/telepath && cargo run -- shell --exec ping
 Annotate functions with `#[command]` and pass them to `TelepathServer::new` in a `poll()` loop:
 
 ```rust
+use telepath_server::{command, TelepathServer};
+
 #[command]
 fn ping() -> u32 { 0xDEAD_BEEF }
 
