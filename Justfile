@@ -99,10 +99,14 @@ host-pty-smoke:
 # Full CI gate: fmt-check + clippy + test + host-pty smoke + telepath tests
 ci: fmt-check clippy test host-pty-smoke mcp-test
 
-# Generate a dry-run plan for the next release (no files modified)
-# Requires: cargo install --locked release-plz
-release-dry-run:
-    release-plz update --dry-run
+# Preview what the next release would update, then restore the working tree.
+# Requires: cargo install --locked release-plz; gh auth login (for PR number lookup)
+release-preview:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    GIT_TOKEN=$(gh auth token) release-plz update --allow-dirty
+    git diff
+    git restore .
 
 # Bump excluded crates' versions to match the upcoming workspace release.
 # Usage: just bump-excluded 0.1.1

@@ -26,8 +26,8 @@ body = """
 - {% if commit.breaking %}**[BREAKING]** {% endif %}\
 {% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
 {{ commit.message | upper_first }}\
-{% if commit.github.pr_number %} \
-([#{{ commit.github.pr_number }}](https://github.com/tarotene/telepath/pull/{{ commit.github.pr_number }}))\
+{% if commit.remote.pr_number %} \
+([#{{ commit.remote.pr_number }}](https://github.com/tarotene/telepath/pull/{{ commit.remote.pr_number }}))\
 {% endif %}
 {% endfor %}
 {% endfor %}
