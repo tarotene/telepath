@@ -304,8 +304,8 @@ This applies to all workspace members and the excluded crates
 The MSRV is verified in CI via the `msrv` job (`dtolnay/rust-toolchain@1.88.0`).
 
 A bump to the MSRV is treated as a `MINOR` change under SemVer for pre-1.0
-releases and follows the commit convention `feat(toolchain)!: bump MSRV to 1.XX`
-(see AGENTS.md § Toolchain for the full policy).
+releases. See [AGENTS.md § Toolchain](AGENTS.md#toolchain) for the
+full MSRV policy including manifest updates and commit convention.
 
 ## Dependency updates
 
