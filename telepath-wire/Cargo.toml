@@ -9,7 +9,7 @@ description = "Shared wire protocol types for Telepath (no_std, no alloc)"
 [dependencies]
 serde = { workspace = true }
 postcard = { workspace = true }
-cobs = { version = "0.2", default-features = false }
+cobs = { version = "0.5", default-features = false }
 
 [features]
 default = []

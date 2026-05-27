@@ -43,7 +43,9 @@ pub fn cobs_encode(data: &[u8], dst: &mut [u8]) -> Result<usize, WireError> {
 ///
 /// Returns the number of decoded bytes written to `dst`.
 pub fn cobs_decode(src: &[u8], dst: &mut [u8]) -> Result<usize, WireError> {
-    cobs::decode(src, dst).map_err(|_| WireError::FramingError)
+    cobs::decode(src, dst)
+        .map(|report| report.frame_size())
+        .map_err(|_| WireError::FramingError)
 }
 
 // ---------------------------------------------------------------------------
