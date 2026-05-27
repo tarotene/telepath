@@ -1,6 +1,6 @@
 [workspace]
 publish = false
-git_release_enable = true
+git_release_enable = false
 git_tag_enable = false
 changelog_update = true
 changelog_path = "./CHANGELOG.md"
@@ -34,8 +34,9 @@ body = """
 """
 
 # Single-tag pattern: telepath-wire is the canonical tag owner.
-# One vX.Y.Z tag covers all five workspace members (unified versioning).
+# One vX.Y.Z tag and one GitHub Release cover all five workspace members (unified versioning).
 [[package]]
 name = "telepath-wire"
+git_release_enable = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
