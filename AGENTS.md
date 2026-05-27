@@ -42,6 +42,8 @@ of duplicating content. Audit cycles (latest: 2026-05, #127) verify compliance.
 | Git hooks | AGENTS.md § Git Hooks | README.md (single command + link) |
 | MSRV policy | AGENTS.md § MSRV policy | README.md (defers to AGENTS) |
 | CI gates | AGENTS.md § Required CI gates | — |
+| Release flow | AGENTS.md § How releases work | README.md (summary + link), `docs/releasing.md` (recovery/override) |
+| Release recovery / version override | `docs/releasing.md` | AGENTS.md (reference only) |
 
 **Limitations sections**: each crate README's `## Limitations` MUST reference
 an open issue and MUST be removed in the same PR that implements the feature
@@ -187,6 +189,42 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
   - `examples/nrf52840-ping/`
 
   This catches FW/host wire-format skew that `just ci` alone cannot detect without hardware.
+
+### How releases work
+
+**Humans MUST NOT create git tags or GitHub Releases manually.**
+Everything is driven by release-plz via GitHub Actions (`.github/workflows/release-plz.yml`).
+
+#### Normal release cycle
+
+1. Merge any PR whose commits include `feat:`, `fix:`, `perf:`, or `refactor:` prefixes.
+2. The `release-plz-pr` job opens a `chore: release vX.Y.Z` PR automatically with:
+   - Workspace `Cargo.toml` version bump
+   - `CHANGELOG.md` entry
+   - `release` label
+3. On the release PR branch, run the required manual step to bump the two excluded crates:
+   ```
+   just bump-excluded X.Y.Z
+   git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
+   git commit -m "chore(release): bump excluded crates to X.Y.Z"
+   git push
+   ```
+   `tools/telepath` and `examples/nrf52840-ping` are excluded from the workspace and are
+   not bumped automatically by release-plz. Skipping this step leaves those crates at a
+   stale version.
+4. Review and merge the release PR.
+5. The `release-plz-release` job creates one GitHub Release (`telepath-wire-vX.Y.Z`)
+   tagged `vX.Y.Z`, covering all five workspace members (unified versioning).
+
+#### What release-plz does NOT do
+
+- Publish to crates.io (`publish = false` everywhere — see [`release-plz.toml`](release-plz.toml))
+- Create per-crate GitHub Releases (only `telepath-wire` is the canonical release owner)
+- Run on PRs — only on pushes to `main`
+
+#### Debugging / recovery
+
+See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, and recovery procedures.
 
 ## Toolchain
 

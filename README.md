@@ -257,6 +257,19 @@ just ci
 
 See [CHANGELOG.md](./CHANGELOG.md) for the project history.
 
+## Releases
+
+Telepath uses unified versioning: all workspace members share the same `vX.Y.Z`
+version and are released together as a single GitHub Release tagged `vX.Y.Z`.
+
+- **CHANGELOG:** [`CHANGELOG.md`](CHANGELOG.md) — updated automatically by release-plz
+- **GitHub Releases:** [Releases page](https://github.com/tarotene/telepath/releases)
+- **crates.io:** `publish = false` everywhere until the API stabilizes
+
+Releases are driven by Conventional Commits on `main` — no manual tagging required.
+For the full developer flow (including the required `just bump-excluded` step on the
+release PR), see [AGENTS.md § How releases work](AGENTS.md#how-releases-work).
+
 ## Supported Rust Version
 
 Telepath declares a Minimum Supported Rust Version (MSRV) of **1.88**.
