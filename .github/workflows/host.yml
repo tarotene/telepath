@@ -25,6 +25,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect relevant changes
         id: guard
@@ -43,13 +45,21 @@ jobs:
             exit 0
           fi
           git fetch origin "$BASE" --depth=1 2>/dev/null || true
-          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
           if [[ -z "$CHANGED" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Workspace crates + host-pty-server + shared manifests + workflow config
-          PATTERNS='^(telepath-(wire|server|client|macros)/|examples/host-pty-server/|Justfile$|rust-toolchain\.toml$|\.github/(workflows/host\.yml|actions/rust-setup/))|Cargo\.(toml|lock)$'
+          # Workspace crates + host-pty-server + root manifests + workflow config.
+          # Cargo.{toml,lock} is anchored to repo root; crate-level manifests are
+          # captured by their directory prefix.
+          PATTERNS='^(telepath-(wire|server|client|macros)/|examples/host-pty-server/|Cargo\.(toml|lock)$|Justfile$|rust-toolchain\.toml$|\.github/(workflows/host\.yml|actions/rust-setup/))'
           if echo "$CHANGED" | grep -qE "$PATTERNS"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else

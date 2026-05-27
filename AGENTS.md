@@ -239,26 +239,31 @@ CI is split into five independent workflows plus one composite action:
 
 | File | Required check name | Trigger scope |
 |------|---------------------|---------------|
-| `.github/workflows/fmt.yml` | `Format check` | Any `.rs`, `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml` |
-| `.github/workflows/host.yml` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, `Cargo.*` |
-| `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, `Cargo.*` |
-| `.github/workflows/msrv.yml` | `MSRV (1.88)` | All source, all `Cargo.{toml,lock}`, `rust-toolchain.toml` |
-| `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `Cargo.*` |
+| `.github/workflows/fmt.yml` | `Format check` | Any `.rs`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `.github/workflows/host.yml` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `.github/workflows/msrv.yml` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
 
-Common setup (toolchain, libudev, mold, just, rust-cache) lives in
+Common setup (toolchain, libudev, just, rust-cache) lives in
 `.github/actions/rust-setup/action.yml` (composite action). Modify it to apply
 changes uniformly across all workflows.
 
 ### Path-filtering and job skip strategy
 
 Each CI workflow contains a `Detect relevant changes` step that runs `git diff`
-between the PR base SHA (or push `before` SHA) and HEAD. If no relevant files changed,
+between the **merge-base** of the PR base SHA and HEAD. If no relevant files changed,
 all subsequent steps are skipped and the workflow still exits **successfully** — required
 status checks remain satisfied because GHA reports a job with all steps skipped as success.
 
 No external path-filter action is used; `permissions: contents: read` is sufficient.
-`git fetch origin "$BASE" --depth=1` in the guard ensures the base commit is available
-on shallow checkouts. If the base is unavailable (new branch / zero SHA / fetch error),
+`actions/checkout@v4` runs with `fetch-depth: 0` (full history) to guarantee that
+`git merge-base` can resolve the common ancestor. Using the merge-base instead of a raw
+two-dot diff prevents false positives when main advances after a PR branches off — only
+commits that belong to the PR contribute to the changed-file list.
+`git fetch origin "$BASE" --depth=1` in the guard ensures the base commit object is
+present (needed for fork PRs where the base ref may not be fetched automatically).
+If the merge-base or base SHA is unavailable (new branch / zero SHA / fetch error),
 the guard defaults to `run=true` (**safe-by-default** principle — prefer false positives
 over silently skipping valid checks).
 

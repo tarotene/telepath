@@ -1,6 +1,6 @@
 name: 'Rust Setup'
 description: >
-  Install Rust toolchain, optional system libs (libudev) and mold linker,
+  Install Rust toolchain, optional system libs (libudev),
   just task runner, and configure Swatinem/rust-cache.
   Used by host, tools, msrv, and firmware workflows.
 
