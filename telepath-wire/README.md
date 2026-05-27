@@ -25,7 +25,7 @@ borrow from the receive buffer for zero-copy deserialization.
 | `Response<'a>` | RPC reply from target to host; `payload` borrows from the receive buffer |
 | `PacketType` | Wire discriminant: `Request` / `Response` |
 | `ResponseStatus` | `Ok` / `AppError` / `SystemError` |
-| `WireError` | `PayloadTooLarge` / `SerdeError` / `UnknownPacketType` / `FramingError` |
+| `WireError` | `PayloadTooLarge` / `SerdeError(postcard::Error)` / `UnknownPacketType` / `FramingError` |
 
 ## Constants
 
@@ -140,9 +140,6 @@ cargo test -p telepath-wire
 
 - Upstream (target → host) framing uses COBS in this MVP. rzCOBS is
   planned for Stage C2 (see [#76](https://github.com/tarotene/telepath/issues/76)).
-- `WireError` does not carry the underlying `postcard::Error`. A
-  `From<postcard::Error> for WireError` impl is planned
-  (see [#77](https://github.com/tarotene/telepath/issues/77)).
 - `AppError` payload format is unspecified. Until resolved, callers must
   agree on an out-of-band convention
   (see [#78](https://github.com/tarotene/telepath/issues/78)).
