@@ -23,8 +23,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # Skip if no Rust source, manifest, or fmt-related config changed.
+      # Skip if no Rust source or fmt-related config changed.
       # The job always runs so the required status check is always reported.
       - name: Detect relevant changes
         id: guard
@@ -44,13 +46,22 @@ jobs:
             exit 0
           fi
           git fetch origin "$BASE" --depth=1 2>/dev/null || true
-          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          # Use merge-base so that commits merged into main after this PR branched off
+          # do not contribute to the diff (prevents false positives on docs-only PRs).
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
           # Empty diff (no changes / re-push): safe-by-default → run
           if [[ -z "$CHANGED" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          PATTERNS='^(.*\.rs$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|Justfile$|\.github/(workflows/fmt\.yml|actions/rust-setup/))'
+          # rustfmt is independent of Cargo.toml; only .rs source and config files matter.
+          PATTERNS='^(.*\.rs$|rust-toolchain\.toml$|Justfile$|\.github/(workflows/fmt\.yml|actions/rust-setup/))'
           if echo "$CHANGED" | grep -qE "$PATTERNS"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else

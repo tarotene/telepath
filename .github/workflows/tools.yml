@@ -25,6 +25,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect relevant changes
         id: guard
@@ -43,13 +45,20 @@ jobs:
             exit 0
           fi
           git fetch origin "$BASE" --depth=1 2>/dev/null || true
-          CHANGED="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
           if [[ -z "$CHANGED" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # tools/telepath + its upstream deps (wire, client, macros) + shared manifests
-          PATTERNS='^(telepath-(wire|client|macros)/|tools/telepath/|Justfile$|rust-toolchain\.toml$|\.github/(workflows/tools\.yml|actions/rust-setup/))|Cargo\.(toml|lock)$'
+          # tools/telepath + upstream deps (wire, client, macros) + root manifests.
+          # Root Cargo.lock included: workspace dep resolution changes can affect CLI builds.
+          PATTERNS='^(telepath-(wire|client|macros)/|tools/telepath/|Cargo\.(toml|lock)$|Justfile$|rust-toolchain\.toml$|\.github/(workflows/tools\.yml|actions/rust-setup/))'
           if echo "$CHANGED" | grep -qE "$PATTERNS"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
