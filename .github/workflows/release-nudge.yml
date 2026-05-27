@@ -1,0 +1,49 @@
+name: Release Nudge
+
+on:
+  schedule:
+    - cron: '0 9 * * MON' # Mondays 09:00 UTC (JST 18:00)
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nudge stale release PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NOW=$(date +%s)
+          THRESHOLD_DAYS=7
+
+          gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label release \
+            --state open \
+            --json number,createdAt,title \
+            --jq '.[]' \
+          | jq -r '[.number, .createdAt, .title] | @tsv' \
+          | while IFS=$'\t' read -r PR_NUM CREATED_AT _TITLE; do
+              CREATED_EPOCH=$(date -d "$CREATED_AT" +%s)
+              DAYS_OPEN=$(( (NOW - CREATED_EPOCH) / 86400 ))
+              [ "$DAYS_OPEN" -lt "$THRESHOLD_DAYS" ] && continue
+
+              # Skip if already nudged within the last 7 days
+              WEEK_AGO=$(date -d '7 days ago' --iso-8601)
+              RECENT=$(gh pr view "$PR_NUM" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json comments \
+                --jq "[.comments[] | select(.body | contains(\"<!-- release-nudge -->\")) | select(.createdAt > \"$WEEK_AGO\")] | length")
+              [ "$RECENT" -gt 0 ] && continue
+
+              NUDGE_BODY=$(printf '<!-- release-nudge -->\n⏰ **Release nudge** — This release PR has been open for **%d days**.\n\nIf the milestone is complete, run `just bump-excluded` and merge when ready.\nSee [Release scheduling model](https://github.com/tarotene/telepath/blob/main/AGENTS.md#release-scheduling-model-hybrid) for the hybrid release policy.' "$DAYS_OPEN")
+              gh pr comment "$PR_NUM" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body "$NUDGE_BODY"
+              echo "Nudged PR #${PR_NUM} (open ${DAYS_OPEN} days)"
+            done
