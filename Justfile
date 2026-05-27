@@ -100,11 +100,11 @@ host-pty-smoke:
 ci: fmt-check clippy test host-pty-smoke mcp-test
 
 # Preview what the next release would update, then restore the working tree.
-# Requires: cargo install --locked release-plz
+# Requires: cargo install --locked release-plz; gh auth login (for PR number lookup)
 release-preview:
     #!/usr/bin/env bash
     set -euo pipefail
-    release-plz update
+    GIT_TOKEN=$(gh auth token) release-plz update --allow-dirty
     git diff
     git restore .
 
