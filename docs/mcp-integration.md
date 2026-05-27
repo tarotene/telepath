@@ -130,5 +130,4 @@ then use the slave PTY path printed as `HOST_PTY_SERVER_PATH=...` with `--port`.
 
 ## Known limitations and followups
 
-- Schema cache invalidation on firmware reconnect — see #37
 - Inspector E2E browser test removed during initial PR; recovery tracked in #42
