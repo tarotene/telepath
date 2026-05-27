@@ -58,9 +58,8 @@ pub struct CommandMetadata {
 }
 ```
 
-`args_schema` / `ret_schema` write postcard-encoded `NamedType` bytes; `arg_names`
-exposes the original parameter identifiers so the discovery protocol can surface
-human-readable signatures.
+For details on the generated `invoke`, `args_schema`, and `ret_schema` functions,
+see [telepath-macros § Signature contract](../telepath-macros/README.md#signature-contract).
 
 Register commands by passing a `&'static [CommandMetadata]` to `new()`.
 Use `telepath_server::commands()` (linkme-collected at link time) to
