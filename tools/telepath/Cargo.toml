@@ -37,7 +37,7 @@ clap            = { version = "4", features = ["derive", "env"] }
 thiserror       = "1"
 
 # Optional: shell
-rustyline = { version = "15", optional = true }
+rustyline = { version = "17", optional = true }
 
 # Optional: mcp
 rmcp               = { version = "1", features = ["server", "transport-io", "macros"], optional = true }
