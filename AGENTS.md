@@ -15,6 +15,38 @@
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
 | `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); `default = ["shell", "mcp", "rtt"]`, `serial` opt-in | native (`std`) |
 
+## Documentation Source of Truth
+
+This repository uses a layered documentation model. Each topic has a single
+canonical home (Source of Truth, SoT); all other documents link to it instead
+of duplicating content. Audit cycles (latest: 2026-05, #127) verify compliance.
+
+**Layering rules:**
+- `AGENTS.md` = SoT for build commands, workspace structure, CI gates,
+  MSRV policy, git hooks, and workflow rules
+- Crate-level `README.md` = SoT for that crate's API surface, usage examples,
+  and Limitations
+- Root `README.md` = user-facing narrative; quickstart lives here, other
+  topics link to AGENTS or crate READMEs
+
+**Topic → SoT mapping:**
+
+| Topic | SoT | Other locations |
+|-------|-----|-----------------|
+| Build commands | AGENTS.md § Build Commands | README.md quickstart |
+| Workspace structure | AGENTS.md § Workspace Overview | README.md (summary + link) |
+| `#[command]` signature contract | `telepath-macros/README.md` § Signature contract | AGENTS.md (summary), `telepath-server/README.md` (link) |
+| `#[resource]` injection pattern | `examples/nrf52840-ping/README.md` § Resource injection | AGENTS.md (prose only, no code) |
+| Server-side usage | `telepath-server/README.md` § Usage | README.md (teaser + link) |
+| Quickstart / host-pty-smoke | README.md § Quickstart | `tools/telepath/README.md` (link), `examples/host-pty-server/README.md` (link) |
+| Git hooks | AGENTS.md § Git Hooks | README.md (single command + link) |
+| MSRV policy | AGENTS.md § MSRV policy | README.md (defers to AGENTS) |
+| CI gates | AGENTS.md § Required CI gates | — |
+
+**Limitations sections**: each crate README's `## Limitations` MUST reference
+an open issue and MUST be removed in the same PR that implements the feature
+(see README Limitations Lifecycle in the user-global AGENTS.md).
+
 ## Build Commands
 
 ```
