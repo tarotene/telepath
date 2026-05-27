@@ -7,7 +7,7 @@
     ":timezone(Asia/Tokyo)"
   ],
   "constraints": {
-    "rust": "1.95.0"
+    "rust": "1.88.0"
   },
   "schedule": ["before 6am on monday"],
   "commitMessagePrefix": "chore(deps):",
@@ -47,6 +47,13 @@
       "matchPackageNames": ["probe-rs"],
       "matchUpdateTypes": ["patch"],
       "groupName": "probe-rs (synchronized)"
+    },
+    {
+      "description": "rustyline: v18+ requires Rust >=1.89 (File::lock stabilization). Surface major bumps on Dependency Dashboard for manual MSRV re-evaluation.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["rustyline"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
     },
     {
       "description": "Embedded HAL (0.x): split minor from patch for careful review; firmware smoke test required",
