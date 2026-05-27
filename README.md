@@ -188,28 +188,11 @@ package manager.
 
 ## Build
 
-```bash
-# Host workspace
-cargo build --workspace
-
-# Run host tests
-cargo test --workspace
-
-# Firmware example — must cd so .cargo/config.toml is discovered
-cd examples/nrf52840-ping && cargo build --release
-
-# Flash to hardware (downloads and exits; probe is released immediately)
-cd examples/nrf52840-ping && cargo run --release
-
-# Unified CLI — must cd because it is workspace-excluded
-cd tools/telepath && cargo build
-
-# 1-shot ping (firmware must already be flashed)
-cd tools/telepath && cargo run -- shell --exec ping
-
-# Interactive REPL
-cd tools/telepath && cargo run -- shell
-```
+The full list of build and test commands — host workspace, firmware example,
+the workspace-excluded `tools/telepath` CLI, format/clippy gates, and the
+`just ci` aggregator — lives in
+[AGENTS.md § Build Commands](AGENTS.md#build-commands).
+For first-time setup, run through [Quickstart](#quickstart) above first.
 
 > **Pre-built binaries:** Host-side tools (`telepath shell`, `telepath mcp`)
 > are currently distributed as source only. Pre-built binary distribution
