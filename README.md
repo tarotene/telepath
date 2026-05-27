@@ -156,11 +156,8 @@ Run once per clone to wire them up:
 git config --local core.hooksPath .githooks
 ```
 
-| Hook | Runs on | Action | Typical wall time |
-|------|---------|--------|-------------------|
-| `commit-msg` | every `git commit` | `cog verify` (Conventional Commits) | < 1 s |
-| `pre-commit` | every `git commit` | `just fmt-check` | < 1 s |
-| `pre-push` | every `git push` | `just clippy` + `just test` | ~30 s |
+The three hooks (`commit-msg`, `pre-commit`, `pre-push`) and their expected
+wall times are documented in [AGENTS.md § Git Hooks](AGENTS.md#git-hooks).
 
 **Why this split?** Commits happen frequently, so `pre-commit` runs only the
 instant format check. Pushes are less frequent and signal intent to share code,
