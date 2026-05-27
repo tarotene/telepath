@@ -13,6 +13,25 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
+## [0.1.0] — 2026-05-27
+
+### Added
+
+- **macros**: Detect cross-command cmd_id collisions at build time ([#98](https://github.com/tarotene/telepath/pull/98))
+
+- **mcp**: Named-argument mapping for tuple-schema commands ([#59](https://github.com/tarotene/telepath/pull/59))
+
+- **[BREAKING]** Role-based rename — server/client, flat layout, workspace consolidation ([#32](https://github.com/tarotene/telepath/pull/32))
+
+
+### Other
+
+- **toolchain**: Declare MSRV 1.88 across workspace and excluded crates ([#105](https://github.com/tarotene/telepath/pull/105))
+
+- Thread Issue links through README Limitations sections ([#85](https://github.com/tarotene/telepath/pull/85))
+
+- Purge loopback zombies and fix mcp-server/shell docs post-#66 ([#81](https://github.com/tarotene/telepath/pull/81))
+
 
 All entries below represent pre-0.1.0 history included here so that
 release-plz does not retroactively generate a single oversized release entry.
