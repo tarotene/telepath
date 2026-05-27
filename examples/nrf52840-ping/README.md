@@ -16,7 +16,7 @@ RPC requests.
   ```
 - [probe-rs](https://probe.rs/) for flashing and RTT:
   ```
-  cargo install probe-rs-tools
+  cargo install --locked probe-rs-tools
   ```
 - nRF52840-DK connected via USB (J-Link on-board)
 
