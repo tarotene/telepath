@@ -209,35 +209,20 @@ cd tools/telepath && cargo run -- shell --exec ping
 
 ### Server side (target)
 
-```toml
-# Cargo.toml
-[dependencies]
-telepath-server = { git = "https://github.com/tarotene/telepath", branch = "main" }
-postcard          = { version = "1", default-features = false }
-```
+Annotate functions with `#[command]` and pass them to `TelepathServer::new` in a `poll()` loop:
 
 ```rust
 use telepath_server::{command, TelepathServer};
 
-// 1. Annotate commands with #[command]. The macro generates a type-erased shim,
-//    a CommandMetadata const, and a linkme registration — no boilerplate required.
 #[command]
 fn ping() -> u32 { 0xDEAD_BEEF }
 
-// Peripheral state can be injected type-safely with #[resource]:
-// #[command]
-// fn set_led(#[resource] led: &mut MyLed, on: bool) -> bool { led.set(on) }
-
-// 2. Implement `transport::Transport` for your byte-stream peripheral
-//    (UART, RTT, USB …).
-//    Non-blocking: `fn read(&mut self, &mut [u8]) -> usize` / `fn write(&mut self, &[u8]) -> usize`.
-
-let mut server = TelepathServer::<MyTransport, 512>::new(
-    transport,
-    telepath_server::commands(), // linkme-collected at link time
-);
+let mut server = TelepathServer::<MyTransport, 512>::new(transport, telepath_server::commands());
 loop { server.poll(); }
 ```
+
+See [telepath-server § Usage](telepath-server/README.md#usage) for the full recipe including
+`#[resource]` injection and the postcard direct-dependency requirement.
 
 ### Host side
 
