@@ -226,6 +226,21 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
 
 See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, and recovery procedures.
 
+#### Release scheduling model (hybrid)
+
+| Change type | Version | When to merge the Release PR |
+|-------------|---------|------------------------------|
+| Bug fix / non-breaking improvement | Patch (`v0.X.Y+1`) | As soon as it is ready |
+| Feature addition (non-breaking) | Minor (`v0.X+1.0`) | When the target Milestone is 100% closed |
+| Breaking change | Minor (`v0.X+1.0`, pre-1.0) | **Always bundle into a Minor Milestone** |
+
+**Wire-protocol breaking changes** (e.g. rzCOBS framing) require firmware and host to update
+simultaneously; never release them in isolation.
+
+A `release-nudge` workflow (`.github/workflows/release-nudge.yml`) posts a weekly comment on
+any Release PR that has been open for more than 7 days. If no Release PR exists despite
+qualifying commits on `main`, the release-plz workflow failed — see `docs/releasing.md § Retriggering`.
+
 ## Toolchain
 
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
