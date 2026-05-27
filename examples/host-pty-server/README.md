@@ -27,13 +27,7 @@ cd tools/telepath
 cargo run --no-default-features --features shell,serial -- shell --transport serial --port /dev/pts/3 --exec ping
 ```
 
-Or use `just host-pty-smoke` to run the full two-process smoke automatically.
-
-## Expected output (smoke)
-
-```
-ping -> 0xDEADBEEF
-```
+For the automated two-process smoke, see [Quickstart in the root README](../../README.md#quickstart).
 
 ## What this demonstrates
 

@@ -7,18 +7,7 @@ Host-side CLI for Telepath RPC servers. Provides two subcommands:
 
 Both subcommands share the same transport layer and discover commands at runtime via the Command Discovery Protocol — no hardcoded command definitions required.
 
-## Quick start (hardware-free)
-
-```bash
-# From repo root: builds host-pty-server + serial-feature CLI, runs smoke
-just host-pty-smoke
-```
-
-Expected output:
-
-```
-ping -> 0xDEADBEEF
-```
+For a hardware-free smoke run, see [Quickstart in the root README](../../README.md#quickstart).
 
 ## Build
 
