@@ -173,16 +173,22 @@ pub struct DiscoveryPage<'a> {
 // ---------------------------------------------------------------------------
 
 /// Errors that can arise during wire-level encoding or decoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireError {
     /// Payload exceeded [`MAX_PAYLOAD_SIZE`].
     PayloadTooLarge,
-    /// postcard serialization / deserialization failed.
-    SerdeError,
+    /// postcard serialization / deserialization failed; carries the underlying cause.
+    SerdeError(postcard::Error),
     /// A reserved or unknown packet type discriminant was received.
     UnknownPacketType,
     /// The framing delimiter was encountered in an unexpected position.
     FramingError,
+}
+
+impl From<postcard::Error> for WireError {
+    fn from(e: postcard::Error) -> Self {
+        WireError::SerdeError(e)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -214,5 +220,12 @@ mod tests {
     #[test]
     fn max_payload_size() {
         assert_eq!(MAX_PAYLOAD_SIZE, 256);
+    }
+
+    #[test]
+    fn wire_error_from_postcard_error() {
+        let pe = postcard::from_bytes::<u32>(&[]).unwrap_err();
+        let we: WireError = pe.clone().into();
+        assert_eq!(we, WireError::SerdeError(pe));
     }
 }

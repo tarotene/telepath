@@ -65,8 +65,8 @@ pub enum HostError {
     SystemError,
     /// The target reported an application-level error.
     AppError(Vec<u8>),
-    /// postcard serialization or deserialization failed.
-    SerdeError,
+    /// postcard serialization or deserialization failed; carries the underlying cause.
+    SerdeError(postcard::Error),
     /// The request args exceeded [`MAX_PAYLOAD_SIZE`].
     RequestPayloadTooLarge,
     /// The response payload exceeded [`MAX_PAYLOAD_SIZE`].
@@ -81,6 +81,12 @@ pub enum HostError {
     /// A discovery page returned unexpected metadata (wrong echoed offset or
     /// inconsistent total), indicating a misbehaving firmware.
     DiscoveryProtocolError,
+}
+
+impl From<postcard::Error> for HostError {
+    fn from(e: postcard::Error) -> Self {
+        HostError::SerdeError(e)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -109,14 +115,14 @@ impl SchemaEntry {
     pub fn decoded_args_schema(
         &self,
     ) -> Result<postcard_schema::schema::owned::OwnedNamedType, HostError> {
-        postcard::from_bytes(&self.args_schema).map_err(|_| HostError::SerdeError)
+        Ok(postcard::from_bytes(&self.args_schema)?)
     }
 
     /// Decode the raw return-schema bytes into an `OwnedNamedType`.
     pub fn decoded_ret_schema(
         &self,
     ) -> Result<postcard_schema::schema::owned::OwnedNamedType, HostError> {
-        postcard::from_bytes(&self.ret_schema).map_err(|_| HostError::SerdeError)
+        Ok(postcard::from_bytes(&self.ret_schema)?)
     }
 }
 
@@ -226,11 +232,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         let mut offset = 0u16;
         let mut expected_total: Option<u16> = None;
         loop {
-            let req_payload = postcard::to_allocvec(&DiscoveryRequest { offset })
-                .map_err(|_| HostError::SerdeError)?;
+            let req_payload = postcard::to_allocvec(&DiscoveryRequest { offset })?;
             let raw = self.call_raw(CMD_ID_DISCOVERY, &req_payload)?;
-            let page: DiscoveryPage<'_> =
-                postcard::from_bytes(&raw).map_err(|_| HostError::SerdeError)?;
+            let page: DiscoveryPage<'_> = postcard::from_bytes(&raw)?;
 
             // Validate that the firmware echoed the offset we requested.
             if page.offset != offset {
@@ -243,11 +247,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
                 _ => {}
             }
 
-            let (count, mut rest): (u32, &[u8]) =
-                postcard::take_from_bytes(page.entries).map_err(|_| HostError::SerdeError)?;
+            let (count, mut rest): (u32, &[u8]) = postcard::take_from_bytes(page.entries)?;
             for _ in 0..count {
-                let (entry, next): (DiscoveryEntry<'_>, &[u8]) =
-                    postcard::take_from_bytes(rest).map_err(|_| HostError::SerdeError)?;
+                let (entry, next): (DiscoveryEntry<'_>, &[u8]) = postcard::take_from_bytes(rest)?;
                 self.schema_cache.insert(SchemaEntry {
                     name: entry.name.to_owned(),
                     cmd_id: entry.id,
@@ -303,7 +305,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             cmd_id,
             args,
         };
-        let serialized = postcard::to_allocvec(&req).map_err(|_| HostError::SerdeError)?;
+        let serialized = postcard::to_allocvec(&req)?;
 
         // COBS encode + 0x00 delimiter.
         let encoded_cap = cobs::max_encoding_length(serialized.len()) + 1;
@@ -354,8 +356,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         decoded.truncate(m);
 
         // Deserialize Response.
-        let resp: telepath_wire::Response<'_> =
-            postcard::from_bytes(&decoded).map_err(|_| HostError::SerdeError)?;
+        let resp: telepath_wire::Response<'_> = postcard::from_bytes(&decoded)?;
 
         // Validate packet kind and payload size.
         if resp.kind != telepath_wire::PacketType::Response {
