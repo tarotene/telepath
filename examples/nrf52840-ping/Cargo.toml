@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 telepath-server = { path = "../../telepath-server" }
 postcard = { version = "1", default-features = false }
-heapless = { version = "0.8", default-features = false, features = ["serde"] }
+heapless = { version = "0.9", default-features = false, features = ["serde"] }
 
 embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread"] }
 embassy-nrf = { version = "0.3", features = [

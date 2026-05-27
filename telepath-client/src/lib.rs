@@ -348,7 +348,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
 
         // COBS decode.
         let mut decoded = vec![0u8; raw_frame.len()];
-        let m = cobs::decode(&raw_frame, &mut decoded).map_err(|_| HostError::FramingError)?;
+        let m = cobs::decode(&raw_frame, &mut decoded)
+            .map(|r| r.frame_size())
+            .map_err(|_| HostError::FramingError)?;
         decoded.truncate(m);
 
         // Deserialize Response.
