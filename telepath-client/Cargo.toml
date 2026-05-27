@@ -14,7 +14,7 @@ serial = ["dep:serialport"]
 telepath-wire = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["alloc"] }
-cobs = "0.2"
+cobs = "0.5"
 postcard-schema = { workspace = true, features = ["use-std"] }
 anyhow = "1"
 # probe-rs 0.31 is the latest stable release (2026-01-17). Pin to this minor.

@@ -29,7 +29,7 @@ telepath-client = { path = "../../telepath-client" }
 telepath-wire   = { path = "../../telepath-wire" }
 postcard        = { version = "1", features = ["alloc"] }
 postcard-schema = { version = "0.2", features = ["use-std", "heapless-v0_8"] }
-heapless        = { version = "0.8", default-features = false, features = ["serde"] }
+heapless        = { version = "0.9", default-features = false, features = ["serde"] }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 anyhow          = "1"
