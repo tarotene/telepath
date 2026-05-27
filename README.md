@@ -169,7 +169,7 @@ git config --local core.hooksPath .githooks
 **Why this split?** Commits happen frequently, so `pre-commit` runs only the
 instant format check. Pushes are less frequent and signal intent to share code,
 so `pre-push` runs the slower static analysis and test suite. The full CI gate
-(`just ci`) additionally runs the PTY-based `host-pty-server` smoke and the `telepath` CLI tests
+(`just ci`) additionally runs the PTY-based `host-pty-server` smoke (`host-pty-smoke`) and the `telepath` CLI tests
 (`mcp-test`), and is intentionally left to CI — see [CI / Quality gates](#ci--quality-gates). `commit-msg` fires before `pre-commit` and validates only the message format via cocogitto — instant feedback with no build step.
 
 ### Troubleshooting
