@@ -3,7 +3,7 @@
 Reference **server** deployment on nRF52840-DK (Embassy + RTT transport).
 
 Minimal Embassy firmware for the [nRF52840-DK](https://www.nordicsemi.com/Products/Development-hardware/nRF52840-DK)
-that demonstrates the Telepath RPC stack over RTT.  Registers nine commands
+that demonstrates the Telepath RPC stack over RTT.  Registers twelve commands
 covering on-board LEDs, buttons, and on-chip sensor/ID peripherals unique to
 real silicon, then calls `server.poll()` in a tight loop to handle incoming
 RPC requests.
@@ -99,6 +99,9 @@ runtime by any connected host (MCP server, shell, or client library).
 | `temp_read` | `() -> i16` | Die temperature in 0.25 °C units from the on-chip TEMP peripheral. Divide by 4 for °C (e.g. 100 → 25 °C). Operating range: −160…340 (−40 °C to 85 °C). |
 | `rng_u32` | `() -> u32` | Hardware true random u32 with bias correction. Each call produces 4 fresh bytes from the silicon RNG; values should differ across calls. |
 | `saadc_vdd_mv` | `() -> u16` | Supply voltage in millivolts via the SAADC VDD internal channel. ~3300 mV under USB power; ~3000 mV from a coin cell. |
+| `add` | `(a: i32, b: i32) -> i32` | Returns `a + b`. |
+| `crc32` | `(data: Vec<u8>) -> u32` | CRC32 of the input byte array. |
+| `echo` | `(data: Vec<u8>) -> Vec<u8>` | Returns the input unchanged. |
 
 All four LEDs (LED1–LED4) are fully under RPC control.
 
