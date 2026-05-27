@@ -297,8 +297,10 @@ over silently skipping valid checks).
 - All Renovate PRs require human review; automerge is disabled.
 - `rangeStrategy: "auto"` (= `update-lockfile`) keeps `Cargo.toml` semver ranges stable; only `Cargo.lock` is bumped.
 - `probe-rs` is intentionally pinned to `0.31.x` in `telepath-client/Cargo.toml` and `tools/telepath/Cargo.toml`.
-  Patch updates are PR'd as a synchronized group. Major/minor bumps are suppressed. To lift the pin, remove
-  the two `enabled: false` packageRules in `renovate.json` and update both manifests together.
+  Patch updates are PR'd as a synchronized group. Major/minor bumps require Dependency Dashboard approval.
+  To lift the pin, remove the `dependencyDashboardApproval: true` packageRule for probe-rs in
+  `renovate.json` and update both `telepath-client/Cargo.toml` and `tools/telepath/Cargo.toml` to allow
+  the desired version range.
 - Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, etc.) carry the `needs-smoke-test` label.
   Run `just firmware-ping` on a connected nRF52840-DK and record the result in the PR before merging.
 - `dtolnay/rust-toolchain@stable` is excluded from Renovate (channel reference, not a version tag).
