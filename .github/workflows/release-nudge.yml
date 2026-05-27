@@ -7,6 +7,7 @@ on:
 
 permissions:
   pull-requests: write
+  issues: write
 
 jobs:
   nudge:
@@ -40,12 +41,9 @@ jobs:
                 --jq "[.comments[] | select(.body | contains(\"<!-- release-nudge -->\")) | select(.createdAt > \"$WEEK_AGO\")] | length")
               [ "$RECENT" -gt 0 ] && continue
 
+              NUDGE_BODY=$(printf '<!-- release-nudge -->\n⏰ **Release nudge** — This release PR has been open for **%d days**.\n\nIf the milestone is complete, run `just bump-excluded` and merge when ready.\nSee [Release scheduling model](https://github.com/tarotene/telepath/blob/main/AGENTS.md#release-scheduling-model-hybrid) for the hybrid release policy.' "$DAYS_OPEN")
               gh pr comment "$PR_NUM" \
                 --repo "$GITHUB_REPOSITORY" \
-                --body "<!-- release-nudge -->
-          ⏰ **Release nudge** — This release PR has been open for **${DAYS_OPEN} days**.
-
-          If the milestone is complete, run \`just bump-excluded\` and merge when ready.
-          See [AGENTS.md § Release scheduling model](../AGENTS.md) for the hybrid release policy."
+                --body "$NUDGE_BODY"
               echo "Nudged PR #${PR_NUM} (open ${DAYS_OPEN} days)"
             done

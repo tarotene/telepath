@@ -230,9 +230,9 @@ See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, an
 
 | Change type | Version | When to merge the Release PR |
 |-------------|---------|------------------------------|
-| Bug fix / non-breaking improvement | Patch (`v0.X.Y+1`) | As soon as it is ready |
-| Feature addition (non-breaking) | Minor (`v0.X+1.0`) | When the target Milestone is 100% closed |
-| Breaking change | Minor (`v0.X+1.0`, pre-1.0) | **Always bundle into a Minor Milestone** |
+| Bug fix / non-breaking improvement | Patch (`v0.X.(Y+1)`) | As soon as it is ready |
+| Feature addition (non-breaking) | Minor (`v0.(X+1).0`) | When the target Milestone is 100% closed |
+| Breaking change | Minor (`v0.(X+1).0`, pre-1.0) | **Always bundle into a Minor Milestone** |
 
 **Wire-protocol breaking changes** (e.g. rzCOBS framing) require firmware and host to update
 simultaneously; never release them in isolation.
