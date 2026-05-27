@@ -46,15 +46,11 @@ sequenceDiagram
 
 ### Workspace structure
 
-| Path | Role |
-|------|------|
-| `telepath-wire` | Shared wire types — `no_std`, no alloc |
-| `telepath-macros` | `#[command]` proc-macro |
-| `telepath-server` | Target-side RPC server — `no_std` |
-| `telepath-client` | Host-side RPC client — `std` |
-| `examples/host-pty-server` | Host-side server deployment over a PTY pair — hardware-free regression |
-| `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK (workspace-excluded) |
-| `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); workspace-excluded |
+Telepath is a five-crate workspace (`telepath-wire`, `telepath-macros`,
+`telepath-server`, `telepath-client`, `examples/host-pty-server`) plus two
+workspace-excluded crates (`tools/telepath`, `examples/nrf52840-ping`).
+See [AGENTS.md § Workspace Overview](AGENTS.md#workspace-overview) for the
+full table with target triples and Cargo feature flags.
 
 ### Framing
 
