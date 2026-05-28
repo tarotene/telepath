@@ -20,8 +20,8 @@ pub mod rtt_transport;
 pub mod serial_transport;
 
 use telepath_wire::{
-    framing::MAX_FRAME_SIZE, DiscoveryEntry, DiscoveryPage, DiscoveryRequest, CMD_ID_DISCOVERY,
-    MAX_PAYLOAD_SIZE,
+    framing::{rzcobs_decode, MAX_FRAME_SIZE},
+    DiscoveryEntry, DiscoveryPage, DiscoveryRequest, CMD_ID_DISCOVERY, MAX_PAYLOAD_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -319,7 +319,7 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             .write_all(&encoded[..n + 1])
             .map_err(|e| HostError::Io(e.to_string()))?;
 
-        // Receive response bytes until 0x00 delimiter (COBS frame boundary).
+        // Receive response bytes until 0x00 delimiter (rzCOBS frame boundary).
         // Read in chunks to avoid a USB roundtrip per byte on slow transports.
         let mut raw_frame: Vec<u8> = Vec::new();
         'recv: loop {
@@ -349,11 +349,9 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             self.read_buf.extend_from_slice(&chunk[..n]);
         }
 
-        // COBS decode.
-        let mut decoded = vec![0u8; raw_frame.len()];
-        let m = cobs::decode(&raw_frame, &mut decoded)
-            .map(|r| r.frame_size())
-            .map_err(|_| HostError::FramingError)?;
+        // rzCOBS decode (upstream framing; decoded length may exceed encoded length).
+        let mut decoded = vec![0u8; MAX_FRAME_SIZE];
+        let m = rzcobs_decode(&raw_frame, &mut decoded).map_err(|_| HostError::FramingError)?;
         decoded.truncate(m);
 
         // Deserialize Response.
@@ -896,9 +894,9 @@ mod tests {
             .iter()
             .position(|&b| b == 0x00)
             .expect("no delimiter");
-        let mut decoded = [0u8; 256];
+        let mut decoded = [0u8; 512];
         let m =
-            telepath_wire::framing::cobs_decode(&response_bytes[..delim], &mut decoded).unwrap();
+            telepath_wire::framing::rzcobs_decode(&response_bytes[..delim], &mut decoded).unwrap();
         let resp: telepath_wire::Response<'_> = postcard::from_bytes(&decoded[..m]).unwrap();
         assert_eq!(resp.status, telepath_wire::ResponseStatus::Ok);
         let val: u32 = postcard::from_bytes(resp.payload).unwrap();

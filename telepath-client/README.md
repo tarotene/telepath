@@ -6,7 +6,7 @@ target running `telepath-server` over any byte-stream transport
 
 ## Overview
 
-`TelepathClient<T>` handles COBS framing, postcard serialization, sequence
+`TelepathClient<T>` handles framing (COBS downstream, rzCOBS upstream), postcard serialization, sequence
 numbering, and the Command Discovery Protocol (CDP). The typed `call::<Args, Ret>`
 method is the primary API for host applications; `call_raw` remains available
 as a low-level escape hatch.
@@ -79,7 +79,7 @@ println!("ping -> 0x{:08X}", result);  // ping -> 0xDEADBEEF
 | `RequestPayloadTooLarge` | `args` exceeded `MAX_PAYLOAD_SIZE` (256 B) | Reduce payload |
 | `ResponsePayloadTooLarge` | Response exceeded `MAX_PAYLOAD_SIZE` | Check firmware shim |
 | `FrameTooLarge` | Received frame exceeded `MAX_FRAME_SIZE` (512 B) | Firmware issue |
-| `FramingError` | Malformed COBS frame from target | Check transport integrity |
+| `FramingError` | Malformed rzCOBS frame from target | Check transport integrity |
 | `DiscoveryStalled` | Discovery page returned zero entries mid-stream | Firmware bug |
 | `DiscoveryProtocolError` | Discovery page returned inconsistent metadata | Firmware bug |
 
@@ -132,8 +132,6 @@ cargo test -p telepath-client
 
 ## Limitations
 
-- Upstream rzCOBS is not yet supported; both framing directions use COBS
-  (see [#76](https://github.com/tarotene/telepath/issues/76)).
 - `SchemaCache` stores schema bytes as `Vec<u8>`; use
   `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` to obtain
   `postcard_schema::schema::owned::OwnedNamedType`. MCP tool descriptors are

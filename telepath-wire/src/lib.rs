@@ -6,7 +6,7 @@
 //!
 //! # Protocol overview
 //!
-//! - Framing: COBS both directions in current MVP; rzCOBS upstream planned for Stage C2
+//! - Framing: COBS downstream (Host→Target), rzCOBS upstream (Target→Host); 0x00 delimiter both directions
 //! - Serialization: postcard (little-endian, varint-compressed)
 //! - Packet type discriminant: 2-valued (Request / Response), per ONC RPC CALL/REPLY model
 //! - Errors: expressed via `ResponseStatus`, not as a separate packet type

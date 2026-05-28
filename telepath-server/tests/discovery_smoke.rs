@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 use telepath_server::{command, commands, transport, TelepathServer};
-use telepath_wire::framing::{cobs_decode, cobs_encode};
+use telepath_wire::framing::{cobs_encode, rzcobs_decode};
 use telepath_wire::{
     DiscoveryEntry, DiscoveryPage, PacketType, Request, Response, ResponseStatus, CMD_ID_DISCOVERY,
 };
@@ -78,14 +78,14 @@ fn discovery_returns_registered_commands() {
     let mut server = TelepathServer::<_, 512>::new(transport, commands());
     server.poll();
 
-    // ── COBS-decode the response frame ────────────────────────────────────
+    // ── rzCOBS-decode the response frame ─────────────────────────────────
     let tx = tx_shared.borrow();
     let delim = tx
         .iter()
         .position(|&b| b == 0x00)
         .expect("no frame delimiter");
     let mut decoded = [0u8; 512];
-    let dl = cobs_decode(&tx[..delim], &mut decoded).unwrap();
+    let dl = rzcobs_decode(&tx[..delim], &mut decoded).unwrap();
     let resp: Response<'_> = postcard::from_bytes(&decoded[..dl]).unwrap();
 
     assert_eq!(resp.seq_no, 7);
