@@ -129,15 +129,40 @@ for byte in stream {
 }
 ```
 
+## AppError payload format
+
+When `Response.status == ResponseStatus::AppError`, `Response.payload`
+contains a postcard-serialized [`AppErrorPayload`]:
+
+| Field | Type | Wire encoding |
+|-------|------|---------------|
+| `code` | `u16` | postcard varint (1–3 bytes) |
+| `message` | `&str` | postcard varint(len) + UTF-8 bytes |
+
+Use the `encode_app_error` / `decode_app_error` helpers; both are `no_std` /
+`no-alloc` and borrow the `message` slice from the receive buffer.
+
+The `code` namespace is application-defined. Reserve `code = 0` as a
+catch-all "unspecified application error" when no finer classification is
+available.
+
+```rust
+use telepath_wire::{AppErrorPayload, encode_app_error, decode_app_error};
+
+// Encode (e.g. on the server, into a stack buffer)
+let err = AppErrorPayload { code: 42, message: "sensor not ready" };
+let mut buf = [0u8; 64];
+let n = encode_app_error(&err, &mut buf).expect("encode failed");
+
+// Decode (e.g. on the host, borrowing from the response payload)
+let decoded = decode_app_error(&buf[..n]).expect("decode failed");
+assert_eq!(decoded.code, 42);
+assert_eq!(decoded.message, "sensor not ready");
+```
+
 ## Build
 
 ```
 cargo build -p telepath-wire
 cargo test -p telepath-wire
 ```
-
-## Limitations
-
-- `AppError` payload format is unspecified. Until resolved, callers must
-  agree on an out-of-band convention
-  (see [#78](https://github.com/tarotene/telepath/issues/78)).

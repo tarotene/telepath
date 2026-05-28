@@ -181,6 +181,53 @@ pub struct DiscoveryPage<'a> {
 }
 
 // ---------------------------------------------------------------------------
+// AppError payload
+// ---------------------------------------------------------------------------
+
+/// Payload carried inside a [`Response`] when `status == ResponseStatus::AppError`.
+///
+/// Encoded as postcard `(varint(code), varint(len), len-bytes UTF-8 message)`.
+/// Borrows the message slice from the receive buffer for zero-copy decode on
+/// targets that cannot allocate.
+///
+/// # Wire layout
+///
+/// | Field | Type | Encoding |
+/// |-------|------|----------|
+/// | `code` | `u16` | postcard varint (1–3 bytes) |
+/// | `message` | `&str` | postcard varint(len) + UTF-8 bytes |
+///
+/// The `code` namespace is application-defined. Reserve `0` as a catch-all
+/// "unspecified application error" when no finer classification is needed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppErrorPayload<'a> {
+    /// Application-defined error code.
+    pub code: u16,
+    /// Human-readable error message, borrowed from the receive buffer.
+    #[serde(borrow)]
+    pub message: &'a str,
+}
+
+/// Encode an [`AppErrorPayload`] into `out`, returning the number of bytes written.
+///
+/// # Errors
+///
+/// Returns [`WireError::SerdeError`] if the payload does not fit in `out`.
+pub fn encode_app_error(payload: &AppErrorPayload<'_>, out: &mut [u8]) -> Result<usize, WireError> {
+    let written = postcard::to_slice(payload, out)?;
+    Ok(written.len())
+}
+
+/// Decode an [`AppErrorPayload`] from `bytes`, borrowing the message slice.
+///
+/// # Errors
+///
+/// Returns [`WireError::SerdeError`] if `bytes` is malformed.
+pub fn decode_app_error(bytes: &[u8]) -> Result<AppErrorPayload<'_>, WireError> {
+    Ok(postcard::from_bytes(bytes)?)
+}
+
+// ---------------------------------------------------------------------------
 // WireError
 // ---------------------------------------------------------------------------
 
@@ -239,5 +286,41 @@ mod tests {
         let pe = postcard::from_bytes::<u32>(&[]).unwrap_err();
         let we: WireError = pe.clone().into();
         assert_eq!(we, WireError::SerdeError(pe));
+    }
+
+    #[test]
+    fn app_error_payload_roundtrip() {
+        let original = AppErrorPayload {
+            code: 42,
+            message: "sensor not ready",
+        };
+        let mut buf = [0u8; 64];
+        let n = encode_app_error(&original, &mut buf).expect("encode failed");
+        let decoded = decode_app_error(&buf[..n]).expect("decode failed");
+        assert_eq!(decoded.code, original.code);
+        assert_eq!(decoded.message, original.message);
+    }
+
+    #[test]
+    fn app_error_payload_wire_layout() {
+        // code=42 (0x2A, 1 varint byte), message="hi" (len=2, bytes 0x68 0x69)
+        let payload = AppErrorPayload {
+            code: 42,
+            message: "hi",
+        };
+        let mut buf = [0u8; 16];
+        let n = encode_app_error(&payload, &mut buf).expect("encode failed");
+        assert_eq!(&buf[..n], &[0x2A, 0x02, b'h', b'i']);
+    }
+
+    #[test]
+    fn app_error_payload_buffer_too_small() {
+        let payload = AppErrorPayload {
+            code: 42,
+            message: "hi",
+        };
+        let mut buf = [0u8; 2]; // too small (needs 4 bytes)
+        let err = encode_app_error(&payload, &mut buf).unwrap_err();
+        assert!(matches!(err, WireError::SerdeError(_)));
     }
 }
