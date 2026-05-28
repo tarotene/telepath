@@ -159,6 +159,75 @@ fn ping_round_trip_over_loopback() {
     assert_eq!(val, 0xDEAD_BEEF);
 }
 
+fn fake_app_error_server(fw: FwSide) {
+    use telepath_wire::framing::{cobs_decode, rzcobs_encode};
+    use telepath_wire::{AppErrorPayload, PacketType, Request, Response, ResponseStatus};
+
+    // Host→Target is COBS-framed; read until the 0x00 delimiter.
+    let mut raw_frame: Vec<u8> = Vec::new();
+    loop {
+        let b = fw.rx.recv().expect("channel closed before delimiter");
+        if b == 0x00 {
+            break;
+        }
+        raw_frame.push(b);
+    }
+
+    // COBS decode (strip delimiter before passing in).
+    let mut decoded_req = [0u8; 512];
+    let req_n = cobs_decode(&raw_frame, &mut decoded_req).expect("cobs decode failed");
+    let req: Request<'_> =
+        postcard::from_bytes(&decoded_req[..req_n]).expect("request deserialize failed");
+
+    // Build an AppError response that mirrors the accepted seq_no.
+    let app_err = AppErrorPayload {
+        code: 42,
+        message: "test error",
+    };
+    let mut err_buf = [0u8; 64];
+    let err_n =
+        telepath_wire::encode_app_error(&app_err, &mut err_buf).expect("encode_app_error failed");
+
+    let resp = Response {
+        kind: PacketType::Response,
+        seq_no: req.seq_no,
+        status: ResponseStatus::AppError,
+        payload: &err_buf[..err_n],
+    };
+    let mut resp_buf = [0u8; 512];
+    let resp_ser = postcard::to_slice(&resp, &mut resp_buf).expect("response serialize failed");
+
+    // Target→Host is rzCOBS-framed; rzcobs_encode includes the 0x00 delimiter.
+    let mut frame_buf = [0u8; 1024];
+    let frame_n = rzcobs_encode(resp_ser, &mut frame_buf).expect("rzcobs encode failed");
+    for &b in &frame_buf[..frame_n] {
+        fw.tx.send(b).expect("send failed");
+    }
+}
+
+#[test]
+fn app_error_round_trip_over_loopback() {
+    let (fw_t, host_t) = make_pair();
+    let fw_handle = thread::spawn(move || {
+        fake_app_error_server(fw_t);
+    });
+
+    let mut client = TelepathClient::new(host_t);
+    let result = client.call_raw(0x0001, &[]);
+
+    fw_handle.join().expect("fw thread panicked");
+
+    match result {
+        Err(telepath_client::HostError::AppError { code, message }) => {
+            assert_eq!(code, 42);
+            assert_eq!(message, "test error");
+        }
+        other => {
+            panic!("expected AppError {{ code: 42, message: \"test error\" }}, got: {other:?}")
+        }
+    }
+}
+
 #[test]
 fn typed_call_ping_round_trip() {
     let (fw_t, host_t) = make_pair();

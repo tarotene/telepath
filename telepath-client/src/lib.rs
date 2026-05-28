@@ -64,8 +64,11 @@ pub enum HostError {
     SeqMismatch { expected: u16, got: u16 },
     /// The target reported a system-level error.
     SystemError,
-    /// The target reported an application-level error.
-    AppError(Vec<u8>),
+    /// The target reported an application-level error with a decoded payload.
+    ///
+    /// Inspect `code` and `message` to understand the failure. `code` is
+    /// application-defined; `0` means "unspecified application error".
+    AppError { code: u16, message: String },
     /// postcard serialization or deserialization failed; carries the underlying cause.
     SerdeError(postcard::Error),
     /// The request args exceeded [`MAX_PAYLOAD_SIZE`].
@@ -433,7 +436,12 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             telepath_wire::ResponseStatus::Ok => Ok(resp.payload.to_vec()),
             telepath_wire::ResponseStatus::SystemError => Err(HostError::SystemError),
             telepath_wire::ResponseStatus::AppError => {
-                Err(HostError::AppError(resp.payload.to_vec()))
+                let payload: telepath_wire::AppErrorPayload<'_> =
+                    postcard::from_bytes(resp.payload)?;
+                Err(HostError::AppError {
+                    code: payload.code,
+                    message: payload.message.to_owned(),
+                })
             }
         }
     }

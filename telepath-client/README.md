@@ -74,7 +74,7 @@ println!("ping -> 0x{:08X}", result);  // ping -> 0xDEADBEEF
 | `Io(String)` | Transport read/write failure | Check cable / serial port |
 | `SeqMismatch { expected, got }` | Response seq number mismatch | Drain and retry; call `rediscover()` |
 | `SystemError` | Target reported a system-level error | Check firmware logs |
-| `AppError(Vec<u8>)` | Target reported an application-level error | Inspect payload |
+| `AppError { code, message }` | Target reported an application-level error | Inspect `code` and `message` |
 | `SerdeError(postcard::Error)` | postcard serialization/deserialization failed | Check Args/Ret types |
 | `RequestPayloadTooLarge` | `args` exceeded `MAX_PAYLOAD_SIZE` (256 B) | Reduce payload |
 | `ResponsePayloadTooLarge` | Response exceeded `MAX_PAYLOAD_SIZE` | Check firmware shim |
