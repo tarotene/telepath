@@ -11,7 +11,7 @@ borrow from the receive buffer for zero-copy deserialization.
 | Aspect | Specification |
 |--------|---------------|
 | Framing (Host→Target) | COBS; `0x00` delimiter |
-| Framing (Target→Host) | COBS (rzCOBS planned) |
+| Framing (Target→Host) | rzCOBS; `0x00` delimiter |
 | Serialization | postcard (little-endian, varint-compressed) |
 | Packet types | `Request` (0x01) / `Response` (0x02) |
 | Error signaling | `ResponseStatus` field inside `Response` |
@@ -138,8 +138,6 @@ cargo test -p telepath-wire
 
 ## Limitations
 
-- Upstream (target → host) framing uses COBS in this MVP. rzCOBS is
-  planned for Stage C2 (see [#76](https://github.com/tarotene/telepath/issues/76)).
 - `AppError` payload format is unspecified. Until resolved, callers must
   agree on an out-of-band convention
   (see [#78](https://github.com/tarotene/telepath/issues/78)).

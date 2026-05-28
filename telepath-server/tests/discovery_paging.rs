@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 use telepath_server::{command, commands, transport, TelepathServer};
-use telepath_wire::framing::{cobs_decode, cobs_encode};
+use telepath_wire::framing::{cobs_encode, rzcobs_decode};
 use telepath_wire::{
     DiscoveryEntry, DiscoveryPage, DiscoveryRequest, PacketType, Request, Response, ResponseStatus,
     CMD_ID_DISCOVERY,
@@ -64,7 +64,7 @@ fn decode_page_owned(raw_tx: &[u8]) -> (u16, u16, Vec<(u16, std::string::String)
         .position(|&b| b == 0x00)
         .expect("no frame delimiter");
     let mut decoded = [0u8; 512];
-    let dl = cobs_decode(&raw_tx[..delim], &mut decoded).unwrap();
+    let dl = rzcobs_decode(&raw_tx[..delim], &mut decoded).unwrap();
     let resp: Response<'_> = postcard::from_bytes(&decoded[..dl]).unwrap();
     assert_eq!(
         resp.status,

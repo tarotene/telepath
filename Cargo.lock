@@ -1459,6 +1459,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "rzcobs"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2af5759e4bc4858ce928073d0ebe29c82d18c04a0023bf2f312500a412f23939"
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1746,6 +1752,7 @@ version = "0.1.0"
 dependencies = [
  "cobs 0.5.1",
  "postcard",
+ "rzcobs",
  "serde",
 ]
 

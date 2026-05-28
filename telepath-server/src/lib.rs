@@ -1,15 +1,15 @@
 //! Target-side Telepath library.
 //!
 //! Runs on the MCU in `no_std` mode. Provides:
-//! - [`TelepathServer`]: receive loop, COBS decode, dispatch, COBS encode
+//! - [`TelepathServer`]: receive loop, COBS decode, dispatch, rzCOBS encode
 //! - [`transport::Transport`]: non-blocking byte-stream I/O trait
 //! - Re-export of `#[command]` attribute macro
 //!
 //! # Architecture
 //!
 //! ```text
-//! Transport → FrameAccumulator → cobs_decode → postcard::from_bytes → Dispatcher
-//!                                                                     → postcard::to_slice → cobs_encode → Transport
+//! Transport → FrameAccumulator → cobs_decode    → postcard::from_bytes → Dispatcher
+//!                                                                       → postcard::to_slice → rzcobs_encode → Transport
 //! ```
 //!
 //! # Usage
@@ -34,7 +34,7 @@ pub use resource::ResourceRegistry;
 
 pub use telepath_macros::command;
 use telepath_wire::{
-    framing::{cobs_decode, cobs_encode, FrameAccumulator},
+    framing::{cobs_decode, rzcobs_encode, FrameAccumulator},
     Request, Response,
 };
 pub use telepath_wire::{
@@ -375,8 +375,8 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
             Err(_) => return,
         };
 
-        // COBS encode into tx_buf and write.
-        let n = match cobs_encode(&serialized[..serialized_len], &mut self.tx_buf) {
+        // rzCOBS encode into tx_buf and write (upstream framing).
+        let n = match rzcobs_encode(&serialized[..serialized_len], &mut self.tx_buf) {
             Ok(n) => n,
             Err(_) => return,
         };
@@ -442,7 +442,7 @@ mod tests {
     // poll() integration test using a loopback transport
     // ---------------------------------------------------------------------------
 
-    use telepath_wire::framing::cobs_encode;
+    use telepath_wire::framing::{cobs_encode, rzcobs_decode};
     use telepath_wire::{PacketType, Request, Response, ResponseStatus};
 
     /// A ping shim that writes `0xDEADBEEFu32` as postcard to output.
@@ -525,7 +525,7 @@ mod tests {
             .position(|&b| b == 0x00)
             .expect("no frame delimiter");
         let mut decoded = [0u8; 512];
-        let m = telepath_wire::framing::cobs_decode(&tx[..delim], &mut decoded).unwrap();
+        let m = rzcobs_decode(&tx[..delim], &mut decoded).unwrap();
 
         let resp: Response<'_> = postcard::from_bytes(&decoded[..m]).unwrap();
         assert_eq!(resp.seq_no, 42);
