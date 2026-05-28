@@ -31,7 +31,7 @@
 //! If the raw hash collides with it, [`derive_cmd_id`] rehashes with a `0xFF`
 //! salt byte appended, producing a deterministic non-zero fallback.
 
-use crate::CMD_ID_DISCOVERY;
+use crate::{CMD_ID_DISCOVERY, CMD_ID_METRICS};
 
 /// Delimiter byte placed between pre-image fields (ASCII Unit Separator, 0x1F).
 ///
@@ -87,9 +87,10 @@ pub const fn fnv1a_16(bytes: &[u8]) -> u16 {
 /// The three segments are hashed sequentially without heap allocation, so this
 /// function is safe to call from `no_std` firmware and `const` proc-macro contexts.
 ///
-/// If the result would equal [`CMD_ID_DISCOVERY`] (0x0000), the function
-/// loops over descending salt bytes (`0xFF`, `0xFE`, …) until the result is
-/// non-zero — guaranteeing that `CMD_ID_DISCOVERY` is never returned.
+/// If the result would equal [`CMD_ID_DISCOVERY`] (0x0000) or
+/// [`CMD_ID_METRICS`] (0xFFFE), the function loops over descending salt bytes
+/// (`0xFF`, `0xFE`, …) until the result avoids all reserved IDs —
+/// guaranteeing that neither reserved value is ever returned.
 pub const fn derive_cmd_id(name: &str, args_type: &str, ret_type: &str) -> u16 {
     let h = fnv1a_32_continue(FNV_OFFSET_BASIS, name.as_bytes());
     let h = fnv1a_32_continue(h, &[CMD_ID_FIELD_SEP]);
@@ -99,7 +100,7 @@ pub const fn derive_cmd_id(name: &str, args_type: &str, ret_type: &str) -> u16 {
     let mut id = xor_fold(h);
     let mut h = h;
     let mut salt = 0xFFu8;
-    while id == CMD_ID_DISCOVERY {
+    while id == CMD_ID_DISCOVERY || id == CMD_ID_METRICS {
         h = fnv1a_32_continue(h, &[salt]);
         id = xor_fold(h);
         if salt > 0 {
@@ -118,7 +119,7 @@ pub const fn derive_cmd_id(name: &str, args_type: &str, ret_type: &str) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CMD_ID_DISCOVERY;
+    use crate::{CMD_ID_DISCOVERY, CMD_ID_METRICS};
 
     // Known-vector source: http://www.isthe.com/chongo/tech/comp/fnv/
     // (Landon Curt Noll, FNV reference page — "FNV-1a 32-bit test vectors")
@@ -182,6 +183,29 @@ mod tests {
             derive_cmd_id("f", "(u8,)", "u32"),
             derive_cmd_id("f", "(u16,)", "u32"),
         );
+    }
+
+    #[test]
+    fn cmd_id_metrics_value() {
+        assert_eq!(CMD_ID_METRICS, 0xFFFE);
+    }
+
+    #[test]
+    fn derive_cmd_id_never_returns_metrics_id() {
+        let cases = [
+            ("ping", "()", "u32"),
+            ("get_value", "(u8,)", "u32"),
+            ("set_value", "(u8, u16)", "Result<(), ()>"),
+            ("", "", ""),
+            ("a", "b", "c"),
+        ];
+        for (name, args, ret) in cases {
+            assert_ne!(
+                derive_cmd_id(name, args, ret),
+                CMD_ID_METRICS,
+                "({name:?}, {args:?}, {ret:?}) mapped to reserved CMD_ID_METRICS",
+            );
+        }
     }
 
     #[test]

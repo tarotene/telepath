@@ -2305,6 +2305,7 @@ version = "0.1.0"
 dependencies = [
  "cobs 0.5.1",
  "postcard",
+ "postcard-schema",
  "rzcobs",
  "serde",
 ]

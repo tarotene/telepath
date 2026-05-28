@@ -37,6 +37,13 @@ pub struct ShellArgs {
     /// Exit code is non-zero if discovery or the command itself fails.
     #[arg(long, value_name = "COMMAND", num_args = 1..)]
     pub exec: Vec<String>,
+
+    /// Run a ping-storm benchmark for the given duration (e.g. `10s`, `30s`).
+    /// Requires `--features profile`. Prints a framing metrics summary to stderr
+    /// after the storm completes.
+    #[cfg(feature = "profile")]
+    #[arg(long, value_name = "DURATION")]
+    pub ping_storm: Option<String>,
 }
 
 #[cfg(feature = "mcp")]

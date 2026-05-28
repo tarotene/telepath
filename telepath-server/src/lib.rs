@@ -32,6 +32,11 @@ pub mod transport;
 mod resource;
 pub use resource::ResourceRegistry;
 
+#[cfg(feature = "profile")]
+pub mod profile;
+#[cfg(feature = "profile")]
+pub use profile::init_dwt;
+
 pub use telepath_macros::command;
 use telepath_wire::{
     framing::{cobs_decode, rzcobs_encode, FrameAccumulator},
@@ -153,6 +158,8 @@ pub struct TelepathServer<T, const N: usize> {
 impl<T, const N: usize> TelepathServer<T, N> {
     /// Create a new server with the given transport and command registry.
     pub fn new(transport: T, commands: &'static [CommandMetadata]) -> Self {
+        #[cfg(feature = "profile")]
+        profile::init_dwt();
         Self {
             transport,
             rx_accum: FrameAccumulator::new(),
@@ -329,10 +336,19 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
 
         // COBS decode into a stack buffer.
         let mut decoded = [0u8; N];
+        #[cfg(feature = "profile")]
+        let t0 = profile::cycles_now();
         let decoded_len = match cobs_decode(frame, &mut decoded) {
             Ok(n) => n,
             Err(_) => return,
         };
+        #[cfg(feature = "profile")]
+        {
+            use core::sync::atomic::Ordering;
+            let dt = profile::cycles_now().wrapping_sub(t0) as u64;
+            profile::DECODE_CYCLES.fetch_add(dt, Ordering::Relaxed);
+            profile::DECODED_BYTES.fetch_add(decoded_len as u32, Ordering::Relaxed);
+        }
 
         // Deserialize Request (args borrows from decoded[]).
         let req: Request<'_> = match postcard::from_bytes(&decoded[..decoded_len]) {
@@ -376,10 +392,20 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
         };
 
         // rzCOBS encode into tx_buf and write (upstream framing).
+        #[cfg(feature = "profile")]
+        let t1 = profile::cycles_now();
         let n = match rzcobs_encode(&serialized[..serialized_len], &mut self.tx_buf) {
             Ok(n) => n,
             Err(_) => return,
         };
+        #[cfg(feature = "profile")]
+        {
+            use core::sync::atomic::Ordering;
+            let dt = profile::cycles_now().wrapping_sub(t1) as u64;
+            profile::ENCODE_CYCLES.fetch_add(dt, Ordering::Relaxed);
+            profile::ENCODED_BYTES.fetch_add(n as u32, Ordering::Relaxed);
+            profile::SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
         self.transport.write(&self.tx_buf[..n]);
     }
 }

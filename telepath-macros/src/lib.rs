@@ -4,11 +4,46 @@
 //! function and a `CommandMetadata` const from a plain Rust function definition.
 
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
-use syn::{parse_macro_input, FnArg, ItemFn, Pat, ReturnType, Type, TypeReference};
+use syn::{parse_macro_input, FnArg, ItemFn, LitInt, Pat, ReturnType, Token, Type, TypeReference};
 use telepath_wire::cmd_id::derive_cmd_id as compute_cmd_id;
+
+/// Optional attributes for `#[command]`.
+///
+/// Syntax: `#[command]` (no attrs) or `#[command(cmd_id = 0xFFFE)]`.
+struct CommandArgs {
+    /// If present, use this literal value as the command ID instead of
+    /// deriving it from the function signature.
+    explicit_cmd_id: Option<u16>,
+}
+
+impl syn::parse::Parse for CommandArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.is_empty() {
+            return Ok(CommandArgs {
+                explicit_cmd_id: None,
+            });
+        }
+        let key: syn::Ident = input.parse()?;
+        if key != "cmd_id" {
+            return Err(syn::Error::new_spanned(
+                key,
+                "#[command]: unknown attribute key (expected `cmd_id`)",
+            ));
+        }
+        let _eq: Token![=] = input.parse()?;
+        let lit: LitInt = input.parse()?;
+        let value: u16 = lit.base10_parse().map_err(|_| {
+            syn::Error::new_spanned(&lit, "#[command(cmd_id = ...)]: value must fit in u16")
+        })?;
+        Ok(CommandArgs {
+            explicit_cmd_id: Some(value),
+        })
+    }
+}
 
 fn seen_cmd_ids() -> &'static Mutex<HashMap<u16, String>> {
     static SEEN: OnceLock<Mutex<HashMap<u16, String>>> = OnceLock::new();
@@ -72,15 +107,22 @@ fn seen_cmd_ids() -> &'static Mutex<HashMap<u16, String>> {
 /// static COMMANDS: [CommandMetadata; 1] = [__TELEPATH_CMD_PING];
 /// ```
 #[proc_macro_attribute]
-pub fn command(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = match syn::parse2::<CommandArgs>(TokenStream2::from(attr)) {
+        Ok(a) => a,
+        Err(e) => return e.to_compile_error().into(),
+    };
     let input = parse_macro_input!(item as ItemFn);
-    match expand_command(input) {
+    match expand_command(input, args.explicit_cmd_id) {
         Ok(ts) => ts.into(),
         Err(e) => e.to_compile_error().into(),
     }
 }
 
-fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
+fn expand_command(
+    func: ItemFn,
+    explicit_cmd_id: Option<u16>,
+) -> syn::Result<proc_macro2::TokenStream> {
     let fn_ident = &func.sig.ident;
     let fn_name_str = fn_ident.to_string();
 
@@ -245,7 +287,8 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
     //    a "multiple definition" linker error when two commands from different crates
     //    happen to share the same id in the final binary.
 
-    let cmd_id_value = compute_cmd_id(&fn_name_str, &args_type_str, &ret_type_str);
+    let cmd_id_value = explicit_cmd_id
+        .unwrap_or_else(|| compute_cmd_id(&fn_name_str, &args_type_str, &ret_type_str));
 
     {
         let mut seen = seen_cmd_ids().lock().unwrap();
@@ -261,6 +304,22 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         }
         seen.insert(cmd_id_value, fn_name_str.clone());
     }
+
+    // If the caller supplied an explicit `cmd_id = N`, embed that literal
+    // directly. Otherwise emit a `__derive_cmd_id(...)` const-fn call so
+    // the derivation is independently verifiable in expanded output.
+    let cmd_id_expr: proc_macro2::TokenStream = if explicit_cmd_id.is_some() {
+        let v = cmd_id_value;
+        quote! { #v }
+    } else {
+        quote! {
+            ::telepath_server::__derive_cmd_id(
+                #fn_name_str,
+                #args_type_str,
+                #ret_type_str,
+            )
+        }
+    };
 
     let collision_export = format!("__telepath_cmd_id_{:04X}", cmd_id_value);
     let guard_ident = format_ident!("__TELEPATH_CMDID_GUARD_{}", fn_name_str.to_uppercase());
@@ -410,11 +469,7 @@ fn expand_command(func: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
         pub const #static_ident: ::telepath_server::CommandMetadata =
             ::telepath_server::CommandMetadata {
                 name: #fn_name_str,
-                id: ::telepath_server::__derive_cmd_id(
-                    #fn_name_str,
-                    #args_type_str,
-                    #ret_type_str,
-                ),
+                id: #cmd_id_expr,
                 invoke: #shim_ident,
                 args_schema: #args_schema_ident,
                 ret_schema: #ret_schema_ident,
@@ -462,8 +517,8 @@ mod tests {
         let _g = TEST_GUARD.lock().unwrap();
         seen_cmd_ids().lock().unwrap().clear();
         // cmd_446() -> u32 and cmd_470() -> u32 both map to 0x43AE (verified by brute force).
-        assert!(expand_command(parse_fn("fn cmd_446() -> u32 { 0 }")).is_ok());
-        let err = expand_command(parse_fn("fn cmd_470() -> u32 { 0 }"))
+        assert!(expand_command(parse_fn("fn cmd_446() -> u32 { 0 }"), None).is_ok());
+        let err = expand_command(parse_fn("fn cmd_470() -> u32 { 0 }"), None)
             .unwrap_err()
             .to_string();
         assert!(
@@ -485,7 +540,7 @@ mod tests {
     fn guard_symbol_has_correct_export_name() {
         let _g = TEST_GUARD.lock().unwrap();
         seen_cmd_ids().lock().unwrap().clear();
-        let ts = expand_command(parse_fn("fn cmd_446() -> u32 { 0 }"))
+        let ts = expand_command(parse_fn("fn cmd_446() -> u32 { 0 }"), None)
             .unwrap()
             .to_string();
         // Guard static export_name encodes the cmd_id as uppercase hex.
@@ -500,8 +555,43 @@ mod tests {
     fn distinct_commands_do_not_collide() {
         let _g = TEST_GUARD.lock().unwrap();
         seen_cmd_ids().lock().unwrap().clear();
-        assert!(expand_command(parse_fn("fn ping() -> u32 { 0 }")).is_ok());
-        assert!(expand_command(parse_fn("fn echo(x: u32) -> u32 { x }")).is_ok());
+        assert!(expand_command(parse_fn("fn ping() -> u32 { 0 }"), None).is_ok());
+        assert!(expand_command(parse_fn("fn echo(x: u32) -> u32 { x }"), None).is_ok());
+        seen_cmd_ids().lock().unwrap().clear();
+    }
+
+    #[test]
+    fn explicit_cmd_id_overrides_derive() {
+        let _g = TEST_GUARD.lock().unwrap();
+        seen_cmd_ids().lock().unwrap().clear();
+        let ts = expand_command(parse_fn("fn get_metrics() -> u32 { 0 }"), Some(0xFFFE))
+            .unwrap()
+            .to_string();
+        // The generated CommandMetadata.id must be the literal 0xFFFE, not a __derive_cmd_id call.
+        assert!(
+            ts.contains("65534"), // 0xFFFE == 65534 in decimal token
+            "explicit cmd_id 0xFFFE not found as literal in generated code: {ts}"
+        );
+        // Guard symbol must encode the explicit id.
+        assert!(
+            ts.contains("__telepath_cmd_id_FFFE"),
+            "guard symbol for explicit cmd_id not found in generated code: {ts}"
+        );
+        seen_cmd_ids().lock().unwrap().clear();
+    }
+
+    #[test]
+    fn explicit_cmd_id_collision_rejected() {
+        let _g = TEST_GUARD.lock().unwrap();
+        seen_cmd_ids().lock().unwrap().clear();
+        assert!(expand_command(parse_fn("fn foo() -> u32 { 0 }"), Some(0xFFFE)).is_ok());
+        let err = expand_command(parse_fn("fn bar() -> u32 { 0 }"), Some(0xFFFE))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cmd_id collision"),
+            "expected collision error for duplicate explicit cmd_id, got: {err}"
+        );
         seen_cmd_ids().lock().unwrap().clear();
     }
 }

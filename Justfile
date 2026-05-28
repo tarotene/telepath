@@ -96,6 +96,42 @@ host-pty-smoke:
     tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec "add 2 3" | tee /dev/stderr | grep -qF "add -> 5"
     tools/telepath/target/debug/telepath shell --transport serial --port "$SLAVE" --exec "add [2, 3]" | tee /dev/stderr | grep -qF "add -> 5"
 
+# Benchmark framing overhead via a PTY pair (no hardware required).
+# Requires profile feature; builds host-pty-server and telepath CLI with --features profile.
+# Output: framing metrics summary on stderr.
+# Usage: just bench-pty [DURATION]  (default 10s)
+bench-pty DURATION="10s":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -p host-pty-server --features profile
+    cargo build --manifest-path tools/telepath/Cargo.toml \
+        --no-default-features --features shell,serial,profile
+    cargo run -p host-pty-server --features profile > /tmp/host-pty-server.out &
+    SERVER_PID=$!
+    trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+    for i in $(seq 1 15); do
+        SLAVE=$(grep 'HOST_PTY_SERVER_PATH=' /tmp/host-pty-server.out 2>/dev/null \
+                | sed 's/HOST_PTY_SERVER_PATH=//' | head -1 || true)
+        if [ -n "$SLAVE" ]; then break; fi
+        sleep 1
+    done
+    if [ -z "$SLAVE" ]; then
+        echo "ERROR: host-pty-server did not print PTY path"; exit 1
+    fi
+    tools/telepath/target/debug/telepath shell \
+        --transport serial --port "$SLAVE" \
+        --ping-storm {{DURATION}}
+
+# Benchmark framing overhead on a connected nRF52840-DK.
+# Flashes firmware with profile feature, then runs a ping-storm via RTT.
+# Requires nRF52840-DK connected. Output: DWT cycles/byte + host ns/byte on stderr.
+# Usage: just firmware-bench [DURATION]  (default 30s)
+firmware-bench DURATION="30s":
+    cd examples/nrf52840-ping && cargo run --release --features profile
+    probe-rs reset --chip nRF52840_xxAA
+    cd tools/telepath && cargo run --features profile -- \
+        shell --transport rtt --ping-storm {{DURATION}}
+
 # Full CI gate: fmt-check + clippy + test + host-pty smoke + telepath tests
 ci: fmt-check clippy test host-pty-smoke mcp-test
 

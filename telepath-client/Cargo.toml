@@ -9,6 +9,7 @@ description = "Host-side Telepath RPC client library (std)"
 [features]
 rtt = ["dep:probe-rs"]
 serial = ["dep:serialport"]
+profile = ["telepath-wire/profile"]
 
 [dependencies]
 telepath-wire = { workspace = true }
