@@ -228,8 +228,7 @@ See [telepath-server § Usage](telepath-server/README.md#usage) for the full rec
 
 ```toml
 [dependencies]
-telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main" }
-postcard      = "1"
+telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main", features = ["rtt"] }
 ```
 
 ```rust

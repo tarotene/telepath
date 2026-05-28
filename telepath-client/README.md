@@ -1,6 +1,6 @@
 # telepath-client
 
-Host-side RPC client library for [Telepath](../../README.md) (`std`). Connects to a
+Host-side RPC client library for [Telepath](../README.md) (`std`). Connects to a
 target running `telepath-server` over any byte-stream transport
 (`std::io::Read + std::io::Write`).
 
@@ -17,12 +17,14 @@ Select a transport feature at build time:
 
 | Feature | Crate | When to use |
 |---------|-------|-------------|
-| `rtt` *(default)* | `probe-rs` | Connected nRF52840-DK or similar; RTT channel 1 carries the wire |
+| `rtt` | `probe-rs` | Connected nRF52840-DK or similar; RTT channel 1 carries the wire |
 | `serial` | `serialport` | PTY pair (`host-pty-server`), UART adapter, or any `/dev/tty*` port |
 
+No transport feature is enabled by default; select `rtt` or `serial` explicitly.
+
 ```toml
-# RTT (default)
-telepath-client = { version = "0.2", features = [] }
+# RTT (hardware target)
+telepath-client = { version = "0.2", features = ["rtt"] }
 
 # Serial / PTY
 telepath-client = { version = "0.2", features = ["serial"] }
@@ -109,9 +111,9 @@ sequenceDiagram
     Note over Client: SchemaCache populated
 
     App->>Client: cmd_id_by_name("ping")
-    Client-->>App: Some(0x0001)
+    Client-->>App: Some(ping_id)
 
-    App->>Client: call::<(), u32>(0x0001, &())
+    App->>Client: call::<(), u32>(ping_id, &())
     Client->>Target: Request { cmd_id, postcard(args) }
     Target-->>Client: Response { status::Ok, postcard(ret) }
     Client-->>App: Ok(0xDEAD_BEEF)

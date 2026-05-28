@@ -411,6 +411,12 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     ///
     /// Returns `None` if [`Self::discover`] has not been called, or the name
     /// is not registered on the target.
+    ///
+    /// # Note
+    ///
+    /// If multiple commands share `name` (possible when signatures differ),
+    /// the returned id is implementation-defined. Disambiguation is tracked in
+    /// [#175](https://github.com/tarotene/telepath/issues/175).
     pub fn cmd_id_by_name(&self, name: &str) -> Option<u16> {
         self.schema_cache
             .iter()
