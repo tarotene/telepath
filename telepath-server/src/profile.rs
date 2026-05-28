@@ -31,16 +31,21 @@ pub(crate) static SAMPLE_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// Enable the Cortex-M DWT cycle counter.
 ///
-/// Sets `DEMCR.TRCENA`, enables the cycle counter, and resets `CYCCNT` to 0.
-/// Uses `Peripherals::steal` so user code does not need to give up the
-/// singleton. Idempotent — safe to call multiple times.
+/// On ARM targets: sets `DEMCR.TRCENA`, enables the cycle counter, and resets
+/// `CYCCNT` to 0. Uses `Peripherals::steal` so user code does not need to give
+/// up the singleton. Idempotent — safe to call multiple times.
+///
+/// On non-ARM targets (e.g. x86_64 host-pty-server): no-op. The atomic counters
+/// still accumulate but `cycles_now()` always returns 0, so cycle fields in the
+/// snapshot will be 0. Host-side `Instant` timing in `telepath-client` remains
+/// meaningful for bench-pty.
 ///
 /// # Safety
 ///
-/// This function uses `cortex_m::peripheral::Peripherals::steal()`. It is
-/// only sound on single-core Cortex-M targets where the `profile` feature
-/// is intentionally enabled. Do not enable `profile` on multi-core systems.
+/// On ARM: uses `cortex_m::peripheral::Peripherals::steal()`. Only sound on
+/// single-core Cortex-M targets with `profile` intentionally enabled.
 pub fn init_dwt() {
+    #[cfg(target_arch = "arm")]
     unsafe {
         let mut cp = cortex_m::peripheral::Peripherals::steal();
         cp.DCB.enable_trace();
@@ -51,9 +56,17 @@ pub fn init_dwt() {
 }
 
 /// Read the current DWT cycle counter value.
+/// Returns 0 on non-ARM targets (e.g. x86_64 host-pty-server).
 #[inline(always)]
 pub fn cycles_now() -> u32 {
-    cortex_m::peripheral::DWT::cycle_count()
+    #[cfg(target_arch = "arm")]
+    {
+        cortex_m::peripheral::DWT::cycle_count()
+    }
+    #[cfg(not(target_arch = "arm"))]
+    {
+        0
+    }
 }
 
 /// Return the current metrics snapshot and atomically reset all counters.
