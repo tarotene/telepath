@@ -46,7 +46,7 @@
 
 use crate::WireError;
 
-/// Maximum COBS-encoded frame size including the `0x00` frame delimiter.
+/// Maximum encoded/framed frame size including the `0x00` frame delimiter.
 ///
 /// Sized to accommodate a fully-serialized `Request` or `Response` with a
 /// maximum-length payload, plus framing overhead. For `MAX_PAYLOAD_SIZE = 256`,
@@ -54,8 +54,8 @@ use crate::WireError;
 ///
 /// - COBS worst-case: `ceil(264 / 254)` ≈ 2 bytes overhead + 1 byte delimiter
 ///   → 267 bytes total.
-/// - rzCOBS worst-case: `264 + ceil(264 / 7)` ≈ 38 bytes overhead + 1 byte
-///   delimiter → 303 bytes total.
+/// - rzCOBS worst-case: `264 + ceil(264 / 7) + 1` = 264 + 38 + 1 = 303 bytes
+///   (per `max_rzcobs_encoding_length`) + 1 byte delimiter → 304 bytes total.
 ///
 /// We round up to 512 to give headroom and match the RTT buffer size.
 pub const MAX_FRAME_SIZE: usize = 512;
