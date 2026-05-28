@@ -6,11 +6,12 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use telepath_client::{TelepathClient, SchemaCache};
+//! use telepath_client::TelepathClient;
 //!
 //! let mut client = TelepathClient::new(serial_port);
-//! let schemas = client.discover().unwrap();
-//! let result = client.call_raw(0x0001, &args_bytes).unwrap();
+//! client.discover().unwrap();
+//! let ping_id = client.cmd_id_by_name("ping").unwrap();
+//! let result: u32 = client.call::<(), u32>(ping_id, &()).unwrap();
 //! ```
 
 #[cfg(feature = "rtt")]
@@ -381,6 +382,46 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
                 Err(HostError::AppError(resp.payload.to_vec()))
             }
         }
+    }
+
+    /// Typed RPC call.
+    ///
+    /// Postcard-serializes `args`, delegates to [`Self::call_raw`], and
+    /// postcard-deserializes the response payload into `Ret`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// client.discover()?;
+    /// let ping_id = client.cmd_id_by_name("ping").unwrap();
+    /// let result: u32 = client.call::<(), u32>(ping_id, &())?;
+    /// ```
+    pub fn call<Args, Ret>(&mut self, cmd_id: u16, args: &Args) -> Result<Ret, HostError>
+    where
+        Args: serde::Serialize,
+        Ret: serde::de::DeserializeOwned,
+    {
+        let args_bytes = postcard::to_allocvec(args)?;
+        let payload = self.call_raw(cmd_id, &args_bytes)?;
+        let ret = postcard::from_bytes(&payload)?;
+        Ok(ret)
+    }
+
+    /// Resolve a command name to its `cmd_id` using the populated schema cache.
+    ///
+    /// Returns `None` if [`Self::discover`] has not been called, or the name
+    /// is not registered on the target.
+    ///
+    /// # Note
+    ///
+    /// If multiple commands share `name` (possible when signatures differ),
+    /// the returned id is implementation-defined. Disambiguation is tracked in
+    /// [#175](https://github.com/tarotene/telepath/issues/175).
+    pub fn cmd_id_by_name(&self, name: &str) -> Option<u16> {
+        self.schema_cache
+            .iter()
+            .find(|e| e.name == name)
+            .map(|e| e.cmd_id)
     }
 
     /// Borrow the schema cache for inspection.

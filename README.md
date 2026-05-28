@@ -228,8 +228,7 @@ See [telepath-server § Usage](telepath-server/README.md#usage) for the full rec
 
 ```toml
 [dependencies]
-telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main" }
-postcard      = "1"
+telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main", features = ["rtt"] }
 ```
 
 ```rust
@@ -237,8 +236,11 @@ use telepath_client::TelepathClient;
 
 // transport: anything implementing `std::io::Read + std::io::Write`
 let mut client = TelepathClient::new(transport);
-let payload = client.call_raw(0x0001, &[])?;
-let val: u32 = postcard::from_bytes(&payload)?;
+
+// Discover commands registered on the target, then issue a typed call.
+client.discover()?;
+let ping_id = client.cmd_id_by_name("ping").expect("ping not registered");
+let val: u32 = client.call::<(), u32>(ping_id, &())?;
 println!("ping -> 0x{:08X}", val);
 ```
 
