@@ -158,3 +158,32 @@ fn ping_round_trip_over_loopback() {
 
     assert_eq!(val, 0xDEAD_BEEF);
 }
+
+#[test]
+fn typed_call_ping_round_trip() {
+    let (fw_t, host_t) = make_pair();
+    let running = Arc::new(AtomicBool::new(true));
+
+    let running_fw = Arc::clone(&running);
+    let fw_handle = thread::spawn(move || {
+        let mut server = TelepathServer::<_, 512>::new(fw_t, &COMMANDS);
+        while running_fw.load(Ordering::Acquire) {
+            server.poll();
+            thread::yield_now();
+        }
+    });
+
+    let mut client = TelepathClient::new(host_t);
+    client.discover().expect("discover failed");
+    let ping_id = client
+        .cmd_id_by_name("ping")
+        .expect("ping not found in schema cache");
+    let val: u32 = client
+        .call::<(), u32>(ping_id, &())
+        .expect("typed call failed");
+
+    running.store(false, Ordering::Release);
+    fw_handle.join().expect("fw thread panicked");
+
+    assert_eq!(val, 0xDEAD_BEEF);
+}

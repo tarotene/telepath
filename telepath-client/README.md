@@ -1,46 +1,37 @@
 # telepath-client
 
-RPC **client** library — the building block for host apps and MCP server frontends (`std`).
+Host-side RPC client library for [Telepath](../../README.md) (`std`). Connects to a
+target running `telepath-server` over any byte-stream transport
+(`std::io::Read + std::io::Write`).
 
-Host-side Telepath RPC client (`std`). Connects to a target running
-`telepath-server` via any byte-stream transport (`std::io::Read + Write`).
+## Overview
 
-## Key API
+`TelepathClient<T>` handles COBS framing, postcard serialization, sequence
+numbering, and the Command Discovery Protocol (CDP). The typed `call::<Args, Ret>`
+method is the primary API for host applications; `call_raw` remains available
+as a low-level escape hatch.
 
-### `TelepathClient<T>`
+## Transports
 
-| Method | Description |
-|--------|-------------|
-| `new(transport)` | Wrap a transport (e.g. serialport, RTT adapter) |
-| `call_raw(cmd_id, args)` | Send a request, block until response; returns payload bytes |
-| `discover()` | Run the Command Discovery Protocol (CDP); populates schema cache |
-| `rediscover()` | Clear the schema cache and re-run CDP (e.g. after firmware reconnect) |
-| `schema_cache()` | Borrow the in-memory schema cache |
+Select a transport feature at build time:
 
-`T` must implement `std::io::Read + std::io::Write`.
+| Feature | Crate | When to use |
+|---------|-------|-------------|
+| `rtt` *(default)* | `probe-rs` | Connected nRF52840-DK or similar; RTT channel 1 carries the wire |
+| `serial` | `serialport` | PTY pair (`host-pty-server`), UART adapter, or any `/dev/tty*` port |
 
-### `HostError` variants
+```toml
+# RTT (default)
+telepath-client = { version = "0.2", features = [] }
 
-| Variant | Cause |
-|---------|-------|
-| `Io(String)` | Transport read/write failure |
-| `SeqMismatch { expected, got }` | Response sequence number mismatch |
-| `SystemError` | Target reported a system-level error |
-| `AppError(Vec<u8>)` | Target reported an application-level error |
-| `SerdeError` | postcard serialization/deserialization failure |
-| `RequestPayloadTooLarge` | `args` exceeded `MAX_PAYLOAD_SIZE` (256 bytes) |
-| `ResponsePayloadTooLarge` | Response payload exceeded `MAX_PAYLOAD_SIZE` |
-| `FrameTooLarge` | Received frame exceeded `MAX_FRAME_SIZE` (512 bytes) |
-| `FramingError` | Malformed COBS frame from target |
+# Serial / PTY
+telepath-client = { version = "0.2", features = ["serial"] }
+```
 
-### `SchemaCache`
+Both features can be enabled simultaneously. For hardware-free testing use the
+`serial` feature against `examples/host-pty-server`.
 
-In-memory map from `cmd_id` to `SchemaEntry` (name, arg schema, return
-schema). Cache coherence is guaranteed by the `cmd_id` design: the ID is
-a hash of (name + input schema + output schema), so any type change
-produces a new ID automatically.
-
-## Usage
+## Quickstart
 
 ```rust
 use telepath_client::TelepathClient;
@@ -48,10 +39,86 @@ use telepath_client::TelepathClient;
 // transport: anything implementing std::io::Read + std::io::Write
 let mut client = TelepathClient::new(transport);
 
-// Ping (CmdID 0x0001, no args)
-let payload = client.call_raw(0x0001, &[])?;
-let val: u32 = postcard::from_bytes(&payload)?;
-println!("ping -> 0x{:08X}", val);  // ping -> 0xDEADBEEF
+// Discover commands registered on the target.
+client.discover()?;
+
+// Resolve name → cmd_id, then issue a typed call.
+let ping_id = client.cmd_id_by_name("ping").expect("ping not registered");
+let result: u32 = client.call::<(), u32>(ping_id, &())?;
+println!("ping -> 0x{:08X}", result);  // ping -> 0xDEADBEEF
+```
+
+## API surface
+
+### `TelepathClient<T>`
+
+| Method | Description |
+|--------|-------------|
+| `new(transport)` | Wrap a transport |
+| `discover()` | Run CDP; populates the schema cache; returns entry count |
+| `rediscover()` | Clear cache and re-run CDP (after firmware reconnect) |
+| `cmd_id_by_name(name)` | Resolve a command name to its `cmd_id` |
+| **`call::<Args, Ret>(cmd_id, args)`** | **Typed RPC call (primary API)** |
+| `call_raw(cmd_id, args)` | Raw RPC call; caller owns ser/de |
+| `schema_cache()` | Borrow the in-memory schema cache |
+| `transport_mut()` | Mutable access to the underlying transport |
+
+`T` must implement `std::io::Read + std::io::Write`.
+
+### `HostError` variants
+
+| Variant | Cause | Recovery |
+|---------|-------|----------|
+| `Io(String)` | Transport read/write failure | Check cable / serial port |
+| `SeqMismatch { expected, got }` | Response seq number mismatch | Drain and retry; call `rediscover()` |
+| `SystemError` | Target reported a system-level error | Check firmware logs |
+| `AppError(Vec<u8>)` | Target reported an application-level error | Inspect payload |
+| `SerdeError(postcard::Error)` | postcard serialization/deserialization failed | Check Args/Ret types |
+| `RequestPayloadTooLarge` | `args` exceeded `MAX_PAYLOAD_SIZE` (256 B) | Reduce payload |
+| `ResponsePayloadTooLarge` | Response exceeded `MAX_PAYLOAD_SIZE` | Check firmware shim |
+| `FrameTooLarge` | Received frame exceeded `MAX_FRAME_SIZE` (512 B) | Firmware issue |
+| `FramingError` | Malformed COBS frame from target | Check transport integrity |
+| `DiscoveryStalled` | Discovery page returned zero entries mid-stream | Firmware bug |
+| `DiscoveryProtocolError` | Discovery page returned inconsistent metadata | Firmware bug |
+
+### `SchemaCache`
+
+In-memory map from `cmd_id: u16` to `SchemaEntry` (name, arg/ret schema
+bytes, arg names). Populated exclusively by `discover()` / `rediscover()`.
+
+Cache coherence is guaranteed by design: `cmd_id` is derived from the command
+name and input/output schemas, so any type change produces a new ID.
+
+Use `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` to obtain
+`postcard_schema::schema::owned::OwnedNamedType` (required by `telepath mcp`
+for JSON-schema generation).
+
+## Discovery & schema cache lifecycle
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Client as TelepathClient
+    participant Target
+
+    App->>Client: discover()
+    loop pages until complete
+        Client->>Target: call_raw(CMD_ID_DISCOVERY, page_n)
+        Target-->>Client: DiscoveryPage(entries, total)
+    end
+    Note over Client: SchemaCache populated
+
+    App->>Client: cmd_id_by_name("ping")
+    Client-->>App: Some(0x0001)
+
+    App->>Client: call::<(), u32>(0x0001, &())
+    Client->>Target: Request { cmd_id, postcard(args) }
+    Target-->>Client: Response { status::Ok, postcard(ret) }
+    Client-->>App: Ok(0xDEAD_BEEF)
+
+    Note over App: Firmware reflashed
+    App->>Client: rediscover()
+    Note over Client: SchemaCache cleared and repopulated
 ```
 
 ## Build
@@ -63,12 +130,8 @@ cargo test -p telepath-client
 
 ## Limitations
 
-- No typed `call::<Args, Ret>` API yet — only `call_raw(cmd_id, &[u8])`
-  (see [#75](https://github.com/tarotene/telepath/issues/75)).
-- Upstream rzCOBS is not yet supported; both framing directions are COBS
+- Upstream rzCOBS is not yet supported; both framing directions use COBS
   (see [#76](https://github.com/tarotene/telepath/issues/76)).
-- `HostError::SerdeError` is opaque — the original `postcard::Error` is
-  discarded (see [#77](https://github.com/tarotene/telepath/issues/77)).
 - `SchemaCache` stores schema bytes as `Vec<u8>`; use
   `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` to obtain
   `postcard_schema::schema::owned::OwnedNamedType`. MCP tool descriptors are
