@@ -403,7 +403,7 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
             use core::sync::atomic::Ordering;
             let dt = profile::cycles_now().wrapping_sub(t1) as u64;
             profile::ENCODE_CYCLES.fetch_add(dt, Ordering::Relaxed);
-            profile::ENCODED_BYTES.fetch_add(n as u32, Ordering::Relaxed);
+            profile::ENCODED_BYTES.fetch_add(serialized_len as u32, Ordering::Relaxed);
             profile::SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         self.transport.write(&self.tx_buf[..n]);

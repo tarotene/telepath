@@ -71,19 +71,13 @@ pub fn cycles_now() -> u32 {
 
 /// Return the current metrics snapshot and atomically reset all counters.
 pub fn snapshot_and_reset() -> MetricsSnapshot {
-    let snap = MetricsSnapshot {
-        encode_cycles: ENCODE_CYCLES.load(Ordering::Relaxed),
-        decode_cycles: DECODE_CYCLES.load(Ordering::Relaxed),
-        encoded_bytes: ENCODED_BYTES.load(Ordering::Relaxed),
-        decoded_bytes: DECODED_BYTES.load(Ordering::Relaxed),
-        sample_count: SAMPLE_COUNT.load(Ordering::Relaxed),
-    };
-    ENCODE_CYCLES.store(0, Ordering::Relaxed);
-    DECODE_CYCLES.store(0, Ordering::Relaxed);
-    ENCODED_BYTES.store(0, Ordering::Relaxed);
-    DECODED_BYTES.store(0, Ordering::Relaxed);
-    SAMPLE_COUNT.store(0, Ordering::Relaxed);
-    snap
+    MetricsSnapshot {
+        encode_cycles: ENCODE_CYCLES.swap(0, Ordering::Relaxed),
+        decode_cycles: DECODE_CYCLES.swap(0, Ordering::Relaxed),
+        encoded_bytes: ENCODED_BYTES.swap(0, Ordering::Relaxed),
+        decoded_bytes: DECODED_BYTES.swap(0, Ordering::Relaxed),
+        sample_count: SAMPLE_COUNT.swap(0, Ordering::Relaxed),
+    }
 }
 
 // ---------------------------------------------------------------------------

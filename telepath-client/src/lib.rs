@@ -404,10 +404,8 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         {
             let dt = t_dec.elapsed().as_nanos() as u64;
             self.host_metrics.decode_ns = self.host_metrics.decode_ns.saturating_add(dt);
-            self.host_metrics.decoded_bytes = self
-                .host_metrics
-                .decoded_bytes
-                .saturating_add(raw_frame.len() as u64);
+            self.host_metrics.decoded_bytes =
+                self.host_metrics.decoded_bytes.saturating_add(m as u64);
             self.host_metrics.sample_count = self.host_metrics.sample_count.saturating_add(1);
         }
         decoded.truncate(m);

@@ -11,14 +11,13 @@ use serde::{Deserialize, Serialize};
 /// frequency in Hz.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Schema)]
 pub struct MetricsSnapshot {
-    /// Total DWT cycles spent in `cobs_encode` (upstream, target→host).
-    // TODO(#76): after rzCOBS lands this field tracks rzcobs_encode instead.
+    /// Total DWT cycles spent in `rzcobs_encode` (upstream, target→host).
     pub encode_cycles: u64,
-    /// Total DWT cycles spent in `cobs_decode` (downstream, host→target).
+    /// Total DWT cycles spent in `rzcobs_decode` (downstream, host→target).
     pub decode_cycles: u64,
-    /// Total bytes output by `cobs_encode` (encoded wire bytes).
+    /// Total payload bytes input to `rzcobs_encode` (pre-framing size).
     pub encoded_bytes: u32,
-    /// Total bytes output by `cobs_decode` (decoded payload bytes).
+    /// Total payload bytes output by `rzcobs_decode` (post-unframe size).
     pub decoded_bytes: u32,
     /// Number of complete request/response round trips counted.
     pub sample_count: u32,

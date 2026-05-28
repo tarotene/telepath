@@ -127,7 +127,8 @@ bench-pty DURATION="10s":
 # Requires nRF52840-DK connected. Output: DWT cycles/byte + host ns/byte on stderr.
 # Usage: just firmware-bench [DURATION]  (default 30s)
 firmware-bench DURATION="30s":
-    cd examples/nrf52840-ping && cargo run --release --features profile
+    cd examples/nrf52840-ping && cargo build --release --features profile
+    probe-rs download --chip nRF52840_xxAA examples/nrf52840-ping/target/thumbv7em-none-eabi/release/nrf52840-ping
     probe-rs reset --chip nRF52840_xxAA
     cd tools/telepath && cargo run --features profile -- \
         shell --transport rtt --ping-storm {{DURATION}}
