@@ -10,6 +10,11 @@ description = "Host-side Telepath server deployment over a PTY pair (parallel to
 name = "host-pty-server"
 path = "src/main.rs"
 
+[features]
+# host-pty-server has no DWT; enable server-side profile only when telepath-client
+# also has profile enabled, so bench-pty can still collect host-side timing.
+profile = ["telepath-server/profile"]
+
 [dependencies]
 telepath-wire   = { workspace = true }
 telepath-server = { workspace = true }

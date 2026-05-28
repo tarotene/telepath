@@ -188,6 +188,29 @@ impl SchemaCache {
 }
 
 // ---------------------------------------------------------------------------
+// HostMetricsSnapshot (profile feature)
+// ---------------------------------------------------------------------------
+
+/// Accumulated host-side framing timing counters.
+///
+/// Returned by [`TelepathClient::take_host_metrics`] and atomically reset.
+/// All timing values are in nanoseconds; byte counts are raw bytes processed.
+#[cfg(feature = "profile")]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HostMetricsSnapshot {
+    /// Total ns spent in `cobs::encode` across all calls since last reset.
+    pub encode_ns: u64,
+    /// Total ns spent in `cobs::decode` across all calls since last reset.
+    pub decode_ns: u64,
+    /// Total bytes COBS-encoded (after postcard serialization).
+    pub encoded_bytes: u64,
+    /// Total bytes COBS-decoded (raw frame bytes fed to decoder).
+    pub decoded_bytes: u64,
+    /// Number of complete round-trips measured.
+    pub sample_count: u64,
+}
+
+// ---------------------------------------------------------------------------
 // TelepathClient
 // ---------------------------------------------------------------------------
 
@@ -203,6 +226,8 @@ pub struct TelepathClient<T> {
     /// Allows `call_raw` to read in chunks rather than one byte at a time,
     /// saving a USB roundtrip per byte on slow transports like RTT over J-Link.
     read_buf: Vec<u8>,
+    #[cfg(feature = "profile")]
+    host_metrics: HostMetricsSnapshot,
 }
 
 impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
@@ -213,7 +238,17 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
             schema_cache: SchemaCache::new(),
             seq_counter: 0,
             read_buf: Vec::new(),
+            #[cfg(feature = "profile")]
+            host_metrics: HostMetricsSnapshot::default(),
         }
+    }
+
+    /// Return the accumulated host-side framing metrics and reset all counters to zero.
+    #[cfg(feature = "profile")]
+    pub fn take_host_metrics(&mut self) -> HostMetricsSnapshot {
+        let snap = self.host_metrics;
+        self.host_metrics = HostMetricsSnapshot::default();
+        snap
     }
 
     /// Run the Command Discovery Protocol, paginating until all commands are cached.
@@ -311,7 +346,18 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
         // COBS encode + 0x00 delimiter.
         let encoded_cap = cobs::max_encoding_length(serialized.len()) + 1;
         let mut encoded = vec![0u8; encoded_cap];
+        #[cfg(feature = "profile")]
+        let t_enc = std::time::Instant::now();
         let n = cobs::encode(&serialized, &mut encoded);
+        #[cfg(feature = "profile")]
+        {
+            let dt = t_enc.elapsed().as_nanos() as u64;
+            self.host_metrics.encode_ns = self.host_metrics.encode_ns.saturating_add(dt);
+            self.host_metrics.encoded_bytes = self
+                .host_metrics
+                .encoded_bytes
+                .saturating_add(serialized.len() as u64);
+        }
         encoded[n] = 0x00;
 
         // Send.
@@ -351,7 +397,17 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
 
         // rzCOBS decode (upstream framing; decoded length may exceed encoded length).
         let mut decoded = vec![0u8; MAX_FRAME_SIZE];
+        #[cfg(feature = "profile")]
+        let t_dec = std::time::Instant::now();
         let m = rzcobs_decode(&raw_frame, &mut decoded).map_err(|_| HostError::FramingError)?;
+        #[cfg(feature = "profile")]
+        {
+            let dt = t_dec.elapsed().as_nanos() as u64;
+            self.host_metrics.decode_ns = self.host_metrics.decode_ns.saturating_add(dt);
+            self.host_metrics.decoded_bytes =
+                self.host_metrics.decoded_bytes.saturating_add(m as u64);
+            self.host_metrics.sample_count = self.host_metrics.sample_count.saturating_add(1);
+        }
         decoded.truncate(m);
 
         // Deserialize Response.

@@ -11,6 +11,8 @@ serde = { workspace = true }
 postcard = { workspace = true }
 cobs = { version = "0.5", default-features = false }
 rzcobs = { version = "0.1", default-features = false }
+postcard-schema = { workspace = true, optional = true }
 
 [features]
 default = []
+profile = ["dep:postcard-schema"]

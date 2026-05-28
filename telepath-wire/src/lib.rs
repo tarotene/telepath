@@ -15,6 +15,10 @@
 
 pub mod cmd_id;
 pub mod framing;
+#[cfg(feature = "profile")]
+pub mod metrics;
+#[cfg(feature = "profile")]
+pub use metrics::MetricsSnapshot;
 
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +35,14 @@ pub const MAX_PAYLOAD_SIZE: usize = 256;
 /// command registry. Modeled after RFC 7252 CoAP Code 0.00 (Empty) and ONC RPC
 /// NULL procedure convention.
 pub const CMD_ID_DISCOVERY: u16 = 0x0000;
+
+/// Reserved command ID for the framing/throughput metrics snapshot.
+///
+/// Sending a `Request` with this ID causes the target to reply with the current
+/// [`MetricsSnapshot`] and atomically reset all counters. Only present when the
+/// target is built with the `profile` feature; without it the command simply
+/// does not exist and the host receives `SystemError`.
+pub const CMD_ID_METRICS: u16 = 0xFFFE;
 
 // ---------------------------------------------------------------------------
 // PacketType

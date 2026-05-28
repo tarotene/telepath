@@ -26,6 +26,7 @@ embassy-nrf = { version = "0.3", features = [
 nrf-pac = { version = "0.1", features = ["nrf52840"] }
 
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+portable-atomic = { version = "1", default-features = false, features = ["unsafe-assume-single-core", "fallback"] }
 cortex-m-rt = "0.7"
 
 # RTT for both debug printing and Telepath transport.
@@ -34,6 +35,9 @@ cortex-m-rt = "0.7"
 rtt-target = "0.6"
 
 panic-halt = "0.2"
+
+[features]
+profile = ["telepath-server/profile"]
 
 [workspace]
 

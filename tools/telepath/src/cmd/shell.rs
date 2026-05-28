@@ -34,6 +34,12 @@ pub fn run(args: &ShellArgs, mut client: TelepathClient<AnyTransport>) -> anyhow
     })?;
     client.transport_mut().clear_read_deadline();
 
+    #[cfg(feature = "profile")]
+    if let Some(ref duration_str) = args.ping_storm {
+        run_ping_storm(&mut client, duration_str)?;
+        return Ok(());
+    }
+
     if !args.exec.is_empty() {
         let joined = args.exec.join(" ");
         let line = joined.trim();
@@ -496,6 +502,121 @@ fn encode_args(
     };
 
     Ok(json_val)
+}
+
+// ── Ping-storm benchmark (profile feature) ──────────────────────────────
+
+#[cfg(feature = "profile")]
+fn parse_duration(s: &str) -> anyhow::Result<std::time::Duration> {
+    if let Some(secs) = s.strip_suffix('s') {
+        let v: f64 = secs
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid duration '{s}': expected e.g. '10s'"))?;
+        return Ok(std::time::Duration::from_secs_f64(v));
+    }
+    anyhow::bail!("invalid duration '{s}': only seconds suffix supported (e.g. '10s')")
+}
+
+#[cfg(feature = "profile")]
+fn run_ping_storm(
+    client: &mut TelepathClient<AnyTransport>,
+    duration_str: &str,
+) -> anyhow::Result<()> {
+    use telepath_client::HostMetricsSnapshot;
+    use telepath_wire::CMD_ID_METRICS;
+
+    let dur = parse_duration(duration_str)?;
+
+    let ping_id = {
+        let cache = client.schema_cache();
+        cache
+            .iter()
+            .find(|e| e.name == "ping")
+            .map(|e| e.cmd_id)
+            .ok_or_else(|| anyhow::anyhow!("'ping' command not found in firmware"))?
+    };
+
+    // Drain any stale metrics from the target before the run.
+    let _ = client.call_raw(CMD_ID_METRICS, &[]);
+    // Reset host-side counters.
+    let _ = client.take_host_metrics();
+
+    let empty_args = postcard::to_allocvec(&())?;
+
+    client
+        .transport_mut()
+        .set_read_deadline(std::time::Duration::from_secs(5));
+
+    let start = std::time::Instant::now();
+    let mut frames: u64 = 0;
+    while start.elapsed() < dur {
+        client
+            .call_raw(ping_id, &empty_args)
+            .map_err(|e| anyhow::anyhow!("ping call failed: {e:?}"))?;
+        frames += 1;
+    }
+    let elapsed = start.elapsed();
+
+    let host: HostMetricsSnapshot = client.take_host_metrics();
+
+    // Attempt to retrieve target-side DWT metrics; degrade gracefully if not available.
+    let target = client
+        .call_raw(CMD_ID_METRICS, &[])
+        .ok()
+        .and_then(|raw| postcard::from_bytes::<telepath_wire::MetricsSnapshot>(&raw).ok());
+
+    let elapsed_secs = elapsed.as_secs_f64();
+    let fps = frames as f64 / elapsed_secs;
+
+    eprintln!("ping-storm {elapsed_secs:.1}s: {frames} frames  ({fps:.1} frames/sec)");
+    eprintln!("  downstream (host encode → target decode):");
+    if let Some(ref t) = target {
+        if t.sample_count > 0 && t.decoded_bytes > 0 {
+            let cyc_per_byte = t.decode_cycles as f64 / t.decoded_bytes as f64;
+            eprintln!(
+                "    target: {cyc_per_byte:.1} cycles/byte  (sample={})",
+                t.sample_count
+            );
+        } else {
+            eprintln!("    target: n/a (no samples)");
+        }
+    } else {
+        eprintln!("    target: n/a (get_metrics not available)");
+    }
+    if host.sample_count > 0 && host.encoded_bytes > 0 {
+        let ns_per_byte = host.encode_ns as f64 / host.encoded_bytes as f64;
+        eprintln!(
+            "    host  : {ns_per_byte:.1} ns/byte  (sample={})",
+            host.sample_count
+        );
+    } else {
+        eprintln!("    host  : n/a (no samples)");
+    }
+    eprintln!("  upstream (target encode → host decode):");
+    if let Some(ref t) = target {
+        if t.sample_count > 0 && t.encoded_bytes > 0 {
+            let cyc_per_byte = t.encode_cycles as f64 / t.encoded_bytes as f64;
+            eprintln!(
+                "    target: {cyc_per_byte:.1} cycles/byte  (sample={})",
+                t.sample_count
+            );
+        } else {
+            eprintln!("    target: n/a (no samples)");
+        }
+    } else {
+        eprintln!("    target: n/a (get_metrics not available)");
+    }
+    if host.sample_count > 0 && host.decoded_bytes > 0 {
+        let ns_per_byte = host.decode_ns as f64 / host.decoded_bytes as f64;
+        eprintln!(
+            "    host  : {ns_per_byte:.1} ns/byte  (sample={})",
+            host.sample_count
+        );
+    } else {
+        eprintln!("    host  : n/a (no samples)");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -73,9 +73,9 @@ async fn serial_pty_mcp_ping_round_trip() {
                         return path.to_string();
                     }
                 }
-                None => panic!(
-                    "host-pty-server stdout closed without printing HOST_PTY_SERVER_PATH"
-                ),
+                None => {
+                    panic!("host-pty-server stdout closed without printing HOST_PTY_SERVER_PATH")
+                }
             }
         }
     })
@@ -93,23 +93,21 @@ async fn serial_pty_mcp_ping_round_trip() {
     let client = ().serve(transport).await.expect("MCP initialize handshake");
 
     // 3. Confirm `ping` is among the discovered tools.
-    let tools = client
-        .list_tools(None)
-        .await
-        .expect("list_tools");
+    let tools = client.list_tools(None).await.expect("list_tools");
     assert!(
         tools.tools.iter().any(|t| t.name == "ping"),
         "ping not in discovered tools: {:?}",
-        tools.tools.iter().map(|t| t.name.as_ref()).collect::<Vec<_>>()
+        tools
+            .tools
+            .iter()
+            .map(|t| t.name.as_ref())
+            .collect::<Vec<_>>()
     );
 
     // 4. Call `ping` and assert the 0xDEADBEEF sentinel.
     let mut call_params = CallToolRequestParams::default();
     call_params.name = "ping".into();
-    let result = client
-        .call_tool(call_params)
-        .await
-        .expect("call_tool ping");
+    let result = client.call_tool(call_params).await.expect("call_tool ping");
 
     let text = result
         .content
