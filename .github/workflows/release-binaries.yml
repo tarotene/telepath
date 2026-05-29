@@ -4,11 +4,6 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag to label artifacts with (workflow_dispatch only; no upload to release)'
-        required: false
-        default: 'dry-run'
 
 permissions:
   contents: write
@@ -66,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           name="telepath-${{ matrix.target }}"
-          staging="${{ runner.temp }}/${name}"
+          staging="${RUNNER_TEMP}/${name}"
           mkdir -p "$staging"
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             cp "target/${{ matrix.target }}/release/telepath.exe" "$staging/"
@@ -100,7 +95,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          asset="${{ runner.temp }}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}"
+          asset="${RUNNER_TEMP}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}"
           gh release upload "${{ github.event.release.tag_name }}" "$asset" --clobber
 
       - name: Upload as workflow artifact (dry-run)

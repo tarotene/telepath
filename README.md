@@ -160,7 +160,7 @@ Manual download — choose your target triple and run:
 VERSION=0.2.0  # replace with desired release
 TARGET=x86_64-unknown-linux-gnu  # or: aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
 curl -L "https://github.com/tarotene/telepath/releases/download/v${VERSION}/telepath-${TARGET}.tar.gz" \
-  | tar -xz
+  | tar -xzf -
 ./telepath-${TARGET}/telepath --help
 ```
 
