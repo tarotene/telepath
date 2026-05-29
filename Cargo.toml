@@ -10,7 +10,7 @@ members = [
 exclude = ["examples/nrf52840-ping", "tools/telepath"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tarotene/telepath"
@@ -18,10 +18,10 @@ publish = false
 rust-version = "1.88"
 
 [workspace.dependencies]
-telepath-wire = { path = "telepath-wire", version = "0.1", default-features = false }
-telepath-macros = { path = "telepath-macros", version = "0.1" }
-telepath-server = { path = "telepath-server", version = "0.1" }
-telepath-client = { path = "telepath-client", version = "0.1" }
+telepath-wire = { path = "telepath-wire", version = "0.2", default-features = false }
+telepath-macros = { path = "telepath-macros", version = "0.2" }
+telepath-server = { path = "telepath-server", version = "0.2" }
+telepath-client = { path = "telepath-client", version = "0.2" }
 serde = { version = "1", default-features = false, features = ["derive"] }
 postcard = { version = "1", default-features = false }
 syn = { version = "2", features = ["full"] }

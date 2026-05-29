@@ -218,9 +218,12 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
 
 #### What release-plz does NOT do
 
-- Publish to crates.io (`publish = false` everywhere — see [`release-plz.toml`](release-plz.toml))
 - Create per-crate GitHub Releases (only `telepath-wire` is the canonical release owner)
 - Run on PRs — only on pushes to `main`
+
+> **Note**: Publishing to crates.io is now enabled (`publish = true` in each crate's `Cargo.toml`,
+> set in PR #183). The `RELEASE_PLZ_ENABLED` repo variable gates the workflow during Phase 4
+> initial-publish choreography; see [`docs/releasing.md § Initial crates.io publish`](docs/releasing.md#initial-cratesio-publish-one-time-choreography).
 
 #### Debugging / recovery
 

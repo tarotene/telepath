@@ -16,6 +16,9 @@ jobs:
   # Creates GitHub Release + git tag after the release PR merges.
   # No concurrency block — missing a release is worse than a duplicate attempt.
   release-plz-release:
+    # Disabled during Phase 4 initial-publish choreography (RELEASE_PLZ_ENABLED not yet set).
+    # Set the repo variable to 'true' after the first manual cargo publish completes.
+    if: vars.RELEASE_PLZ_ENABLED == 'true'
     name: Release-plz release
     runs-on: ubuntu-latest
     permissions:
@@ -52,6 +55,8 @@ jobs:
   # Opens / updates the release PR on every push to main.
   # Concurrency: cancel in-flight PR-update runs but never cancel a release run.
   release-plz-pr:
+    # Same guard as release-plz-release — both jobs disabled until RELEASE_PLZ_ENABLED='true'.
+    if: vars.RELEASE_PLZ_ENABLED == 'true'
     name: Release-plz PR
     runs-on: ubuntu-latest
     permissions:

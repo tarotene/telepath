@@ -78,9 +78,95 @@ git commit -m "chore(release): bump excluded crates to 0.1.1"
 git push
 ```
 
+## Rotating CARGO_REGISTRY_TOKEN
+
+The token issued for the initial crates.io publish expires **90 days** after issue.
+The `token-expiry-check` workflow opens an issue when the token is 60+ days old.
+
+**Name convention**: `telepath-release-plz-YYYYQn` (e.g. `telepath-release-plz-2026Q3`).
+
+Rotation steps (zero-downtime — old token stays valid until you revoke it):
+
+1. Issue a new token at <https://crates.io/me> → Account Settings → API Tokens → New Token.
+   Scopes: `publish-new` + `publish-update` only. Expiration: 90 days.
+   Copy the `cio_…` value immediately (shown only once).
+
+2. Update the secret and the issue-date variable:
+   ```
+   echo -n "<new-token>" | gh secret set CARGO_REGISTRY_TOKEN \
+     --repo tarotene/telepath --body -
+   gh variable set CARGO_TOKEN_ISSUED_AT --body "$(date +%F)" \
+     --repo tarotene/telepath
+   ```
+
+3. Confirm authentication with a dry-run workflow trigger:
+   ```
+   gh workflow run release-plz.yml --repo tarotene/telepath --ref main
+   ```
+   Expected: both jobs complete (or skip if no pending release).
+
+4. Revoke the old token at <https://crates.io/me> → Account Settings → API Tokens → Revoke.
+
+### Expired token recovery (401 Unauthorized)
+
+If the token already expired and release-plz is failing with 401:
+
+```
+# 1. Issue new token (Step 1 above)
+# 2. Overwrite the secret
+echo -n "<new-token>" | gh secret set CARGO_REGISTRY_TOKEN \
+  --repo tarotene/telepath --body -
+# 3. Update issued-at variable
+gh variable set CARGO_TOKEN_ISSUED_AT --body "$(date +%F)" \
+  --repo tarotene/telepath
+# 4. Retrigger the failed workflow
+gh workflow run release-plz.yml --repo tarotene/telepath --ref main
+```
+
+## Initial crates.io publish (one-time choreography)
+
+The first publish must be performed manually in dependency order because
+release-plz cannot compute diffs against a non-existent registry entry.
+
+**Prerequisites**: `CARGO_REGISTRY_TOKEN` secret set, `RELEASE_PLZ_ENABLED` variable unset or `false`.
+
+```bash
+# From workspace root — each publish waits for crates.io index (~30 s) before continuing
+cargo publish -p telepath-wire && sleep 30
+cargo publish -p telepath-macros && sleep 30
+cargo publish -p telepath-server && sleep 30
+cargo publish -p telepath-client && sleep 30
+(cd tools/telepath && cargo publish)
+```
+
+After publishing, enable automation and create the GitHub Release:
+
+```bash
+# Tag and release
+git tag -a v0.2.0 -m "Release v0.2.0 (initial crates.io publish)"
+git push origin v0.2.0
+gh release create v0.2.0 \
+  --title "v0.2.0" \
+  --notes-file <(awk '/^## \[0\.2\.0\]/,/^## \[/' CHANGELOG.md | sed '$d')
+
+# Re-enable release-plz automation
+gh variable set RELEASE_PLZ_ENABLED --body true --repo tarotene/telepath
+gh variable set CARGO_TOKEN_ISSUED_AT --body "$(date +%F)" --repo tarotene/telepath
+```
+
+Verify all five crates are live:
+
+```bash
+for crate in telepath-wire telepath-macros telepath-server telepath-client telepath; do
+  curl -sf "https://crates.io/api/v1/crates/$crate/0.2.0" >/dev/null \
+    && echo "$crate ✓" || echo "$crate ✗"
+done
+```
+
 ## Reference
 
 - [`release-plz.toml`](../release-plz.toml) — workspace configuration
 - [`.github/workflows/release-plz.yml`](../.github/workflows/release-plz.yml) — workflow file
+- [`.github/workflows/token-expiry-check.yml`](../.github/workflows/token-expiry-check.yml) — token age monitor
 - [release-plz docs](https://release-plz.dev/docs)
-- Tracking issue: [#30](https://github.com/tarotene/telepath/issues/30)
+- Tracking issue: [#172](https://github.com/tarotene/telepath/issues/172)

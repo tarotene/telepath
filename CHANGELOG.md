@@ -13,6 +13,25 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
+
+## [0.2.0] — 2026-05-30
+
+### Breaking Changes
+
+- **[BREAKING] wire, server, client**: rzCOBS upstream framing (Stage C2) — Host→Target uses COBS, Target→Host uses rzCOBS ([#176](https://github.com/tarotene/telepath/pull/176))
+- **[BREAKING] wire, client**: Specify AppError payload format (Stage C4) ([#182](https://github.com/tarotene/telepath/pull/182))
+
+### Added
+
+- **client**: Typed `call::<Args, Ret>` wrapper (Stage C1) ([#174](https://github.com/tarotene/telepath/pull/174))
+- **telemetry**: DWT-based framing/throughput instrumentation ([#178](https://github.com/tarotene/telepath/pull/178))
+- **release**: Pre-built binary distribution pipeline for 5 platforms ([#184](https://github.com/tarotene/telepath/pull/184))
+
+### Other
+
+- **wire**: `impl From<postcard::Error> for WireError` ([#173](https://github.com/tarotene/telepath/pull/173))
+- **deps**: Lock file maintenance; taiki-e/install-action update
+
 ## [0.1.0] — 2026-05-27
 
 ### Added

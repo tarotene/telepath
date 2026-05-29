@@ -1,0 +1,46 @@
+name: Token expiry check
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # 1st of every month, 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-token-age:
+    name: Check CARGO_REGISTRY_TOKEN age
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate token age and open issue if expiry is near
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUED_AT: ${{ vars.CARGO_TOKEN_ISSUED_AT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ISSUED_AT:-}" ]; then
+            echo "CARGO_TOKEN_ISSUED_AT variable is not set — cannot check age."
+            echo "Set it to the token issue date (YYYY-MM-DD) after next rotation."
+            exit 0
+          fi
+          NOW=$(date +%s)
+          ISSUED=$(date -d "$ISSUED_AT" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$ISSUED_AT" +%s)
+          AGE_DAYS=$(( (NOW - ISSUED) / 86400 ))
+          echo "Token issued $ISSUED_AT (age: ${AGE_DAYS} days, 90-day lifetime)"
+          if [ "$AGE_DAYS" -gt 60 ]; then
+            DAYS_LEFT=$(( 90 - AGE_DAYS ))
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "chore(security): rotate CARGO_REGISTRY_TOKEN (age ${AGE_DAYS}d, ~${DAYS_LEFT}d remaining)" \
+              --label "security" \
+              --body "## Action required
+
+The \`CARGO_REGISTRY_TOKEN\` secret was issued **$ISSUED_AT** and is now **${AGE_DAYS} days old**.
+It expires at 90 days (~${DAYS_LEFT} days remaining). Release-plz will fail with 401 if it expires.
+
+See **[docs/releasing.md § Rotating CARGO_REGISTRY_TOKEN](../blob/main/docs/releasing.md#rotating-cargo_registry_token)** for the rotation procedure."
+          else
+            echo "Token is ${AGE_DAYS} days old — no action needed (threshold: 60 days)."
+          fi
