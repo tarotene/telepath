@@ -41,7 +41,7 @@ jobs:
                 --jq "[.comments[] | select(.body | contains(\"<!-- release-nudge -->\")) | select(.createdAt > \"$WEEK_AGO\")] | length")
               [ "$RECENT" -gt 0 ] && continue
 
-              NUDGE_BODY=$(printf '<!-- release-nudge -->\n⏰ **Release nudge** — This release PR has been open for **%d days**.\n\nIf the milestone is complete, run `just bump-excluded` and merge when ready.\nSee [Release scheduling model](https://github.com/tarotene/telepath/blob/main/AGENTS.md#release-scheduling-model-hybrid) for the hybrid release policy.' "$DAYS_OPEN")
+              NUDGE_BODY=$(printf '<!-- release-nudge -->\n⏰ **Release nudge** — This release PR has been open for **%d days**.\n\nIf the milestone is complete, review and merge when ready. The excluded-crate version bump (`just bump-excluded`) is performed automatically by the `release-plz-pr` CI step.\nSee [Release scheduling model](https://github.com/tarotene/telepath/blob/main/AGENTS.md#release-scheduling-model-hybrid) for the hybrid release policy.' "$DAYS_OPEN")
               gh pr comment "$PR_NUM" \
                 --repo "$GITHUB_REPOSITORY" \
                 --body "$NUDGE_BODY"

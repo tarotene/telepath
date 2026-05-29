@@ -202,16 +202,12 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
    - Workspace `Cargo.toml` version bump
    - `CHANGELOG.md` entry
    - `release` label
-3. On the release PR branch, run the required manual step to bump the two excluded crates:
-   ```
-   just bump-excluded X.Y.Z
-   git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
-   git commit -m "chore(release): bump excluded crates to X.Y.Z"
-   git push
-   ```
-   `tools/telepath` and `examples/nrf52840-ping` are excluded from the workspace and are
-   not bumped automatically by release-plz. Skipping this step leaves those crates at a
-   stale version.
+3. The `release-plz-pr` job automatically bumps `tools/telepath` and
+   `examples/nrf52840-ping` to the new version and pushes a commit
+   (`chore(release): bump excluded crates to X.Y.Z`) onto the release PR branch.
+   **No manual action is required.** (See step 3 in
+   [`docs/releasing.md § Excluded crates`](docs/releasing.md#excluded-crates-bump-excluded-requirement)
+   for recovery if the automatic step fails.)
 4. Review and merge the release PR.
 5. The `release-plz-release` job creates one GitHub Release (`telepath-wire-vX.Y.Z`)
    tagged `vX.Y.Z`, covering all five workspace members (unified versioning).

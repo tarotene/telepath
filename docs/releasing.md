@@ -62,21 +62,33 @@ produce a new release PR for the corrected version on the next push to `main`.
 **Do not re-use a deleted tag.** Increment the patch version instead
 (e.g. `v0.1.0` deleted → next release is `v0.1.1`).
 
-## Excluded crates: why bump-excluded is required
+## Excluded crates: bump-excluded requirement
 
 `tools/telepath` and `examples/nrf52840-ping` are listed under `exclude` in
 the root `Cargo.toml` and are therefore invisible to release-plz. Their
 `version` field is not touched by the automated version bump.
 
-The `just bump-excluded X.Y.Z` recipe (`Justfile`) rewrites the `version`
-line in both files with `sed`. Run it on the release PR branch before merging:
+**As of #170, this step is automated.** The `release-plz-pr` job reads the
+bumped version from the workspace `Cargo.toml` on the release PR branch,
+runs `just bump-excluded`, and pushes a commit
+`chore(release): bump excluded crates to X.Y.Z` onto that branch automatically.
+
+### Recovery: if the automatic bump fails
+
+If the automatic commit was not pushed (e.g. the `release-plz` action output
+did not contain a branch name, or the push was rejected), run the step manually:
 
 ```
-just bump-excluded 0.1.1
+git fetch origin <release-pr-branch>
+git checkout <release-pr-branch>
+just bump-excluded X.Y.Z
 git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
-git commit -m "chore(release): bump excluded crates to 0.1.1"
+git commit -m "chore(release): bump excluded crates to X.Y.Z"
 git push
 ```
+
+Replace `X.Y.Z` with the version from `[workspace.package].version` in the
+root `Cargo.toml` on the release PR branch.
 
 ## Trusted Publishing
 
