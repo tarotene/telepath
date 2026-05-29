@@ -218,9 +218,14 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
 
 #### What release-plz does NOT do
 
-- Publish to crates.io (`publish = false` everywhere — see [`release-plz.toml`](release-plz.toml))
 - Create per-crate GitHub Releases (only `telepath-wire` is the canonical release owner)
 - Run on PRs — only on pushes to `main`
+
+> **Authentication**: Publishing uses Trusted Publishing (OIDC) — no `CARGO_REGISTRY_TOKEN`
+> secret is required. `id-token: write` is set on the `release-plz-release` job so GitHub
+> Actions can exchange a short-lived OIDC token with crates.io. When adding a new publishable
+> crate, configure Trusted Publishing on crates.io for the new crate name before its first
+> release. See [`docs/releasing.md § Trusted Publishing`](docs/releasing.md#trusted-publishing).
 
 #### Debugging / recovery
 
