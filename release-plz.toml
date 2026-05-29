@@ -41,6 +41,10 @@ git_tag_enable = true
 git_tag_name = "v{{ version }}"
 
 [[package]]
+name = "host-pty-server"
+publish = false
+
+[[package]]
 name = "telepath-macros"
 
 [[package]]
