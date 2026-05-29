@@ -144,6 +144,33 @@ hardware. Switching to an MCU is purely a transport swap.
 > **MSRV:** See [Supported Rust Version](#supported-rust-version) below for the
 > declared Minimum Supported Rust Version and policy.
 
+## Install
+
+The unified CLI ships three install paths:
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| Source build | `cargo install telepath` | Compiles from crates.io. Minutes; no extra tooling. |
+| Pre-built binary | `cargo binstall telepath` | Fetches the matching archive from GitHub Releases. Requires [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall). |
+| Manual download | See below | No Rust required. |
+
+Manual download — choose your target triple and run:
+
+```bash
+VERSION=0.2.0  # replace with desired release
+TARGET=x86_64-unknown-linux-gnu  # or: aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
+curl -L "https://github.com/tarotene/telepath/releases/download/v${VERSION}/telepath-${TARGET}.tar.gz" \
+  | tar -xzf -
+./telepath-${TARGET}/telepath --help
+```
+
+Windows: download `telepath-x86_64-pc-windows-msvc.zip` from the
+[Releases page](https://github.com/tarotene/telepath/releases) and extract.
+
+Pre-built binaries ship with default features (`shell + mcp + rtt`). The `serial`
+transport requires libudev on Linux and is available only via source build:
+`cargo install telepath --features serial`.
+
 ## Git hooks setup
 
 The repository ships hooks under `.githooks/` that enforce quality gates at
@@ -186,11 +213,6 @@ the workspace-excluded `tools/telepath` CLI, format/clippy gates, and the
 `just ci` aggregator — lives in
 [AGENTS.md § Build Commands](AGENTS.md#build-commands).
 For first-time setup, run through [Quickstart](#quickstart) above first.
-
-> **Pre-built binaries:** Host-side tools (`telepath shell`, `telepath mcp`)
-> are currently distributed as source only. Pre-built binary distribution
-> via GitHub Releases is planned in
-> [#52](https://github.com/tarotene/telepath/issues/52).
 
 ## Real hardware: nRF52840-DK
 

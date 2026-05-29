@@ -1,0 +1,108 @@
+name: Release binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/rust-setup
+        with:
+          targets: ${{ matrix.target }}
+          cache-key: release-binaries-${{ matrix.target }}
+          cache-workspaces: tools/telepath
+
+      - name: Build (release, default features)
+        working-directory: tools/telepath
+        shell: bash
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      - name: Stage archive contents
+        id: stage
+        shell: bash
+        working-directory: tools/telepath
+        run: |
+          set -euo pipefail
+          name="telepath-${{ matrix.target }}"
+          staging="${RUNNER_TEMP}/${name}"
+          mkdir -p "$staging"
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            cp "target/${{ matrix.target }}/release/telepath.exe" "$staging/"
+          else
+            cp "target/${{ matrix.target }}/release/telepath" "$staging/"
+          fi
+          cp ../../LICENSE-MIT "$staging/"
+          cp ../../LICENSE-APACHE "$staging/"
+          cp README.md "$staging/"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "staging=$staging" >> "$GITHUB_OUTPUT"
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          cd "${{ runner.temp }}"
+          tar czf "${{ steps.stage.outputs.name }}.tar.gz" "${{ steps.stage.outputs.name }}"
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "${{ steps.stage.outputs.staging }}\*" `
+            -DestinationPath "${{ runner.temp }}\${{ steps.stage.outputs.name }}.zip"
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          asset="${RUNNER_TEMP}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}"
+          gh release upload "${{ github.event.release.tag_name }}" "$asset" --clobber
+
+      - name: Upload as workflow artifact (dry-run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.stage.outputs.name }}
+          path: ${{ runner.temp }}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 7

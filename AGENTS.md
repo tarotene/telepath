@@ -267,6 +267,7 @@ Ruleset (`id=13908758`, applies to `main`):
 | `MSRV (1.88)` | Policy gate | YES |
 | `Firmware (cross-compile nRF52840-DK)` | Cross-compile correctness | YES |
 | `Tools (telepath CLI clippy + tests)` | Correctness (tools/telepath) | YES (added PR #110) |
+| `Release binaries (5 targets)` | Release artifact pipeline | NO (release-only trigger; cannot gate PRs) |
 
 **Decision criteria for promoting a job to Required:**
 - Correctness / Style / Policy gates → SHOULD be required
@@ -297,6 +298,7 @@ CI is split into five independent workflows plus one composite action:
 | `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
 | `.github/workflows/msrv.yml` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
 | `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
+| `.github/workflows/release-binaries.yml` | `Release binaries (5 targets)` | Triggered by `release: published`; `workflow_dispatch` for dry-run validation |
 
 Common setup (toolchain, libudev, just, rust-cache) lives in
 `.github/actions/rust-setup/action.yml` (composite action). Modify it to apply
