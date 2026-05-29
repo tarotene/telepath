@@ -158,7 +158,7 @@ Manual download — choose your target triple and run:
 
 ```bash
 VERSION=0.2.0  # replace with desired release
-TARGET=x86_64-unknown-linux-gnu  # or: aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
+TARGET=x86_64-unknown-linux-gnu  # or: aarch64-unknown-linux-gnu, aarch64-apple-darwin
 curl -L "https://github.com/tarotene/telepath/releases/download/v${VERSION}/telepath-${TARGET}.tar.gz" \
   | tar -xzf -
 ./telepath-${TARGET}/telepath --help
@@ -166,6 +166,9 @@ curl -L "https://github.com/tarotene/telepath/releases/download/v${VERSION}/tele
 
 Windows: download `telepath-x86_64-pc-windows-msvc.zip` from the
 [Releases page](https://github.com/tarotene/telepath/releases) and extract.
+
+macOS Intel (`x86_64-apple-darwin`) users: pre-built binaries are not available yet — use
+`cargo install telepath` instead.
 
 Pre-built binaries ship with default features (`shell + mcp + rtt`). The `serial`
 transport requires libudev on Linux and is available only via source build:
