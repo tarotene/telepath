@@ -130,4 +130,9 @@ then use the slave PTY path printed as `HOST_PTY_SERVER_PATH=...` with `--port`.
 
 ## Known limitations and followups
 
-- Inspector E2E browser test removed during initial PR; recovery tracked in #42
+- Inspector UI browser E2E test was removed during initial PR (#33). Restoring
+  it is deferred: the unified CLI lacks a `--transport loopback` entry point and
+  the Inspector React UI has known render-timing flakiness. Hardware-free
+  headless coverage exists in `tools/telepath/tests/serial_pty_smoke.rs`.
+  See [#42](https://github.com/tarotene/telepath/issues/42) for the scope
+  revision and options.
