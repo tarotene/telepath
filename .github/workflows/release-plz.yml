@@ -40,12 +40,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # host-pty-server (publish=false) produces a git-only release that appears in
+      # the releases output. Skip tools/telepath publishing for git-only releases.
+      - id: gate
+        if: ${{ steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]' }}
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          count=$(echo "$RELEASES" | jq '[.[] | select(.package_name != "host-pty-server")] | length')
+          echo "should_publish_tools=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       # tools/telepath is excluded from the root workspace and is not managed by
       # release-plz; publish it manually after the workspace crates are live.
-      # Trusted Publishing (OIDC) — no long-lived CARGO_REGISTRY_TOKEN needed.
+      # release-plz performs its own OIDC exchange internally and does not expose
+      # the temporary token to subsequent steps, so we obtain a separate token via
+      # rust-lang/crates-io-auth-action for this publish step.
+      - name: Authenticate to crates.io for tools/telepath
+        id: auth
+        if: ${{ steps.gate.outputs.should_publish_tools == 'true' }}
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+
       - name: Publish tools/telepath to crates.io
-        if: ${{ steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]' }}
+        if: ${{ steps.gate.outputs.should_publish_tools == 'true' }}
         working-directory: tools/telepath
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: cargo publish
 
   # Opens / updates the release PR on every push to main.

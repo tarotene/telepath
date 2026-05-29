@@ -138,6 +138,19 @@ gh release create v0.2.0 \
 
 Trusted Publishing handles all subsequent releases automatically — no rotation or monitoring needed.
 
+### tools/telepath (excluded crate)
+
+`tools/telepath` is excluded from the root workspace and is not managed by release-plz.
+The `release-plz-release` job publishes it in a separate step using
+[`rust-lang/crates-io-auth-action`](https://github.com/rust-lang/crates-io-auth-action).
+
+**Why a separate action?** release-plz performs its own OIDC token exchange internally
+and does not expose that token to subsequent workflow steps. release-plz's quickstart
+says "don't use `crates-io-auth-action`" — this applies only to the crates managed
+by `release-plz release` itself. For crates published outside release-plz's scope,
+`crates-io-auth-action` is the correct mechanism and must have a matching Trusted
+Publishing entry on crates.io (same owner/repo/workflow as the workspace crates).
+
 ## Reference
 
 - [`release-plz.toml`](../release-plz.toml) — workspace configuration
