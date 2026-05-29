@@ -1,5 +1,4 @@
 [workspace]
-publish = false
 git_release_enable = false
 git_tag_enable = false
 changelog_update = true
@@ -40,3 +39,16 @@ name = "telepath-wire"
 git_release_enable = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
+
+[[package]]
+name = "host-pty-server"
+publish = false
+
+[[package]]
+name = "telepath-macros"
+
+[[package]]
+name = "telepath-server"
+
+[[package]]
+name = "telepath-client"

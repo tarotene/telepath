@@ -18,10 +18,10 @@ publish = false
 rust-version = "1.88"
 
 [workspace.dependencies]
-telepath-wire = { path = "telepath-wire", default-features = false }
-telepath-macros = { path = "telepath-macros" }
-telepath-server = { path = "telepath-server" }
-telepath-client = { path = "telepath-client" }
+telepath-wire = { path = "telepath-wire", version = "0.1", default-features = false }
+telepath-macros = { path = "telepath-macros", version = "0.1" }
+telepath-server = { path = "telepath-server", version = "0.1" }
+telepath-client = { path = "telepath-client", version = "0.1" }
 serde = { version = "1", default-features = false, features = ["derive"] }
 postcard = { version = "1", default-features = false }
 syn = { version = "2", features = ["full"] }

@@ -5,8 +5,11 @@ edition = "2021"
 resolver = "3"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tarotene/telepath"
+publish = true
 description = "Unified CLI for Telepath: interactive shell and MCP server"
-publish = false
+readme = "README.md"
+keywords = ["embedded", "rpc", "cli", "mcp", "probe-rs"]
+categories = ["command-line-utilities", "embedded", "development-tools"]
 rust-version = "1.88"
 
 [[bin]]
@@ -26,8 +29,8 @@ serial = ["telepath-client/serial"]
 profile = ["telepath-client/profile", "telepath-wire/profile"]
 
 [dependencies]
-telepath-client = { path = "../../telepath-client" }
-telepath-wire   = { path = "../../telepath-wire" }
+telepath-client = { path = "../../telepath-client", version = "0.1" }
+telepath-wire   = { path = "../../telepath-wire",   version = "0.1" }
 postcard        = { version = "1", features = ["alloc"] }
 postcard-schema = { version = "0.2", features = ["use-std", "heapless-v0_9"] }
 heapless        = { version = "0.9", default-features = false, features = ["serde"] }
@@ -50,7 +53,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 probe-rs = { version = "0.31", optional = true }
 
 [dev-dependencies]
-telepath-server = { path = "../../telepath-server" }
+telepath-server = { path = "../../telepath-server", version = "0.1" }
 tokio           = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "time", "io-util"] }
 rmcp            = { version = "1", features = ["client", "transport-child-process"] }
 
