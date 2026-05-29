@@ -116,10 +116,10 @@ fn ping_shim(
     _input: &[u8],
     output: &mut [u8],
     _resources: &telepath_server::ResourceRegistry,
-) -> Result<usize, DispatchError> {
+) -> Result<telepath_server::DispatchOutcome, DispatchError> {
     let val: u32 = 0xDEAD_BEEF;
     let written = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-    Ok(written.len())
+    Ok(telepath_server::DispatchOutcome::Ok(written.len()))
 }
 
 fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {

@@ -8,7 +8,10 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
-use syn::{parse_macro_input, FnArg, ItemFn, LitInt, Pat, ReturnType, Token, Type, TypeReference};
+use syn::{
+    parse_macro_input, FnArg, GenericArgument, ItemFn, LitInt, Pat, PathArguments, ReturnType,
+    Token, Type, TypeReference,
+};
 use telepath_wire::cmd_id::derive_cmd_id as compute_cmd_id;
 
 /// Optional attributes for `#[command]`.
@@ -258,6 +261,28 @@ fn expand_command(
         }
     };
 
+    // Detect whether the declared return type is `Result<T, AppErrorPayload>`.
+    // A `Result` with any other error type is rejected at compile time — silently
+    // serialising the whole `Result<T, E>` would produce `ResponseStatus::Ok` for
+    // an error arm, which is a footgun.
+    let returns_app_error = match &func.sig.output {
+        ReturnType::Default => false,
+        ReturnType::Type(_, ty) => {
+            if is_result_outer(ty) && !is_result_app_error(ty) {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "#[command] supports `Result<T, AppErrorPayload>` for fallible commands. \
+                     A `Result` with any other error type is not supported — use \
+                     `telepath_wire::AppErrorPayload` as the Err variant, or return a plain \
+                     value `T` for an infallible command. \
+                     Note: type aliases for AppErrorPayload are not detected; spell it out \
+                     literally.",
+                ));
+            }
+            is_result_app_error(ty)
+        }
+    };
+
     // --- Build arg_names_str ---
     // Comma-joined wire argument names for runtime introspection (e.g. "a,b").
     // Resource arguments are excluded — they are server-side only.
@@ -344,9 +369,19 @@ fn expand_command(
         quote! { (#(#wire_types),*) }
     };
 
+    // For `Result<T, AppErrorPayload>` commands the ret_schema describes the
+    // *Ok* payload (`T`), because `ResponseStatus` already distinguishes Ok
+    // from AppError and `AppErrorPayload` is a known wire type.
     let ret_schema_type = match &func.sig.output {
         ReturnType::Default => quote! { () },
-        ReturnType::Type(_, ty) => quote! { #ty },
+        ReturnType::Type(_, ty) => {
+            if returns_app_error {
+                let ok_ty = extract_ok_type(ty);
+                quote! { #ok_ty }
+            } else {
+                quote! { #ty }
+            }
+        }
     };
 
     // --- Build shim body ---
@@ -413,15 +448,52 @@ fn expand_command(
         .map(|ident| quote! { #ident })
         .collect();
 
-    let shim_body = quote! {
-        #wire_deser
-        #(#resource_lookups)*
-        let __ret = #fn_ident(#(#call_args),*);
-        match ::postcard::to_slice(&__ret, output) {
-            Ok(s) => ::core::result::Result::Ok(s.len()),
-            Err(_) => ::core::result::Result::Err(
-                ::telepath_server::DispatchError::SerializeError
-            ),
+    let shim_body = if returns_app_error {
+        // Fallible command: `-> Result<T, AppErrorPayload>`.
+        // Ok arm serialises `T`; Err arm serialises `AppErrorPayload` via
+        // `__encode_app_error` and signals `DispatchOutcome::AppError`.
+        quote! {
+            #wire_deser
+            #(#resource_lookups)*
+            let __ret = #fn_ident(#(#call_args),*);
+            match __ret {
+                ::core::result::Result::Ok(__ok) => {
+                    match ::postcard::to_slice(&__ok, output) {
+                        Ok(s) => ::core::result::Result::Ok(
+                            ::telepath_server::DispatchOutcome::Ok(s.len())
+                        ),
+                        Err(_) => ::core::result::Result::Err(
+                            ::telepath_server::DispatchError::SerializeError
+                        ),
+                    }
+                }
+                ::core::result::Result::Err(__err) => {
+                    match ::telepath_server::__encode_app_error(&__err, output) {
+                        Ok(n) => ::core::result::Result::Ok(
+                            ::telepath_server::DispatchOutcome::AppError(n)
+                        ),
+                        Err(_) => ::core::result::Result::Err(
+                            ::telepath_server::DispatchError::SerializeError
+                        ),
+                    }
+                }
+            }
+        }
+    } else {
+        // Infallible command: `-> T`. Wire output is identical to the previous
+        // behaviour; only the return value is now wrapped in `DispatchOutcome::Ok`.
+        quote! {
+            #wire_deser
+            #(#resource_lookups)*
+            let __ret = #fn_ident(#(#call_args),*);
+            match ::postcard::to_slice(&__ret, output) {
+                Ok(s) => ::core::result::Result::Ok(
+                    ::telepath_server::DispatchOutcome::Ok(s.len())
+                ),
+                Err(_) => ::core::result::Result::Err(
+                    ::telepath_server::DispatchError::SerializeError
+                ),
+            }
         }
     };
 
@@ -442,7 +514,10 @@ fn expand_command(
             input: &[u8],
             output: &mut [u8],
             __resources: &::telepath_server::ResourceRegistry,
-        ) -> ::core::result::Result<usize, ::telepath_server::DispatchError> {
+        ) -> ::core::result::Result<
+            ::telepath_server::DispatchOutcome,
+            ::telepath_server::DispatchError,
+        > {
             #shim_body
         }
 
@@ -498,6 +573,97 @@ fn expand_command(
         pub static #guard_ident: u8 = 0;
 
     })
+}
+
+// ---------------------------------------------------------------------------
+// Return-type helpers
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if `ty` is a `Result<T, E>` type (any two-argument Result).
+///
+/// Accepts bare `Result`, `core::result::Result`, and similar fully-qualified
+/// paths; matches solely on the last path-segment ident.
+fn is_result_outer(ty: &Type) -> bool {
+    let Type::Path(tp) = ty else { return false };
+    let Some(seg) = tp.path.segments.last() else {
+        return false;
+    };
+    if seg.ident != "Result" {
+        return false;
+    }
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return false;
+    };
+    let type_args: Vec<&Type> = args
+        .args
+        .iter()
+        .filter_map(|a| match a {
+            GenericArgument::Type(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    type_args.len() == 2
+}
+
+/// Returns `true` if `ty` is `Result<T, AppErrorPayload>` (or any path whose
+/// last segment ident is `AppErrorPayload`, e.g. `telepath_wire::AppErrorPayload`).
+///
+/// Detects `AppErrorPayload<'a>` correctly because only the last segment ident
+/// is checked.  Type aliases (e.g. `type MyErr = AppErrorPayload;`) are **not**
+/// detected — users must spell out `AppErrorPayload` literally.
+fn is_result_app_error(ty: &Type) -> bool {
+    if !is_result_outer(ty) {
+        return false;
+    }
+    let Type::Path(tp) = ty else { return false };
+    let Some(seg) = tp.path.segments.last() else {
+        return false;
+    };
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return false;
+    };
+    let type_args: Vec<&Type> = args
+        .args
+        .iter()
+        .filter_map(|a| match a {
+            GenericArgument::Type(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    let err_ty = type_args[1];
+    let Type::Path(err_tp) = err_ty else {
+        return false;
+    };
+    err_tp
+        .path
+        .segments
+        .last()
+        .map(|s| s.ident == "AppErrorPayload")
+        .unwrap_or(false)
+}
+
+/// Extracts the `Ok` type `T` from `Result<T, AppErrorPayload>`.
+///
+/// # Panics
+///
+/// Panics if `ty` is not a two-argument `Result` (callers must gate on
+/// [`is_result_outer`] first).
+fn extract_ok_type(ty: &Type) -> &Type {
+    let Type::Path(tp) = ty else {
+        panic!("extract_ok_type: expected Type::Path");
+    };
+    let seg = tp.path.segments.last().expect("empty path");
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        panic!("extract_ok_type: expected angle-bracketed args");
+    };
+    args.args
+        .iter()
+        .filter_map(|a| match a {
+            GenericArgument::Type(t) => Some(t),
+            _ => None,
+        })
+        .next()
+        .expect("extract_ok_type: no type arg")
 }
 
 #[cfg(test)]

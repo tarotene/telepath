@@ -607,10 +607,10 @@ mod tests {
             _input: &[u8],
             output: &mut [u8],
             _resources: &telepath_server::ResourceRegistry,
-        ) -> Result<usize, DispatchError> {
+        ) -> Result<telepath_server::DispatchOutcome, DispatchError> {
             let s = postcard::to_slice(&0xDEAD_BEEFu32, output)
                 .map_err(|_| DispatchError::SerializeError)?;
-            Ok(s.len())
+            Ok(telepath_server::DispatchOutcome::Ok(s.len()))
         }
         fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {
             Ok(0)
@@ -861,10 +861,10 @@ mod tests {
             _input: &[u8],
             output: &mut [u8],
             _resources: &telepath_server::ResourceRegistry,
-        ) -> Result<usize, DispatchError> {
+        ) -> Result<telepath_server::DispatchOutcome, DispatchError> {
             let val: u32 = 0xDEAD_BEEF;
             let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-            Ok(s.len())
+            Ok(telepath_server::DispatchOutcome::Ok(s.len()))
         }
 
         fn noop_schema_sp(_out: &mut [u8]) -> Result<usize, ()> {

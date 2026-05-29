@@ -54,6 +54,8 @@ pub use linkme as __linkme;
 pub use postcard_schema as __postcard_schema;
 #[doc(hidden)]
 pub use telepath_wire::cmd_id::derive_cmd_id as __derive_cmd_id;
+#[doc(hidden)]
+pub use telepath_wire::encode_app_error as __encode_app_error;
 
 // ---------------------------------------------------------------------------
 // CommandMetadata
@@ -62,13 +64,15 @@ pub use telepath_wire::cmd_id::derive_cmd_id as __derive_cmd_id;
 /// Type-erased shim function signature.
 ///
 /// Receives a postcard-serialized argument slice, writes a postcard-serialized
-/// result into `output`, and returns the number of bytes written. The
-/// `resources` parameter provides access to injected `#[resource]` values.
+/// result into `output`, and returns a [`DispatchOutcome`] indicating how many
+/// bytes were written and which [`ResponseStatus`] the dispatch layer should
+/// emit. The `resources` parameter provides access to injected `#[resource]`
+/// values.
 pub type ShimFn = fn(
     input: &[u8],
     output: &mut [u8],
     resources: &ResourceRegistry,
-) -> Result<usize, DispatchError>;
+) -> Result<DispatchOutcome, DispatchError>;
 
 /// Type alias for schema-writer function pointers.
 ///
@@ -132,6 +136,28 @@ pub enum DispatchError {
     ResourceUnavailable,
 }
 
+/// Successful dispatch outcome: how many bytes were written to `output` and
+/// which [`ResponseStatus`] the dispatch layer should emit.
+///
+/// Both variants hold the byte count written into the shim's `output` buffer.
+///
+/// - [`Ok`][DispatchOutcome::Ok] — command succeeded; `output[..n]` holds the
+///   postcard-serialized return value.
+/// - [`AppError`][DispatchOutcome::AppError] — command returned a user-defined
+///   application error; `output[..n]` holds the postcard-serialized
+///   [`telepath_wire::AppErrorPayload`].
+///
+/// `DispatchError` (the `Err` channel) is reserved for *system-level* failures
+/// where dispatch could not complete (unknown ID, deserialize failure, etc.).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DispatchOutcome {
+    /// Command ran and produced a serialized return value of `n` bytes.
+    Ok(usize),
+    /// Command ran and produced a serialized [`telepath_wire::AppErrorPayload`]
+    /// of `n` bytes.
+    AppError(usize),
+}
+
 // ---------------------------------------------------------------------------
 // TelepathServer
 // ---------------------------------------------------------------------------
@@ -189,15 +215,18 @@ impl<T, const N: usize> TelepathServer<T, N> {
 
     /// Dispatch a pre-decoded payload slice to the matching command handler.
     ///
-    /// Returns the number of bytes written to `output` on success.
+    /// Returns a [`DispatchOutcome`] describing how many bytes were written to
+    /// `output` and which [`ResponseStatus`] should be emitted.
     pub fn dispatch(
         &mut self,
         cmd_id: u16,
         input: &[u8],
         output: &mut [u8],
-    ) -> Result<usize, DispatchError> {
+    ) -> Result<DispatchOutcome, DispatchError> {
         if cmd_id == telepath_wire::CMD_ID_DISCOVERY {
-            return self.handle_discovery(input, output);
+            return self
+                .handle_discovery(input, output)
+                .map(DispatchOutcome::Ok);
         }
         let cmd = self
             .find_command(cmd_id)
@@ -373,8 +402,12 @@ impl<T: transport::Transport, const N: usize> TelepathServer<T, N> {
         // Dispatch; clamp oversized return payloads to SystemError.
         let mut payload_buf = [0u8; N];
         let (status, payload_len) = match self.dispatch(cmd_id, args, &mut payload_buf) {
-            Ok(n) if n > MAX_PAYLOAD_SIZE => (ResponseStatus::SystemError, 0),
-            Ok(n) => (ResponseStatus::Ok, n),
+            Ok(DispatchOutcome::Ok(n)) if n > MAX_PAYLOAD_SIZE => (ResponseStatus::SystemError, 0),
+            Ok(DispatchOutcome::Ok(n)) => (ResponseStatus::Ok, n),
+            Ok(DispatchOutcome::AppError(n)) if n > MAX_PAYLOAD_SIZE => {
+                (ResponseStatus::SystemError, 0)
+            }
+            Ok(DispatchOutcome::AppError(n)) => (ResponseStatus::AppError, n),
             Err(_) => (ResponseStatus::SystemError, 0),
         };
 
@@ -423,8 +456,8 @@ mod tests {
         _input: &[u8],
         _output: &mut [u8],
         _resources: &ResourceRegistry,
-    ) -> Result<usize, DispatchError> {
-        Ok(0)
+    ) -> Result<DispatchOutcome, DispatchError> {
+        Ok(DispatchOutcome::Ok(0))
     }
 
     fn noop_schema(_out: &mut [u8]) -> Result<usize, ()> {
@@ -458,10 +491,8 @@ mod tests {
     fn dispatch_unknown_returns_error() {
         let mut server = TelepathServer::<FakeTransport, 256>::new(FakeTransport, &TEST_COMMANDS);
         let mut out = [0u8; 256];
-        assert_eq!(
-            server.dispatch(0xFFFF, &[], &mut out),
-            Err(DispatchError::UnknownCommand)
-        );
+        let result = server.dispatch(0xFFFF, &[], &mut out);
+        assert_eq!(result, Err(DispatchError::UnknownCommand));
     }
 
     // ---------------------------------------------------------------------------
@@ -476,10 +507,10 @@ mod tests {
         _input: &[u8],
         output: &mut [u8],
         _resources: &ResourceRegistry,
-    ) -> Result<usize, DispatchError> {
+    ) -> Result<DispatchOutcome, DispatchError> {
         let val: u32 = 0xDEAD_BEEF;
         let s = postcard::to_slice(&val, output).map_err(|_| DispatchError::SerializeError)?;
-        Ok(s.len())
+        Ok(DispatchOutcome::Ok(s.len()))
     }
 
     static PING_COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
@@ -521,6 +552,69 @@ mod tests {
             self.tx.extend_from_slice(buf);
             buf.len()
         }
+    }
+
+    /// An app-error shim that always returns a serialized `AppErrorPayload`.
+    fn app_error_shim(
+        _input: &[u8],
+        output: &mut [u8],
+        _resources: &ResourceRegistry,
+    ) -> Result<DispatchOutcome, DispatchError> {
+        use telepath_wire::{encode_app_error, AppErrorPayload};
+        let payload = AppErrorPayload {
+            code: 42,
+            message: "test error",
+        };
+        let n = encode_app_error(&payload, output).map_err(|_| DispatchError::SerializeError)?;
+        Ok(DispatchOutcome::AppError(n))
+    }
+
+    static APP_ERROR_COMMANDS: [CommandMetadata; 1] = [CommandMetadata {
+        name: "app_error_cmd",
+        id: 0x0002,
+        invoke: app_error_shim,
+        args_schema: noop_schema,
+        ret_schema: noop_schema,
+        arg_names: "",
+    }];
+
+    #[test]
+    fn poll_app_error_roundtrip() {
+        // Build a COBS-framed request targeting the app-error command.
+        let req = Request {
+            kind: PacketType::Request,
+            seq_no: 7,
+            cmd_id: 0x0002,
+            args: &[],
+        };
+        let mut ser_buf = [0u8; 64];
+        let serialized = postcard::to_slice(&req, &mut ser_buf).unwrap();
+        let mut framed = [0u8; 64];
+        let n = cobs_encode(serialized, &mut framed).unwrap();
+
+        let transport = LoopbackTransport::new(framed[..n].to_vec());
+        let mut server =
+            TelepathServer::<LoopbackTransport, 512>::new(transport, &APP_ERROR_COMMANDS);
+        server.poll();
+
+        // Decode the response from tx buffer.
+        let tx = &server.transport.tx;
+        assert!(!tx.is_empty(), "server must have written a response");
+
+        let delim = tx
+            .iter()
+            .position(|&b| b == 0x00)
+            .expect("no frame delimiter");
+        let mut decoded = [0u8; 512];
+        let m = rzcobs_decode(&tx[..delim], &mut decoded).unwrap();
+
+        let resp: Response<'_> = postcard::from_bytes(&decoded[..m]).unwrap();
+        assert_eq!(resp.seq_no, 7);
+        assert_eq!(resp.status, ResponseStatus::AppError);
+
+        let app_err = telepath_wire::decode_app_error(resp.payload).unwrap();
+        assert_eq!(app_err.code, 42);
+        assert_eq!(app_err.message, "test error");
     }
 
     #[test]
