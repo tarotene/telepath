@@ -110,8 +110,23 @@ cargo publish -p telepath-client && sleep 30
 (cd tools/telepath && cargo publish)
 ```
 
-After the crates are live on crates.io, create the matching git tag and GitHub Release
-so the repository state aligns with what was published:
+Once all five crates are live on crates.io, configure Trusted Publishing for each one.
+For each of `telepath-wire`, `telepath-macros`, `telepath-server`, `telepath-client`, `telepath`:
+
+1. Open `https://crates.io/crates/<CRATE>/settings` (signed in as the publisher account).
+2. Scroll to **Trusted Publishers** → **Add a new publisher**.
+3. Fill in:
+   - Repository owner: `tarotene`
+   - Repository name: `telepath`
+   - Workflow filename: `release-plz.yml`
+   - Environment name: *(leave blank)*
+4. Save.
+
+After all five crates have a Trusted Publishing entry, revoke the short-lived API token at
+`https://crates.io/settings/tokens`.
+
+Then create the matching git tag and GitHub Release so the repository state aligns with
+what was published:
 
 ```bash
 git tag -a v0.2.0 -m "Release v0.2.0 (initial crates.io publish)"
@@ -121,7 +136,6 @@ gh release create v0.2.0 \
   --notes-file <(awk '/^## \[0\.2\.0\]/,/^## \[/' CHANGELOG.md | sed '$d')
 ```
 
-Revoke the short-lived API token after the above steps complete.
 Trusted Publishing handles all subsequent releases automatically — no rotation or monitoring needed.
 
 ## Reference
