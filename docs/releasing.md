@@ -78,9 +78,69 @@ git commit -m "chore(release): bump excluded crates to 0.1.1"
 git push
 ```
 
+## Trusted Publishing
+
+The release workflow uses **Trusted Publishing (OIDC)** — no long-lived `CARGO_REGISTRY_TOKEN`
+secret is stored in the repository. GitHub Actions exchanges a short-lived OIDC token
+(30-minute lifetime) with crates.io at publish time, with no rotation or monitoring required.
+
+**Setup requirement for new crates**: Before a crate can be published for the first time via
+the release workflow, a Trusted Publishing entry must exist on crates.io:
+
+1. Go to <https://crates.io/settings/tokens> → "Trusted Publishing" → "Add publisher".
+2. Set: repository `tarotene/telepath`, workflow filename `release-plz.yml`.
+3. Optional: restrict to a specific environment name for extra isolation.
+
+See [release-plz quickstart § Trusted Publishing](https://release-plz.dev/docs/github/quickstart)
+and the [crates.io Trusted Publishing docs](https://crates.io/docs/trusted-publishing).
+
+### Initial bootstrap (historical — v0.2.0 only)
+
+The first publish of any crate on crates.io cannot use Trusted Publishing
+([crates.io limitation](https://crates.io/docs/trusted-publishing)). For v0.2.0, a
+short-lived API token (scopes: `publish-new` only, 7-day expiry) was used for the one-time
+manual bootstrap, then immediately revoked:
+
+```bash
+# Dependency-ordered initial publish
+cargo publish -p telepath-wire && sleep 30
+cargo publish -p telepath-macros && sleep 30
+cargo publish -p telepath-server && sleep 30
+cargo publish -p telepath-client && sleep 30
+(cd tools/telepath && cargo publish)
+```
+
+Once all five crates are live on crates.io, configure Trusted Publishing for each one.
+For each of `telepath-wire`, `telepath-macros`, `telepath-server`, `telepath-client`, `telepath`:
+
+1. Open `https://crates.io/crates/<CRATE>/settings` (signed in as the publisher account).
+2. Scroll to **Trusted Publishers** → **Add a new publisher**.
+3. Fill in:
+   - Repository owner: `tarotene`
+   - Repository name: `telepath`
+   - Workflow filename: `release-plz.yml`
+   - Environment name: *(leave blank)*
+4. Save.
+
+After all five crates have a Trusted Publishing entry, revoke the short-lived API token at
+`https://crates.io/settings/tokens`.
+
+Then create the matching git tag and GitHub Release so the repository state aligns with
+what was published:
+
+```bash
+git tag -a v0.2.0 -m "Release v0.2.0 (initial crates.io publish)"
+git push origin v0.2.0
+gh release create v0.2.0 \
+  --title "v0.2.0" \
+  --notes-file <(awk '/^## \[0\.2\.0\]/,/^## \[/' CHANGELOG.md | sed '$d')
+```
+
+Trusted Publishing handles all subsequent releases automatically — no rotation or monitoring needed.
+
 ## Reference
 
 - [`release-plz.toml`](../release-plz.toml) — workspace configuration
 - [`.github/workflows/release-plz.yml`](../.github/workflows/release-plz.yml) — workflow file
 - [release-plz docs](https://release-plz.dev/docs)
-- Tracking issue: [#30](https://github.com/tarotene/telepath/issues/30)
+- Tracking issue: [#172](https://github.com/tarotene/telepath/issues/172)
