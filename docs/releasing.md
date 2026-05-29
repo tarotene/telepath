@@ -110,8 +110,19 @@ cargo publish -p telepath-client && sleep 30
 (cd tools/telepath && cargo publish)
 ```
 
-After the initial publish, Trusted Publishing handles all subsequent releases automatically.
-The short-lived token was revoked after bootstrap. No rotation or monitoring is needed.
+After the crates are live on crates.io, create the matching git tag and GitHub Release
+so the repository state aligns with what was published:
+
+```bash
+git tag -a v0.2.0 -m "Release v0.2.0 (initial crates.io publish)"
+git push origin v0.2.0
+gh release create v0.2.0 \
+  --title "v0.2.0" \
+  --notes-file <(awk '/^## \[0\.2\.0\]/,/^## \[/' CHANGELOG.md | sed '$d')
+```
+
+Revoke the short-lived API token after the above steps complete.
+Trusted Publishing handles all subsequent releases automatically — no rotation or monitoring needed.
 
 ## Reference
 
