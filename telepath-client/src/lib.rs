@@ -10,7 +10,10 @@
 //!
 //! let mut client = TelepathClient::new(serial_port);
 //! client.discover().unwrap();
-//! let ping_id = client.cmd_id_by_name("ping").unwrap();
+//! let ping_id = match client.cmd_id_by_name("ping") {
+//!     telepath_client::NameResolutionResult::Unique(id) => id,
+//!     other => panic!("unexpected: {other:?}"),
+//! };
 //! let result: u32 = client.call::<(), u32>(ping_id, &()).unwrap();
 //! ```
 
@@ -91,6 +94,26 @@ impl From<postcard::Error> for HostError {
     fn from(e: postcard::Error) -> Self {
         HostError::SerdeError(e)
     }
+}
+
+// ---------------------------------------------------------------------------
+// NameResolutionResult
+// ---------------------------------------------------------------------------
+
+/// Result of resolving a command name to a `cmd_id` via [`TelepathClient::cmd_id_by_name`].
+///
+/// Two commands can share a name while differing in argument or return types
+/// (which changes the `cmd_id` hash). In that case the result is `Ambiguous`
+/// and the caller must pick a specific ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameResolutionResult {
+    /// Exactly one command with the requested name exists.
+    Unique(u16),
+    /// No command with the requested name was found in the schema cache.
+    NotFound,
+    /// Multiple commands share the name; the `Vec` contains their `cmd_id`s in
+    /// ascending order.
+    Ambiguous(Vec<u16>),
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +478,10 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
     ///
     /// ```rust,ignore
     /// client.discover()?;
-    /// let ping_id = client.cmd_id_by_name("ping").unwrap();
+    /// let ping_id = match client.cmd_id_by_name("ping") {
+    ///     NameResolutionResult::Unique(id) => id,
+    ///     other => return Err(format!("unexpected: {other:?}").into()),
+    /// };
     /// let result: u32 = client.call::<(), u32>(ping_id, &())?;
     /// ```
     pub fn call<Args, Ret>(&mut self, cmd_id: u16, args: &Args) -> Result<Ret, HostError>
@@ -471,19 +497,26 @@ impl<T: std::io::Read + std::io::Write> TelepathClient<T> {
 
     /// Resolve a command name to its `cmd_id` using the populated schema cache.
     ///
-    /// Returns `None` if [`Self::discover`] has not been called, or the name
-    /// is not registered on the target.
+    /// Returns [`NameResolutionResult::Unique`] when exactly one command with the
+    /// given name is registered, [`NameResolutionResult::NotFound`] when none
+    /// exist, and [`NameResolutionResult::Ambiguous`] when multiple commands
+    /// share the same name but differ in signature (and therefore `cmd_id`).
     ///
-    /// # Note
-    ///
-    /// If multiple commands share `name` (possible when signatures differ),
-    /// the returned id is implementation-defined. Disambiguation is tracked in
-    /// [#175](https://github.com/tarotene/telepath/issues/175).
-    pub fn cmd_id_by_name(&self, name: &str) -> Option<u16> {
-        self.schema_cache
+    /// Call [`Self::discover`] before using this method; the cache is empty
+    /// until discovery has completed at least once.
+    pub fn cmd_id_by_name(&self, name: &str) -> NameResolutionResult {
+        let mut matches: Vec<u16> = self
+            .schema_cache
             .iter()
-            .find(|e| e.name == name)
+            .filter(|e| e.name == name)
             .map(|e| e.cmd_id)
+            .collect();
+        matches.sort();
+        match matches.len() {
+            0 => NameResolutionResult::NotFound,
+            1 => NameResolutionResult::Unique(matches[0]),
+            _ => NameResolutionResult::Ambiguous(matches),
+        }
     }
 
     /// Borrow the schema cache for inspection.

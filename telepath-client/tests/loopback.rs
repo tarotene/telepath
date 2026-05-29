@@ -9,7 +9,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 use std::thread;
 
-use telepath_client::TelepathClient;
+use telepath_client::{NameResolutionResult, TelepathClient};
 use telepath_server::transport::Transport;
 use telepath_server::{CommandMetadata, DispatchError, TelepathServer};
 use telepath_wire::framing::MAX_FRAME_SIZE;
@@ -244,9 +244,10 @@ fn typed_call_ping_round_trip() {
 
     let mut client = TelepathClient::new(host_t);
     client.discover().expect("discover failed");
-    let ping_id = client
-        .cmd_id_by_name("ping")
-        .expect("ping not found in schema cache");
+    let ping_id = match client.cmd_id_by_name("ping") {
+        NameResolutionResult::Unique(id) => id,
+        other => panic!("unexpected resolution for 'ping': {other:?}"),
+    };
     let val: u32 = client
         .call::<(), u32>(ping_id, &())
         .expect("typed call failed");

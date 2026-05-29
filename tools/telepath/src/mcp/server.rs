@@ -184,7 +184,33 @@ where
     }
 }
 
-fn build_tools(entries: Vec<SchemaEntry>) -> Result<Vec<ToolMeta>, HostError> {
+fn build_tools(mut entries: Vec<SchemaEntry>) -> Result<Vec<ToolMeta>, HostError> {
+    // Sort by cmd_id for deterministic tool ordering within a run.
+    entries.sort_by_key(|e| e.cmd_id);
+
+    // Detect name collisions: two commands with the same name but different
+    // cmd_ids (i.e. different signatures) would appear as duplicate MCP tool
+    // names, which clients cannot disambiguate. Warn on stderr so the operator
+    // is aware.
+    {
+        let mut names: std::collections::HashMap<&str, Vec<u16>> =
+            std::collections::HashMap::new();
+        for e in &entries {
+            names.entry(&e.name).or_default().push(e.cmd_id);
+        }
+        for (name, ids) in &names {
+            if ids.len() > 1 {
+                eprintln!(
+                    "[telepath mcp] Warning: ambiguous command name '{name}' \
+                     maps to {} cmd_ids ({:04X?}). MCP clients cannot \
+                     disambiguate; only the first will be reachable by name.",
+                    ids.len(),
+                    ids
+                );
+            }
+        }
+    }
+
     let mut tools = Vec::new();
     for entry in entries {
         let args_schema = entry.decoded_args_schema()?;

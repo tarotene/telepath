@@ -12,7 +12,7 @@ use std::io::{self, Write};
 #[cfg(feature = "rtt")]
 use std::path::PathBuf;
 use std::time::Duration;
-use telepath_client::{HostTransportExt, TelepathClient};
+use telepath_client::{HostTransportExt, NameResolutionResult, TelepathClient};
 
 use super::super::cli::ShellArgs;
 use super::super::transport::AnyTransport;
@@ -348,9 +348,22 @@ fn print_help(client: &TelepathClient<AnyTransport>) {
 }
 
 fn print_command_help(client: &TelepathClient<AnyTransport>, cmd_name: &str) {
-    let cache = client.schema_cache();
-    let Some(entry) = cache.iter().find(|e| e.name == cmd_name) else {
-        eprintln!("Unknown command: {cmd_name}  (try 'help')");
+    let cmd_id = match client.cmd_id_by_name(cmd_name) {
+        NameResolutionResult::Unique(id) => id,
+        NameResolutionResult::NotFound => {
+            eprintln!("Unknown command: {cmd_name}  (try 'help')");
+            return;
+        }
+        NameResolutionResult::Ambiguous(ids) => {
+            eprintln!(
+                "Ambiguous command: '{cmd_name}' matches cmd_ids {:04X?}",
+                ids
+            );
+            return;
+        }
+    };
+    let Some(entry) = client.schema_cache().get(cmd_id) else {
+        eprintln!("Schema not found for '{cmd_name}'");
         return;
     };
 
@@ -418,18 +431,30 @@ fn dispatch_command(
     }
 
     let (cmd_id, args_schema, ret_schema) = {
+        let resolved_id = match client.cmd_id_by_name(name) {
+            NameResolutionResult::Unique(id) => id,
+            NameResolutionResult::NotFound => {
+                return Err(anyhow::anyhow!("Unknown command: {name}  (try 'help')"));
+            }
+            NameResolutionResult::Ambiguous(ids) => {
+                return Err(anyhow::anyhow!(
+                    "Ambiguous command: '{name}' matches multiple cmd_ids {:04X?}. \
+                     Use a specific cmd_id.",
+                    ids
+                ));
+            }
+        };
         let cache = client.schema_cache();
         let entry = cache
-            .iter()
-            .find(|e| e.name == name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown command: {name}  (try 'help')"))?;
+            .get(resolved_id)
+            .ok_or_else(|| anyhow::anyhow!("Schema not found for '{name}'"))?;
         let args = entry
             .decoded_args_schema()
             .map_err(|_| anyhow::anyhow!("Failed to decode args schema for '{name}'"))?;
         let ret = entry
             .decoded_ret_schema()
             .map_err(|_| anyhow::anyhow!("Failed to decode ret schema for '{name}'"))?;
-        (entry.cmd_id, args, ret)
+        (resolved_id, args, ret)
     };
 
     let args_json = encode_args(&args_schema, args_str, name)?;
@@ -527,13 +552,17 @@ fn run_ping_storm(
 
     let dur = parse_duration(duration_str)?;
 
-    let ping_id = {
-        let cache = client.schema_cache();
-        cache
-            .iter()
-            .find(|e| e.name == "ping")
-            .map(|e| e.cmd_id)
-            .ok_or_else(|| anyhow::anyhow!("'ping' command not found in firmware"))?
+    let ping_id = match client.cmd_id_by_name("ping") {
+        NameResolutionResult::Unique(id) => id,
+        NameResolutionResult::NotFound => {
+            return Err(anyhow::anyhow!("'ping' command not found in firmware"));
+        }
+        NameResolutionResult::Ambiguous(ids) => {
+            return Err(anyhow::anyhow!(
+                "Ambiguous 'ping' command: matches cmd_ids {:04X?}",
+                ids
+            ));
+        }
     };
 
     // Drain any stale metrics from the target before the run.
