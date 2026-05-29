@@ -4,7 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+publish = true
 description = "Host-side Telepath RPC client library (std)"
+readme = "README.md"
+keywords = ["embedded", "rpc", "probe-rs", "rtt", "serial"]
+categories = ["embedded", "command-line-utilities"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 rtt = ["dep:probe-rs"]

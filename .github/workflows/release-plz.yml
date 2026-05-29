@@ -37,6 +37,7 @@ jobs:
           command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # Opens / updates the release PR on every push to main.
   # Concurrency: cancel in-flight PR-update runs but never cancel a release run.

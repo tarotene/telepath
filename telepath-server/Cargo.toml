@@ -4,8 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+publish = true
 description = "Target-side Telepath RPC server library (no_std)"
+readme = "README.md"
+keywords = ["embedded", "rpc", "no-std", "nrf52", "cortex-m"]
+categories = ["embedded", "no-std"]
 build = "build.rs"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 telepath-wire = { workspace = true }

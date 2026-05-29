@@ -4,7 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+publish = true
 description = "Shared wire protocol types for Telepath (no_std, no alloc)"
+readme = "README.md"
+keywords = ["embedded", "rpc", "no-std", "wire-protocol", "postcard"]
+categories = ["embedded", "no-std", "encoding"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 serde = { workspace = true }
