@@ -1,6 +1,7 @@
 [workspace]
 git_release_enable = false
 git_tag_enable = false
+git_release_name = "v{{ version }}"
 changelog_update = true
 changelog_path = "./CHANGELOG.md"
 pr_labels = ["release"]

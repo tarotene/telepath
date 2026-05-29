@@ -18,8 +18,10 @@ For a hardware-free smoke run, see [Quickstart in the root README](../../README.
 | Manual download | `curl -L https://github.com/tarotene/telepath/releases/download/v<VERSION>/telepath-<TARGET>.tar.gz \| tar -xz` |
 
 Archive names follow `telepath-<target-triple>.{tar.gz,zip}`:
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
 `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+
+macOS Intel (`x86_64-apple-darwin`) is not available as a pre-built binary — use `cargo install telepath`.
 
 Pre-built binaries ship with default features only (`shell + mcp + rtt`). The `serial`
 transport requires libudev on Linux and is available only via source build:
