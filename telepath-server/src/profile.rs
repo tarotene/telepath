@@ -95,13 +95,13 @@ fn get_metrics_shim(
     input: &[u8],
     output: &mut [u8],
     _resources: &crate::ResourceRegistry,
-) -> Result<usize, crate::DispatchError> {
+) -> Result<crate::DispatchOutcome, crate::DispatchError> {
     if !input.is_empty() {
         return Err(crate::DispatchError::DeserializeError);
     }
     let snap = snapshot_and_reset();
     postcard::to_slice(&snap, output)
-        .map(|s| s.len())
+        .map(|s| crate::DispatchOutcome::Ok(s.len()))
         .map_err(|_| crate::DispatchError::SerializeError)
 }
 

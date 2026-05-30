@@ -46,12 +46,20 @@ fn resource_mut_injection() {
     let args = postcard::to_slice(&(5u32,), &mut input_buf).unwrap();
     let mut out = [0u8; 16];
 
-    let n = (__TELEPATH_CMD_INCREMENT.invoke)(args, &mut out, &reg).unwrap();
+    let telepath_server::DispatchOutcome::Ok(n) =
+        (__TELEPATH_CMD_INCREMENT.invoke)(args, &mut out, &reg).unwrap()
+    else {
+        panic!("expected Ok")
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 5);
 
     // Second call — resource state persists
-    let n = (__TELEPATH_CMD_INCREMENT.invoke)(args, &mut out, &reg).unwrap();
+    let telepath_server::DispatchOutcome::Ok(n) =
+        (__TELEPATH_CMD_INCREMENT.invoke)(args, &mut out, &reg).unwrap()
+    else {
+        panic!("expected Ok")
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 10);
 }
@@ -62,7 +70,11 @@ fn resource_ref_injection() {
     reg.insert(Label("hello"));
 
     let mut out = [0u8; 16];
-    let n = (__TELEPATH_CMD_READ_LABEL.invoke)(&[], &mut out, &reg).unwrap();
+    let telepath_server::DispatchOutcome::Ok(n) =
+        (__TELEPATH_CMD_READ_LABEL.invoke)(&[], &mut out, &reg).unwrap()
+    else {
+        panic!("expected Ok")
+    };
     let val: u8 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 5);
 }
@@ -77,7 +89,11 @@ fn mixed_resource_and_wire_args() {
     let args = postcard::to_slice(&(3u32, 7u32), &mut input_buf).unwrap();
     let mut out = [0u8; 16];
 
-    let n = (__TELEPATH_CMD_MIXED.invoke)(args, &mut out, &reg).unwrap();
+    let telepath_server::DispatchOutcome::Ok(n) =
+        (__TELEPATH_CMD_MIXED.invoke)(args, &mut out, &reg).unwrap()
+    else {
+        panic!("expected Ok")
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     // ctr.0 = 10 + 3 + 7 = 20, + label.len() = 2 → 22
     assert_eq!(val, 22);
@@ -131,7 +147,11 @@ fn no_resource_cmd_works_with_empty_registry() {
     let args = postcard::to_slice(&(41u32,), &mut input_buf).unwrap();
     let mut out = [0u8; 16];
 
-    let n = (__TELEPATH_CMD_NO_RESOURCES.invoke)(args, &mut out, &reg).unwrap();
+    let telepath_server::DispatchOutcome::Ok(n) =
+        (__TELEPATH_CMD_NO_RESOURCES.invoke)(args, &mut out, &reg).unwrap()
+    else {
+        panic!("expected Ok")
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 42);
 }

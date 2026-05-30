@@ -1,4 +1,5 @@
-use telepath_server::{command, CommandMetadata};
+use telepath_server::{command, CommandMetadata, DispatchOutcome};
+use telepath_wire::AppErrorPayload;
 
 // ---------------------------------------------------------------------------
 // Functions under test
@@ -17,6 +18,20 @@ fn add(a: u32, b: u32) -> u32 {
 #[command]
 fn unary_echo(x: u8) -> u8 {
     x
+}
+
+/// A fallible command: divides `a` by `b`, returning an `AppErrorPayload` on
+/// divide-by-zero.
+#[command]
+fn checked_div(a: u32, b: u32) -> Result<u32, AppErrorPayload<'static>> {
+    if b == 0 {
+        Err(AppErrorPayload {
+            code: 1,
+            message: "divide by zero",
+        })
+    } else {
+        Ok(a / b)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +92,10 @@ fn unary_cmd_id_matches_canonical_tuple() {
 fn shim_nullary_roundtrip() {
     let mut out = [0u8; 16];
     let reg = telepath_server::ResourceRegistry::new();
-    let n = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[], &mut out, &reg).unwrap();
+    let outcome = (__TELEPATH_CMD_NULLARY_PING.invoke)(&[], &mut out, &reg).unwrap();
+    let DispatchOutcome::Ok(n) = outcome else {
+        panic!("expected DispatchOutcome::Ok, got {outcome:?}");
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 0xDEAD_BEEF);
 }
@@ -88,7 +106,10 @@ fn shim_multiarg_roundtrip() {
     let serialized = postcard::to_slice(&(3u32, 4u32), &mut input_buf).unwrap();
     let mut out = [0u8; 16];
     let reg = telepath_server::ResourceRegistry::new();
-    let n = (__TELEPATH_CMD_ADD.invoke)(serialized, &mut out, &reg).unwrap();
+    let outcome = (__TELEPATH_CMD_ADD.invoke)(serialized, &mut out, &reg).unwrap();
+    let DispatchOutcome::Ok(n) = outcome else {
+        panic!("expected DispatchOutcome::Ok, got {outcome:?}");
+    };
     let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 7);
 }
@@ -99,7 +120,10 @@ fn shim_unary_roundtrip() {
     let serialized = postcard::to_slice(&(42u8,), &mut input_buf).unwrap();
     let mut out = [0u8; 4];
     let reg = telepath_server::ResourceRegistry::new();
-    let n = (__TELEPATH_CMD_UNARY_ECHO.invoke)(serialized, &mut out, &reg).unwrap();
+    let outcome = (__TELEPATH_CMD_UNARY_ECHO.invoke)(serialized, &mut out, &reg).unwrap();
+    let DispatchOutcome::Ok(n) = outcome else {
+        panic!("expected DispatchOutcome::Ok, got {outcome:?}");
+    };
     let val: u8 = postcard::from_bytes(&out[..n]).unwrap();
     assert_eq!(val, 42);
 }
@@ -113,6 +137,63 @@ fn shim_nullary_rejects_nonempty_input() {
         result,
         Err(telepath_server::DispatchError::DeserializeError)
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Result<T, AppErrorPayload> shim tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn shim_result_ok_arm() {
+    let mut input_buf = [0u8; 16];
+    let serialized = postcard::to_slice(&(10u32, 2u32), &mut input_buf).unwrap();
+    let mut out = [0u8; 32];
+    let reg = telepath_server::ResourceRegistry::new();
+    let outcome = (__TELEPATH_CMD_CHECKED_DIV.invoke)(serialized, &mut out, &reg).unwrap();
+    let DispatchOutcome::Ok(n) = outcome else {
+        panic!("expected DispatchOutcome::Ok, got {outcome:?}");
+    };
+    let val: u32 = postcard::from_bytes(&out[..n]).unwrap();
+    assert_eq!(val, 5);
+}
+
+#[test]
+fn shim_result_err_arm_emits_app_error() {
+    let mut input_buf = [0u8; 16];
+    // Divide by zero triggers the Err arm.
+    let serialized = postcard::to_slice(&(10u32, 0u32), &mut input_buf).unwrap();
+    let mut out = [0u8; 32];
+    let reg = telepath_server::ResourceRegistry::new();
+    let outcome = (__TELEPATH_CMD_CHECKED_DIV.invoke)(serialized, &mut out, &reg).unwrap();
+    let DispatchOutcome::AppError(n) = outcome else {
+        panic!("expected DispatchOutcome::AppError, got {outcome:?}");
+    };
+    let payload = telepath_wire::decode_app_error(&out[..n]).unwrap();
+    assert_eq!(payload.code, 1);
+    assert_eq!(payload.message, "divide by zero");
+}
+
+#[test]
+fn shim_result_cmd_id_uses_result_type() {
+    // cmd_id must include the full "Result<u32, AppErrorPayload<'static>>" text
+    // so that a previously infallible command with the same name/args would get
+    // a different ID (wire ABI break accepted, as per the issue spec).
+    // id_infallible_variant is the cmd_id that the *infallible* `checked_div(u32,u32)->u32`
+    // would have received.  We use it as the comparison baseline to verify that adding a
+    // Result<T, AppErrorPayload> return type changes the cmd_id (wire ABI break).
+    let id_infallible_variant =
+        telepath_wire::cmd_id::derive_cmd_id("checked_div", "(u32, u32)", "u32");
+    // The actual cmd_id was derived from the full Result<...> ret_type_str, but
+    // the schema uses just `u32` — verify the schema writer compiles and runs.
+    let mut schema_buf = [0u8; 64];
+    let n = (__TELEPATH_CMD_CHECKED_DIV.ret_schema)(&mut schema_buf)
+        .expect("ret_schema writer must not fail");
+    assert!(n > 0, "ret_schema must write non-zero bytes for u32");
+    // The cmd_id must differ from the hypothetical infallible `checked_div(u32,u32)->u32`.
+    assert_ne!(
+        __TELEPATH_CMD_CHECKED_DIV.id, id_infallible_variant,
+        "Result<T, AppErrorPayload> and T must produce different cmd_ids"
+    );
 }
 
 // ---------------------------------------------------------------------------
