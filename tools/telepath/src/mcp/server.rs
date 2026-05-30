@@ -152,17 +152,35 @@ where
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let meta = self
+        let matches: Vec<&ToolMeta> = self
             .tools
             .iter()
-            .find(|m| m.tool.name == request.name)
-            .ok_or_else(|| {
-                ErrorData::new(
+            .filter(|m| m.tool.name == request.name)
+            .collect();
+        let meta = match matches.as_slice() {
+            [] => {
+                return Err(ErrorData::new(
                     rmcp::model::ErrorCode::METHOD_NOT_FOUND,
                     format!("unknown tool: {}", request.name),
                     None,
-                )
-            })?;
+                ));
+            }
+            [single] => single,
+            many => {
+                let ids: Vec<u16> = many.iter().map(|m| m.cmd_id).collect();
+                return Err(ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!(
+                        "ambiguous tool '{}' maps to {} cmd_ids {:04X?}; \
+                         rename or remove duplicate command(s) in firmware",
+                        request.name,
+                        many.len(),
+                        ids,
+                    ),
+                    None,
+                ));
+            }
+        };
 
         let args_json: Value = named_to_positional(request.arguments, &meta.arg_names);
 

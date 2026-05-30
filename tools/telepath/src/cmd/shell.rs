@@ -439,7 +439,8 @@ fn dispatch_command(
             NameResolutionResult::Ambiguous(ids) => {
                 return Err(anyhow::anyhow!(
                     "Ambiguous command: '{name}' matches multiple cmd_ids {:04X?}. \
-                     Use a specific cmd_id.",
+                     Rename or remove the duplicate command(s) in firmware so each \
+                     name is unique.",
                     ids
                 ));
             }

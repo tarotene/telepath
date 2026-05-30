@@ -999,4 +999,70 @@ mod tests {
         let val: u32 = postcard::from_bytes(resp.payload).unwrap();
         assert_eq!(val, 0xDEAD_BEEF);
     }
+
+    /// cmd_id_by_name returns Ambiguous with IDs sorted ascending when two cache
+    /// entries share the same name but have different cmd_ids.
+    #[test]
+    fn cmd_id_by_name_returns_ambiguous_for_duplicate_names() {
+        let mut cache = SchemaCache::new();
+        // Insert higher cmd_id first to verify the sort is independent of
+        // insertion order.
+        cache.insert(SchemaEntry {
+            name: "dup".to_string(),
+            cmd_id: 0x0020,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+        cache.insert(SchemaEntry {
+            name: "dup".to_string(),
+            cmd_id: 0x0010,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+
+        // Build a client that owns this cache so we can call cmd_id_by_name.
+        struct NullIo;
+        impl std::io::Read for NullIo {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+        impl std::io::Write for NullIo {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut client = TelepathClient::new(NullIo);
+        client.schema_cache.insert(SchemaEntry {
+            name: "dup".to_string(),
+            cmd_id: 0x0020,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+        client.schema_cache.insert(SchemaEntry {
+            name: "dup".to_string(),
+            cmd_id: 0x0010,
+            args_schema: vec![],
+            ret_schema: vec![],
+            arg_names: vec![],
+        });
+
+        match client.cmd_id_by_name("dup") {
+            NameResolutionResult::Ambiguous(ids) => {
+                assert_eq!(ids, vec![0x0010, 0x0020], "ids must be sorted ascending");
+            }
+            other => panic!("expected Ambiguous, got {:?}", other),
+        }
+        // Unrelated name is NotFound.
+        assert!(matches!(
+            client.cmd_id_by_name("other"),
+            NameResolutionResult::NotFound
+        ));
+    }
 }
