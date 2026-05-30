@@ -164,17 +164,27 @@ jobs:
           BASE_TREE=$(gh api "repos/${REPO}/git/commits/${HEAD_SHA}" \
             --jq '.tree.sha')
 
-          # 3. Build a new tree containing only the two changed files.
-          # Use --rawfile so jq reads the file verbatim; $(cat ...) strips trailing newlines.
+          # 3. Build a new tree containing the four changed files (Cargo.toml and
+          # Cargo.lock for each excluded crate).  Including the lockfiles prevents
+          # them from going stale after a version bump — without this, any `cargo`
+          # invocation inside those directories would regenerate the lockfile and
+          # produce an unexpected diff in contributors' working trees.
+          # Use --rawfile so jq reads each file verbatim.
           TREE_PAYLOAD=$(jq -n \
             --arg base_tree "$BASE_TREE" \
             --rawfile tools_content tools/telepath/Cargo.toml \
+            --rawfile tools_lock   tools/telepath/Cargo.lock \
             --rawfile ping_content examples/nrf52840-ping/Cargo.toml \
+            --rawfile ping_lock    examples/nrf52840-ping/Cargo.lock \
             '{base_tree: $base_tree, tree: [
                {path: "tools/telepath/Cargo.toml",
                 mode: "100644", type: "blob", content: $tools_content},
+               {path: "tools/telepath/Cargo.lock",
+                mode: "100644", type: "blob", content: $tools_lock},
                {path: "examples/nrf52840-ping/Cargo.toml",
-                mode: "100644", type: "blob", content: $ping_content}
+                mode: "100644", type: "blob", content: $ping_content},
+               {path: "examples/nrf52840-ping/Cargo.lock",
+                mode: "100644", type: "blob", content: $ping_lock}
              ]}')
           NEW_TREE=$(echo "$TREE_PAYLOAD" \
             | gh api "repos/${REPO}/git/trees" \

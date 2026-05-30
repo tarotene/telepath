@@ -82,10 +82,15 @@ did not contain a branch name, or the push was rejected), run the step manually:
 git fetch origin <release-pr-branch>
 git checkout <release-pr-branch>
 just bump-excluded X.Y.Z
-git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
+git add tools/telepath/Cargo.toml tools/telepath/Cargo.lock \
+        examples/nrf52840-ping/Cargo.toml examples/nrf52840-ping/Cargo.lock
 git commit -m "chore(release): bump excluded crates to X.Y.Z"
 git push
 ```
+
+`just bump-excluded` rewrites both `Cargo.toml` files **and** regenerates their
+`Cargo.lock` files (via `cargo update --workspace` in each directory). The
+`git add` above captures all four changed files.
 
 Replace `X.Y.Z` with the version from `[workspace.package].version` in the
 root `Cargo.toml` on the release PR branch.
