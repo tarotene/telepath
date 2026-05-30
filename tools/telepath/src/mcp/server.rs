@@ -152,17 +152,35 @@ where
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let meta = self
+        let matches: Vec<&ToolMeta> = self
             .tools
             .iter()
-            .find(|m| m.tool.name == request.name)
-            .ok_or_else(|| {
-                ErrorData::new(
+            .filter(|m| m.tool.name == request.name)
+            .collect();
+        let meta = match matches.as_slice() {
+            [] => {
+                return Err(ErrorData::new(
                     rmcp::model::ErrorCode::METHOD_NOT_FOUND,
                     format!("unknown tool: {}", request.name),
                     None,
-                )
-            })?;
+                ));
+            }
+            [single] => single,
+            many => {
+                let ids: Vec<u16> = many.iter().map(|m| m.cmd_id).collect();
+                return Err(ErrorData::new(
+                    rmcp::model::ErrorCode::INVALID_PARAMS,
+                    format!(
+                        "ambiguous tool '{}' maps to {} cmd_ids {:04X?}; \
+                         rename or remove duplicate command(s) in firmware",
+                        request.name,
+                        many.len(),
+                        ids,
+                    ),
+                    None,
+                ));
+            }
+        };
 
         let args_json: Value = named_to_positional(request.arguments, &meta.arg_names);
 
@@ -184,7 +202,33 @@ where
     }
 }
 
-fn build_tools(entries: Vec<SchemaEntry>) -> Result<Vec<ToolMeta>, HostError> {
+fn build_tools(mut entries: Vec<SchemaEntry>) -> Result<Vec<ToolMeta>, HostError> {
+    // Sort by cmd_id for deterministic tool ordering within a run.
+    entries.sort_by_key(|e| e.cmd_id);
+
+    // Detect name collisions: two commands with the same name but different
+    // cmd_ids (i.e. different signatures) would appear as duplicate MCP tool
+    // names, which clients cannot disambiguate. Warn on stderr so the operator
+    // is aware.
+    {
+        let mut names: std::collections::HashMap<&str, Vec<u16>> =
+            std::collections::HashMap::new();
+        for e in &entries {
+            names.entry(&e.name).or_default().push(e.cmd_id);
+        }
+        for (name, ids) in &names {
+            if ids.len() > 1 {
+                eprintln!(
+                    "[telepath mcp] Warning: ambiguous command name '{name}' \
+                     maps to {} cmd_ids ({:04X?}). MCP clients cannot \
+                     disambiguate; only the first will be reachable by name.",
+                    ids.len(),
+                    ids
+                );
+            }
+        }
+    }
+
     let mut tools = Vec::new();
     for entry in entries {
         let args_schema = entry.decoded_args_schema()?;
