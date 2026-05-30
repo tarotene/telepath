@@ -13,6 +13,12 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
+## [0.2.1]([`0.2.1`](https://github.com/tarotene/telepath/compare/0.2.0..0.2.1)) — 2026-05-30
+
+### Added
+
+- **macros,server**: Emit ResponseStatus::AppError for Result<T, AppErrorPayload> returns ([#193](https://github.com/tarotene/telepath/pull/193))
+
 
 ## [0.2.0] — 2026-05-30
 
