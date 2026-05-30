@@ -6,6 +6,45 @@ non-standard scenarios: retriggering, version overrides, and recovery.
 For the normal release cycle, see
 [AGENTS.md § How releases work](../AGENTS.md#how-releases-work).
 
+## Setup: GitHub App token
+
+The `release-plz.yml` workflow uses a **GitHub App installation token** instead of
+`GITHUB_TOKEN` for all steps that create GitHub objects (release PRs and GitHub Releases).
+This is required because GitHub's anti-recursion guard suppresses `pull_request` and
+`release: published` events that originate from `GITHUB_TOKEN`-authenticated API calls,
+which would prevent required CI status checks from running on release PRs and prevent
+`release-binaries.yml` from firing.
+
+### Required repository secrets
+
+Add the following secrets to the repository (`Settings → Secrets and variables → Actions`):
+
+| Secret name | Value |
+|---|---|
+| `RELEASE_PLZ_APP_ID` | The numeric App ID shown on the GitHub App's settings page |
+| `RELEASE_PLZ_APP_PRIVATE_KEY` | The PEM-encoded private key generated on the App's settings page |
+
+### GitHub App permission requirements
+
+The App installation at `tarotene/telepath` must be granted:
+
+| Permission | Level |
+|---|---|
+| Contents | Read and write |
+| Pull requests | Read and write |
+
+These are the minimum permissions for release-plz to create and update release PRs and
+to create GitHub Releases. No other permissions are required.
+
+### Creating and installing the App
+
+1. Go to `https://github.com/settings/apps/new` and create a new GitHub App.
+2. Set the required permissions listed above. Disable all others and disable the webhook.
+3. Install the App on the `tarotene/telepath` repository only (not "all repositories").
+4. Generate a private key on the App settings page.
+5. Copy the numeric **App ID** and the **PEM private key** into the repository secrets
+   listed above.
+
 ## Retriggering the release workflow
 
 If the `release-plz-pr` or `release-plz-release` job fails or is skipped,
