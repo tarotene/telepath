@@ -18,8 +18,8 @@
 //! use telepath_server::{TelepathServer, command};
 //!
 //! #[command]
-//! fn set_led(id: u8, brightness: u16) -> Result<(), ()> {
-//!     Ok(())
+//! fn set_led(id: u8, brightness: u16) {
+//!     // ...
 //! }
 //!
 //! let mut server = TelepathServer::<_, 512>::new(transport, telepath_server::commands());

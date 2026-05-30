@@ -178,7 +178,10 @@ fn shim_result_cmd_id_uses_result_type() {
     // cmd_id must include the full "Result<u32, AppErrorPayload<'static>>" text
     // so that a previously infallible command with the same name/args would get
     // a different ID (wire ABI break accepted, as per the issue spec).
-    let id_result_variant =
+    // id_infallible_variant is the cmd_id that the *infallible* `checked_div(u32,u32)->u32`
+    // would have received.  We use it as the comparison baseline to verify that adding a
+    // Result<T, AppErrorPayload> return type changes the cmd_id (wire ABI break).
+    let id_infallible_variant =
         telepath_wire::cmd_id::derive_cmd_id("checked_div", "(u32, u32)", "u32");
     // The actual cmd_id was derived from the full Result<...> ret_type_str, but
     // the schema uses just `u32` — verify the schema writer compiles and runs.
@@ -188,7 +191,7 @@ fn shim_result_cmd_id_uses_result_type() {
     assert!(n > 0, "ret_schema must write non-zero bytes for u32");
     // The cmd_id must differ from the hypothetical infallible `checked_div(u32,u32)->u32`.
     assert_ne!(
-        __TELEPATH_CMD_CHECKED_DIV.id, id_result_variant,
+        __TELEPATH_CMD_CHECKED_DIV.id, id_infallible_variant,
         "Result<T, AppErrorPayload> and T must produce different cmd_ids"
     );
 }

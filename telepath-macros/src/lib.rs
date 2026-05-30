@@ -59,7 +59,7 @@ fn seen_cmd_ids() -> &'static Mutex<HashMap<u16, String>> {
 ///
 /// For every annotated function the macro emits five additional items:
 ///
-/// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8], resources: &ResourceRegistry) -> Result<usize, DispatchError>`** —
+/// 1. **`fn __telepath_shim_<name>(input: &[u8], output: &mut [u8], resources: &ResourceRegistry) -> Result<DispatchOutcome, DispatchError>`** —
 ///    deserializes `input` via postcard, resolves `#[resource]`-annotated arguments from
 ///    `resources`, calls the original function, and serializes the result into `output`.
 /// 2. **`fn __telepath_args_schema_<name>(out: &mut [u8]) -> Result<usize, ()>`** —
