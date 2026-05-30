@@ -31,10 +31,11 @@ The App installation at `tarotene/telepath` must be granted:
 | Permission | Level |
 |---|---|
 | Contents | Read and write |
+| Issues | Read and write |
 | Pull requests | Read and write |
 
-These are the minimum permissions for release-plz to create and update release PRs and
-to create GitHub Releases. No other permissions are required.
+These are the minimum permissions for release-plz to create and update release PRs,
+to apply the `release` label (Issues API), and to create GitHub Releases.
 
 ### Creating and installing the App
 
