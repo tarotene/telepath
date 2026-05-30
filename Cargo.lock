@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "host-pty-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "heapless 0.9.3",
@@ -1792,7 +1792,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "telepath-client"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "cobs 0.5.1",
@@ -1807,7 +1807,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-macros"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cortex-m",
  "heapless 0.9.3",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-wire"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cobs 0.5.1",
  "postcard",
