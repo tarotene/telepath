@@ -155,3 +155,8 @@ bump-excluded VERSION:
         sed 's/^version = "[^"]*"/version = "{{VERSION}}"/' "$f" > "$f.tmp" \
             && mv "$f.tmp" "$f"
     done
+    # Sync each excluded crate's Cargo.lock to reflect the new version.
+    # cargo update --workspace updates only the local-crate entries in the lockfile;
+    # registry dependencies (smallvec, syn, etc.) are left untouched.
+    (cd tools/telepath && cargo update --workspace)
+    (cd examples/nrf52840-ping && cargo update --workspace)
