@@ -226,6 +226,16 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
 > From the second release onward, the release-plz workflow handles publishing via OIDC.
 > See [`docs/releasing.md § Trusted Publishing`](docs/releasing.md#trusted-publishing).
 
+> **GitHub App token**: The `release-plz-pr` and `release-plz-release` jobs use a
+> GitHub App installation token (via `actions/create-github-app-token`) rather than
+> `GITHUB_TOKEN` for all GitHub-object-creating steps. This allows release PRs and
+> GitHub Releases to trigger downstream workflow runs (required status checks,
+> `release-binaries.yml`) — `GITHUB_TOKEN`-originated events are silently suppressed
+> by GitHub's anti-recursion guard. The token is generated from secrets
+> `RELEASE_PLZ_APP_ID` and `RELEASE_PLZ_APP_PRIVATE_KEY`.
+> See [`docs/releasing.md § Setup: GitHub App token`](docs/releasing.md#setup-github-app-token)
+> for App creation and secret configuration.
+
 #### Debugging / recovery
 
 See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, and recovery procedures.
