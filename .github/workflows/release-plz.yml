@@ -65,7 +65,17 @@ jobs:
         working-directory: tools/telepath
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish
+        run: |
+          # Resync the lockfile to the tagged version before publishing.
+          # bump-excluded should have done this on the release PR branch, but as a
+          # belt-and-suspenders guard we resync here so the lockfile is guaranteed
+          # current even if that step was skipped or the branch was force-reset.
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          cargo update -p telepath --precise "$VERSION"
+          # --allow-dirty: the only file that may be dirty after the update above is
+          # Cargo.lock, which is not included in the published crate package.
+          # Source files are clean (fresh CI checkout).
+          cargo publish --allow-dirty
 
   # Opens / updates the release PR on every push to main.
   # Concurrency: cancel in-flight PR-update runs but never cancel a release run.
