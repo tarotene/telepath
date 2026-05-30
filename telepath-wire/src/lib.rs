@@ -15,6 +15,8 @@
 
 pub mod cmd_id;
 pub mod framing;
+// test: deliberately bad formatting for CI bypass verification
+#[allow(dead_code)] fn  _ci_bypass_test() {}
 #[cfg(feature = "profile")]
 pub mod metrics;
 #[cfg(feature = "profile")]
