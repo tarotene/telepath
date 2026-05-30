@@ -165,12 +165,11 @@ jobs:
             --jq '.tree.sha')
 
           # 3. Build a new tree containing only the two changed files.
-          TOOLS_CONTENT=$(cat tools/telepath/Cargo.toml)
-          PING_CONTENT=$(cat examples/nrf52840-ping/Cargo.toml)
+          # Use --rawfile so jq reads the file verbatim; $(cat ...) strips trailing newlines.
           TREE_PAYLOAD=$(jq -n \
             --arg base_tree "$BASE_TREE" \
-            --arg tools_content "$TOOLS_CONTENT" \
-            --arg ping_content "$PING_CONTENT" \
+            --rawfile tools_content tools/telepath/Cargo.toml \
+            --rawfile ping_content examples/nrf52840-ping/Cargo.toml \
             '{base_tree: $base_tree, tree: [
                {path: "tools/telepath/Cargo.toml",
                 mode: "100644", type: "blob", content: $tools_content},
