@@ -89,8 +89,69 @@ jobs:
         with:
           cache-key: release-plz-pr
 
-      - uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5
+      - id: release-plz
+        uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Automatically bump the two excluded crates (tools/telepath and
+      # examples/nrf52840-ping) to match the version that release-plz wrote
+      # into the workspace Cargo.toml on the release PR branch.
+      #
+      # Idempotent: exits without a commit if the excluded crates are already
+      # at the target version (handles re-runs after force-updates by
+      # release-plz, which regenerates the PR branch from scratch).
+      - name: Bump excluded crates on release PR
+        if: ${{ steps.release-plz.outputs.pr != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          PR_JSON='${{ steps.release-plz.outputs.pr }}'
+          BRANCH=$(echo "$PR_JSON" | jq -r '.head_branch // empty')
+          if [ -z "$BRANCH" ]; then
+            echo "No release PR branch found in output; skipping bump-excluded."
+            exit 0
+          fi
+
+          # Fetch and switch to the release-plz PR branch.
+          # Use -B to create-or-reset a local branch tracking origin/$BRANCH so
+          # the subsequent push targets the right remote ref even when git DWIM
+          # checkout would not set up tracking (e.g. detached-HEAD environments).
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+          # Read the target version from the workspace via cargo metadata so the
+          # read is robust against Cargo.toml whitespace or key-order changes.
+          # telepath-wire inherits version from [workspace.package]; any member works.
+          VERSION=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name=="telepath-wire") | .version')
+          echo "Target version: $VERSION"
+
+          # Check whether excluded crates already match — skip if they do.
+          TOOLS_VER=$(grep -m1 '^version = ' tools/telepath/Cargo.toml \
+                      | sed 's/version = "\(.*\)"/\1/')
+          PING_VER=$(grep -m1 '^version = ' examples/nrf52840-ping/Cargo.toml \
+                     | sed 's/version = "\(.*\)"/\1/')
+          if [ "$TOOLS_VER" = "$VERSION" ] && [ "$PING_VER" = "$VERSION" ]; then
+            echo "Excluded crates already at $VERSION; nothing to commit."
+            exit 0
+          fi
+
+          just bump-excluded "$VERSION"
+
+          if git diff --quiet; then
+            echo "No changes after bump-excluded; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
+          git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
+          git commit -m "chore(release): bump excluded crates to $VERSION"
+          git push
