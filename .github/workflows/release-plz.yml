@@ -100,6 +100,10 @@ jobs:
       # examples/nrf52840-ping) to match the version that release-plz wrote
       # into the workspace Cargo.toml on the release PR branch.
       #
+      # Commits via the GitHub API (not git push) so the resulting commit is
+      # verified (signed by GitHub), matching the verification level of
+      # release-plz's own commits on the same branch.
+      #
       # Idempotent: exits without a commit if the excluded crates are already
       # at the target version (handles re-runs after force-updates by
       # release-plz, which regenerates the PR branch from scratch).
@@ -148,10 +152,49 @@ jobs:
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin \
-            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
-          git add tools/telepath/Cargo.toml examples/nrf52840-ping/Cargo.toml
-          git commit -m "chore(release): bump excluded crates to $VERSION"
-          git push
+          # Commit via GitHub API — verified automatically by GitHub.
+          # No git commit or git push: those produce unsigned commits.
+          REPO="${{ github.repository }}"
+
+          # 1. Resolve the current branch HEAD SHA.
+          HEAD_SHA=$(gh api "repos/${REPO}/git/ref/heads/${BRANCH}" \
+            --jq '.object.sha')
+
+          # 2. Resolve the base tree SHA from the HEAD commit.
+          BASE_TREE=$(gh api "repos/${REPO}/git/commits/${HEAD_SHA}" \
+            --jq '.tree.sha')
+
+          # 3. Build a new tree containing only the two changed files.
+          # Use --rawfile so jq reads the file verbatim; $(cat ...) strips trailing newlines.
+          TREE_PAYLOAD=$(jq -n \
+            --arg base_tree "$BASE_TREE" \
+            --rawfile tools_content tools/telepath/Cargo.toml \
+            --rawfile ping_content examples/nrf52840-ping/Cargo.toml \
+            '{base_tree: $base_tree, tree: [
+               {path: "tools/telepath/Cargo.toml",
+                mode: "100644", type: "blob", content: $tools_content},
+               {path: "examples/nrf52840-ping/Cargo.toml",
+                mode: "100644", type: "blob", content: $ping_content}
+             ]}')
+          NEW_TREE=$(echo "$TREE_PAYLOAD" \
+            | gh api "repos/${REPO}/git/trees" \
+                --method POST --input - \
+                --jq '.sha')
+
+          # 4. Create the commit — GitHub signs it automatically.
+          COMMIT_PAYLOAD=$(jq -n \
+            --arg msg "chore(release): bump excluded crates to ${VERSION}" \
+            --arg tree "$NEW_TREE" \
+            --arg parent "$HEAD_SHA" \
+            '{message: $msg, tree: $tree, parents: [$parent]}')
+          NEW_COMMIT=$(echo "$COMMIT_PAYLOAD" \
+            | gh api "repos/${REPO}/git/commits" \
+                --method POST --input - \
+                --jq '.sha')
+          echo "Created verified commit: $NEW_COMMIT"
+
+          # 5. Advance the branch ref (fast-forward only).
+          jq -n --arg sha "$NEW_COMMIT" '{sha: $sha, force: false}' \
+            | gh api "repos/${REPO}/git/refs/heads/${BRANCH}" \
+                --method PATCH --input -
+          echo "Branch ${BRANCH} advanced to ${NEW_COMMIT}"
