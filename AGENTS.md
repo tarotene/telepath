@@ -277,11 +277,11 @@ The repository uses **three layered Rulesets** targeting `~DEFAULT_BRANCH` (`mai
 |---------|-----|-------|---------------|
 | `Security` | `17066999` | `deletion`, `non_fast_forward` | none (absolute) |
 | `Quality` | `17067250` | `required_status_checks`, `required_signatures`, `required_linear_history` | none (absolute) |
-| `Workflow` | `13908758` | `pull_request`, `copilot_code_review` | `@tarotene` (pull_request mode) |
+| `Workflow` | `13908758` | `pull_request` (squash-only, thread resolution; no review required), `copilot_code_review` | none |
 
 When multiple rulesets target the same branch, GitHub enforces the **most restrictive**
-combination.  The three-way split ensures that `@tarotene`'s bypass on `Workflow` never
-weakens the absolute guards in `Security` or `Quality`.
+combination.  The three-way split ensures that `Security` and `Quality` remain absolute
+regardless of `Workflow` configuration.
 
 The following jobs are registered as **required status checks** in the `Quality` Ruleset:
 
