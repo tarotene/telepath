@@ -156,7 +156,7 @@ bump-excluded VERSION:
             && mv "$f.tmp" "$f"
     done
     # Sync each excluded crate's Cargo.lock to reflect the new version.
-    # cargo update --workspace updates only the local-crate entries in the lockfile;
-    # registry dependencies (smallvec, syn, etc.) are left untouched.
-    (cd tools/telepath && cargo update --workspace)
-    (cd examples/nrf52840-ping && cargo update --workspace)
+    # --precise pins the update to exactly the new version, leaving all registry
+    # dependencies (smallvec, syn, etc.) untouched.
+    (cd tools/telepath && cargo update -p telepath --precise "{{VERSION}}")
+    (cd examples/nrf52840-ping && cargo update -p nrf52840-ping --precise "{{VERSION}}")
