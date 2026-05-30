@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_publish_tools:
+        description: 'Force-publish tools/telepath (recovery — use when the automated publish step failed)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,13 +48,19 @@ jobs:
 
       # host-pty-server (publish=false) produces a git-only release that appears in
       # the releases output. Skip tools/telepath publishing for git-only releases.
+      # force_publish_tools input bypasses the gate for recovery after a failed publish.
       - id: gate
-        if: ${{ steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]' }}
         env:
           RELEASES: ${{ steps.release-plz.outputs.releases }}
         run: |
-          count=$(echo "$RELEASES" | jq '[.[] | select(.package_name != "host-pty-server")] | length')
-          echo "should_publish_tools=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.force_publish_tools }}" = "true" ]; then
+            echo "should_publish_tools=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$RELEASES" ] && [ "$RELEASES" != "[]" ]; then
+            count=$(echo "$RELEASES" | jq '[.[] | select(.package_name != "host-pty-server")] | length')
+            echo "should_publish_tools=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish_tools=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # tools/telepath is excluded from the root workspace and is not managed by
       # release-plz; publish it manually after the workspace crates are live.
