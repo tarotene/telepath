@@ -89,8 +89,9 @@ git push
 ```
 
 `just bump-excluded` rewrites both `Cargo.toml` files **and** regenerates their
-`Cargo.lock` files (via `cargo update --workspace` in each directory). The
-`git add` above captures all four changed files.
+`Cargo.lock` files (via `cargo update -p <name> --precise <version>` in each
+directory — only the local package entry is updated, registry dependencies are
+left untouched). The `git add` above captures all four changed files.
 
 Replace `X.Y.Z` with the version from `[workspace.package].version` in the
 root `Cargo.toml` on the release PR branch.
