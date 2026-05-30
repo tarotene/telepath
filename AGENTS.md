@@ -271,17 +271,19 @@ commit convention `feat(toolchain)!: bump MSRV to 1.XX`.
 
 ### Required CI gates
 
-The repository uses **two layered Rulesets** targeting `~DEFAULT_BRANCH` (`main`):
+The repository uses **three layered Rulesets** targeting `~DEFAULT_BRANCH` (`main`):
 
-| Ruleset | id | Purpose | bypass actors |
-|---------|-----|---------|---------------|
-| `Security` | `17066999` | Destructive-operation guard: `deletion` + `non_fast_forward` | none (absolute) |
-| `Workflow` | `13908758` | Quality + review gate: CI checks, PR reviews, signatures | `@tarotene` (pull_request mode) |
+| Ruleset | id | Rules | bypass actors |
+|---------|-----|-------|---------------|
+| `Security` | `17066999` | `deletion`, `non_fast_forward` | none (absolute) |
+| `Quality` | `17067250` | `required_status_checks`, `required_signatures`, `required_linear_history` | none (absolute) |
+| `Workflow` | `13908758` | `pull_request`, `copilot_code_review` | `@tarotene` (pull_request mode) |
 
 When multiple rulesets target the same branch, GitHub enforces the **most restrictive**
-combination.  Splitting ensures that bypass granted on `Workflow` never weakens `Security`.
+combination.  The three-way split ensures that `@tarotene`'s bypass on `Workflow` never
+weakens the absolute guards in `Security` or `Quality`.
 
-The following jobs are registered as **required status checks** in the `Workflow` Ruleset:
+The following jobs are registered as **required status checks** in the `Quality` Ruleset:
 
 | Job name | Category | Required |
 |----------|----------|----------|
@@ -298,6 +300,7 @@ The following jobs are registered as **required status checks** in the `Workflow
 - Experimental or known-flaky jobs → NOT required until stable across ≥5 consecutive PRs
 - Ruleset updates MUST be applied via API so changes are auditable:
   - `Security` (`id=17066999`): `gh api -X PUT repos/.../rulesets/17066999`
+  - `Quality`  (`id=17067250`): `gh api -X PUT repos/.../rulesets/17067250`
   - `Workflow` (`id=13908758`): `gh api -X PUT repos/.../rulesets/13908758`
 
 ### CI tool installation policy
