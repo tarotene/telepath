@@ -271,8 +271,17 @@ commit convention `feat(toolchain)!: bump MSRV to 1.XX`.
 
 ### Required CI gates
 
-The following jobs are registered as **required status checks** in the repository
-Ruleset (`id=13908758`, applies to `main`):
+The repository uses **two layered Rulesets** targeting `~DEFAULT_BRANCH` (`main`):
+
+| Ruleset | id | Purpose | bypass actors |
+|---------|-----|---------|---------------|
+| `Security` | `17066999` | Destructive-operation guard: `deletion` + `non_fast_forward` | none (absolute) |
+| `Workflow` | `13908758` | Quality + review gate: CI checks, PR reviews, signatures | `@tarotene` (pull_request mode) |
+
+When multiple rulesets target the same branch, GitHub enforces the **most restrictive**
+combination.  Splitting ensures that bypass granted on `Workflow` never weakens `Security`.
+
+The following jobs are registered as **required status checks** in the `Workflow` Ruleset:
 
 | Job name | Category | Required |
 |----------|----------|----------|
@@ -287,8 +296,9 @@ Ruleset (`id=13908758`, applies to `main`):
 - Correctness / Style / Policy gates → SHOULD be required
 - Hardware-dependent jobs (e.g. `firmware-ping`) → NOT required without a self-hosted runner
 - Experimental or known-flaky jobs → NOT required until stable across ≥5 consecutive PRs
-- Ruleset updates MUST be applied via API (`gh api -X PUT repos/.../rulesets/13908758`)
-  so changes are auditable
+- Ruleset updates MUST be applied via API so changes are auditable:
+  - `Security` (`id=17066999`): `gh api -X PUT repos/.../rulesets/17066999`
+  - `Workflow` (`id=13908758`): `gh api -X PUT repos/.../rulesets/13908758`
 
 ### CI tool installation policy
 
