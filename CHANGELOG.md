@@ -14,14 +14,14 @@ Telepath uses **unified versioning** across all five workspace members
 
 ## [Unreleased]
 
-## [0.2.2](https://github.com/tarotene/telepath/compare/0.2.1..0.2.2) — 2026-05-31
+## [0.2.2](https://github.com/tarotene/telepath/compare/v0.2.1..v0.2.2) — 2026-05-31
 
 ### Fixed
 
 - **ci,docs**: Align renovate MSRV constraint and fix stale README release claims ([#217](https://github.com/tarotene/telepath/pull/217))
 - **ci**: Use cargo update --precise to avoid registry dep churn in bump-excluded ([#204](https://github.com/tarotene/telepath/pull/204))
 
-## [0.2.1](https://github.com/tarotene/telepath/compare/0.2.0..0.2.1) — 2026-05-30
+## [0.2.1](https://github.com/tarotene/telepath/compare/v0.2.0..v0.2.1) — 2026-05-30
 
 ### Added
 
@@ -34,7 +34,7 @@ Telepath uses **unified versioning** across all five workspace members
 - **ci**: Commit bump-excluded via GitHub API for verified signature ([#199](https://github.com/tarotene/telepath/pull/199))
 - **ci**: Regenerate excluded-crate lockfiles in bump-excluded ([#201](https://github.com/tarotene/telepath/pull/201))
 
-## [0.2.0](https://github.com/tarotene/telepath/compare/0.1.0..0.2.0) — 2026-05-29
+## [0.2.0](https://github.com/tarotene/telepath/compare/v0.1.0..v0.2.0) — 2026-05-29
 
 ### Breaking Changes
 

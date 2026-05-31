@@ -12,7 +12,7 @@ release_commits = "^(feat|fix|perf|refactor)"
 body = """
 {% if version %}\
 ## [{{ version | trim_start_matches(pat="v") }}]\
-{%- if previous %}{%- if previous.version %}(https://github.com/tarotene/telepath/compare/{{ previous.version }}..{{ version }}){%- endif %}{%- endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
+{%- if previous %}{%- if previous.version %}(https://github.com/tarotene/telepath/compare/v{{ previous.version | trim_start_matches(pat="v") }}..v{{ version | trim_start_matches(pat="v") }}){%- endif %}{%- endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
 {% else %}\
 ## [Unreleased]
 {% endif %}\
