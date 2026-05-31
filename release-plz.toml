@@ -11,12 +11,8 @@ release_commits = "^(feat|fix|perf|refactor)"
 [changelog]
 body = """
 {% if version %}\
-## [{{ version | trim_start_matches(pat="v") }}] \
-{%- if previous %}\
-{%- if previous.version %}\
-([`{{ version | trim_start_matches(pat="v") }}`](https://github.com/tarotene/telepath/compare/{{ previous.version }}..{{ version }}))\
-{% endif %}\
-{% endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
+## [{{ version | trim_start_matches(pat="v") }}]\
+{%- if previous %}{%- if previous.version %}(https://github.com/tarotene/telepath/compare/v{{ previous.version | trim_start_matches(pat="v") }}..v{{ version | trim_start_matches(pat="v") }}){%- endif %}{%- endif %} — {{ timestamp | date(format="%Y-%m-%d") }}
 {% else %}\
 ## [Unreleased]
 {% endif %}\
@@ -35,11 +31,17 @@ body = """
 
 # Single-tag pattern: telepath-wire is the canonical tag owner.
 # One vX.Y.Z tag and one GitHub Release cover all five workspace members (unified versioning).
+# git_release_draft = true: release-plz creates the GitHub Release as a draft so that
+# release-binaries (called from release-plz.yml) can attach prebuilt binaries before the
+# release is published. The release-binaries workflow calls `gh release edit --draft=false`
+# after all four builds succeed, publishing the release with assets already attached and
+# allowing the immutable lock to apply to a complete release.
 [[package]]
 name = "telepath-wire"
 git_release_enable = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
+git_release_draft = true
 
 [[package]]
 name = "host-pty-server"

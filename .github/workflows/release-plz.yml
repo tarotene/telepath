@@ -13,11 +13,19 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  # Creates GitHub Release + git tag after the release PR merges.
+  # Creates a draft GitHub Release + git tag after the release PR merges.
+  # The `release-binaries` job (below) attaches 4 prebuilt binaries to the draft and
+  # then publishes the release via `gh release edit --draft=false`.  This draft→publish
+  # approach ensures binaries are attached before the immutable lock is applied.
+  #
   # No concurrency block — missing a release is worse than a duplicate attempt.
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
+    outputs:
+      # The vX.Y.Z tag created for the telepath-wire crate, if any.  Empty when no new
+      # workspace crate release was produced (e.g. host-pty-server-only run).
+      tag: ${{ steps.extract-tag.outputs.tag }}
     permissions:
       contents: write
       pull-requests: read
@@ -46,6 +54,19 @@ jobs:
           command: release
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      # Extract the vX.Y.Z tag for telepath-wire so the release-binaries job can
+      # reference it.  host-pty-server produces a git-only release (no crates.io publish)
+      # with a different tag format; we select telepath-wire specifically to get the
+      # canonical workspace tag.
+      - id: extract-tag
+        if: ${{ steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]' }}
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          tag=$(echo "$RELEASES" \
+            | jq -r '.[] | select(.package_name == "telepath-wire") | .tag // empty')
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       # host-pty-server (publish=false) produces a git-only release that appears in
       # the releases output. Skip tools/telepath publishing for git-only releases.
@@ -232,3 +253,20 @@ jobs:
             | gh api "repos/${REPO}/git/refs/heads/${BRANCH}" \
                 --method PATCH --input -
           echo "Branch ${BRANCH} advanced to ${NEW_COMMIT}"
+
+  # Builds 4 prebuilt binaries, attaches them to the draft GitHub Release created by
+  # release-plz-release, then publishes the release.  Only runs when release-plz
+  # produced a new telepath-wire tag (i.e. a real workspace version bump occurred).
+  #
+  # If this job fails the release remains as a draft — it is never published without
+  # assets.  Recovery: re-run via workflow_dispatch with the `tag` input set.
+  release-binaries:
+    name: Release binaries
+    needs: [release-plz-release]
+    if: ${{ needs.release-plz-release.outputs.tag != '' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-binaries.yml
+    with:
+      tag: ${{ needs.release-plz-release.outputs.tag }}
+    secrets: inherit
