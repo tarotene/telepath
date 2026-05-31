@@ -209,8 +209,13 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
    [`docs/releasing.md § Excluded crates`](docs/releasing.md#excluded-crates-bump-excluded-requirement)
    for recovery if the automatic step fails.)
 4. Review and merge the release PR.
-5. The `release-plz-release` job creates one GitHub Release (`telepath-wire-vX.Y.Z`)
-   tagged `vX.Y.Z`, covering all five workspace members (unified versioning).
+5. The `release-plz-release` job creates a **draft** GitHub Release tagged `vX.Y.Z`,
+   covering all five workspace members (unified versioning).
+6. The `release-binaries` job (triggered by `release-plz-release`) builds prebuilt
+   binaries for 4 targets, attaches them to the draft release, then publishes it via
+   `gh release edit --draft=false`.  The immutable lock is applied only after all
+   assets are attached.  If this job fails, the release stays as a draft and can be
+   retried: `gh workflow run release-binaries.yml -f tag=vX.Y.Z`.
 
 #### What release-plz does NOT do
 
@@ -229,10 +234,12 @@ Everything is driven by release-plz via GitHub Actions (`.github/workflows/relea
 > **GitHub App token**: The `release-plz-pr` and `release-plz-release` jobs use a
 > GitHub App installation token (via `actions/create-github-app-token`) rather than
 > `GITHUB_TOKEN` for all GitHub-object-creating steps. This allows release PRs and
-> GitHub Releases to trigger downstream workflow runs (required status checks,
-> `release-binaries.yml`) — `GITHUB_TOKEN`-originated events are silently suppressed
-> by GitHub's anti-recursion guard. The token is generated from secrets
-> `RELEASE_PLZ_APP_ID` and `RELEASE_PLZ_APP_PRIVATE_KEY`.
+> GitHub Releases to trigger downstream workflow runs (required status checks) —
+> `GITHUB_TOKEN`-originated events are silently suppressed by GitHub's anti-recursion
+> guard. The `release-binaries` job is called directly via `workflow_call` from
+> `release-plz-release`, so it does not rely on a `release: published` event trigger
+> and is therefore unaffected by the anti-recursion guard. The token is generated from
+> secrets `RELEASE_PLZ_APP_ID` and `RELEASE_PLZ_APP_PRIVATE_KEY`.
 > See [`docs/releasing.md § Setup: GitHub App token`](docs/releasing.md#setup-github-app-token)
 > for App creation and secret configuration.
 
@@ -333,7 +340,7 @@ CI uses **five PR-gate workflows**, **three release/maintenance workflows**, and
 
 | File | Purpose | Trigger |
 |------|---------|---------|
-| `.github/workflows/release-binaries.yml` | Build pre-built binaries for 4 targets | `release: published`; `workflow_dispatch` for dry-run validation |
+| `.github/workflows/release-binaries.yml` | Build pre-built binaries for 4 targets, attach to draft release, publish | `workflow_call` (from `release-plz.yml`); `workflow_dispatch` with optional `tag` input for backfill / dry-run |
 | `.github/workflows/release-plz.yml` | Open release PRs and publish to crates.io | Push to `main`; `workflow_dispatch` to retrigger |
 | `.github/workflows/release-nudge.yml` | Post weekly reminder on stale release PRs | Weekly schedule |
 

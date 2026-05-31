@@ -1,9 +1,38 @@
 name: Release binaries
 
+# Called in two ways:
+#
+#   1. workflow_call (from release-plz.yml, after release-plz creates a draft release):
+#      Builds 4 prebuilt binaries, attaches them to the draft GitHub Release for `tag`,
+#      then the `publish` job calls `gh release edit --draft=false` to publish the release
+#      with all assets already attached before the immutable lock is applied.
+#
+#   2. workflow_dispatch (manual, dry-run or backfill):
+#      - `tag` left blank → build only, upload as workflow artifacts (dry-run, no release touched).
+#      - `tag` set to an existing tag → build and attach to that release, then publish it.
+#        Use this to backfill binaries for a mutable release or to retry after a failure.
+#
+# Why not `release: published`?
+#   GitHub marks a published release as immutable immediately on publication.
+#   Uploading assets via `gh release upload` after the release is published would fail with
+#   HTTP 422 ("Cannot upload assets to an immutable release.").  The draft→publish approach
+#   avoids this: assets are attached while the release is still a draft (mutable), and the
+#   release is published (and locked) only after all four builds succeed.
+
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Git tag to build and attach to (e.g. v0.2.3). Required for release upload.'
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git tag to build and attach to (e.g. v0.1.0). Leave blank for dry-run (artifact only).'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -37,6 +66,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          # Check out the exact tag being released (or HEAD for untargeted dispatch).
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -86,20 +117,40 @@ jobs:
             -Path "${{ steps.stage.outputs.staging }}\*" `
             -DestinationPath "${{ runner.temp }}\${{ steps.stage.outputs.name }}.zip"
 
-      - name: Upload to GitHub Release
-        if: github.event_name == 'release'
+      - name: Upload to GitHub Release (draft)
+        if: inputs.tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           asset="${RUNNER_TEMP}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}"
-          gh release upload "${{ github.event.release.tag_name }}" "$asset" --clobber
+          gh release upload "${{ inputs.tag }}" "$asset" --clobber
 
       - name: Upload as workflow artifact (dry-run)
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.tag == ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ steps.stage.outputs.name }}
           path: ${{ runner.temp }}/${{ steps.stage.outputs.name }}.${{ matrix.archive }}
           if-no-files-found: error
           retention-days: 7
+
+  # Publishes the draft GitHub Release after all four builds have attached their assets.
+  # Only runs when a tag is provided (i.e. not a dry-run dispatch).
+  # On failure the release stays as a draft — it is never published without assets.
+  # Recovery: re-run with `gh workflow run release-binaries.yml -f tag=<tag>`.
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: inputs.tag != ''
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release edit "${{ inputs.tag }}" --draft=false

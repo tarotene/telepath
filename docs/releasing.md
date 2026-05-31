@@ -6,6 +6,53 @@ non-standard scenarios: retriggering, version overrides, and recovery.
 For the normal release cycle, see
 [AGENTS.md § How releases work](../AGENTS.md#how-releases-work).
 
+## Draft → publish pipeline
+
+`release-plz` is configured with `git_release_draft = true` (see `release-plz.toml`).
+This means every GitHub Release is created as a **draft** first.  The
+`release-binaries` job in `release-plz.yml` then:
+
+1. Builds 4 prebuilt binaries (x86_64-linux, aarch64-linux, aarch64-darwin, x86_64-windows).
+2. Attaches them to the draft release via `gh release upload`.
+3. Publishes the release via `gh release edit --draft=false`.
+
+The immutable lock is applied by GitHub at publish time, so all assets are already
+attached before the release becomes read-only.
+
+### Why draft→publish instead of post-publish upload?
+
+GitHub marks a published release as **immutable** immediately on publication.
+Any `gh release upload` call after that returns HTTP 422
+("Cannot upload assets to an immutable release.").  The draft→publish approach
+avoids this by keeping the release mutable until all assets are in place.
+
+### Recovering from a failed release-binaries run
+
+If `release-binaries` fails the GitHub Release stays as a draft — it is never
+published without assets.
+
+To retry:
+
+```
+gh workflow run release-binaries.yml --repo tarotene/telepath --ref main -f tag=vX.Y.Z
+```
+
+Or from the GitHub UI: Actions → Release binaries → Run workflow → enter the tag.
+
+After the workflow succeeds the release is published automatically by the `publish` job.
+
+### Backfilling binaries for a mutable (non-immutable) release
+
+If a release is `immutable=false` (check `gh release view vX.Y.Z --json isImmutable`),
+you can attach binaries after the fact using the same workflow:
+
+```
+gh workflow run release-binaries.yml --repo tarotene/telepath --ref main -f tag=vX.Y.Z
+```
+
+If the release is already published (not draft), the `publish` job's
+`gh release edit --draft=false` call is a no-op and does not affect the release state.
+
 ## Setup: GitHub App token
 
 The `release-plz.yml` workflow uses a **GitHub App installation token** instead of
