@@ -271,16 +271,8 @@ println!("ping -> 0x{:08X}", val);
 
 ## CI / Quality gates
 
-```bash
-# Format check
-cargo fmt --all -- --check
-
-# Clippy (warnings are errors)
-cargo clippy --workspace -- -D warnings
-
-# All checks at once
-just ci
-```
+Run `just ci` locally before opening a PR — it covers format check, clippy, tests, the PTY smoke, and the CLI tests.
+Full gate details and individual commands live in [AGENTS.md § Build Commands](AGENTS.md#build-commands) and [AGENTS.md § Required CI gates](AGENTS.md#required-ci-gates).
 
 See [CHANGELOG.md](./CHANGELOG.md) for the project history.
 

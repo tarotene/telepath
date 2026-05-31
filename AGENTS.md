@@ -316,7 +316,9 @@ When adding new tooling to CI workflows, choose the delivery mechanism in this o
 
 ### CI workflow file layout
 
-CI is split into five independent workflows plus one composite action:
+CI uses **five PR-gate workflows**, **three release/maintenance workflows**, and **one composite action**:
+
+#### PR-gate workflows (required status checks)
 
 | File | Required check name | Trigger scope |
 |------|---------------------|---------------|
@@ -325,7 +327,14 @@ CI is split into five independent workflows plus one composite action:
 | `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
 | `.github/workflows/msrv.yml` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
 | `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
-| `.github/workflows/release-binaries.yml` | `Release binaries (4 targets)` | Triggered by `release: published`; `workflow_dispatch` for dry-run validation |
+
+#### Release and maintenance workflows (not PR-gate checks)
+
+| File | Purpose | Trigger |
+|------|---------|---------|
+| `.github/workflows/release-binaries.yml` | Build pre-built binaries for 4 targets | `release: published`; `workflow_dispatch` for dry-run validation |
+| `.github/workflows/release-plz.yml` | Open release PRs and publish to crates.io | Push to `main`; `workflow_dispatch` to retrigger |
+| `.github/workflows/release-nudge.yml` | Post weekly reminder on stale release PRs | Weekly schedule |
 
 Common setup (toolchain, libudev, just, rust-cache) lives in
 `.github/actions/rust-setup/action.yml` (composite action). Modify it to apply
