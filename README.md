@@ -157,7 +157,7 @@ The unified CLI ships three install paths:
 Manual download — choose your target triple and run:
 
 ```bash
-VERSION=0.2.0  # replace with desired release
+VERSION=0.2.1  # replace with desired release
 TARGET=x86_64-unknown-linux-gnu  # or: aarch64-unknown-linux-gnu, aarch64-apple-darwin
 curl -L "https://github.com/tarotene/telepath/releases/download/v${VERSION}/telepath-${TARGET}.tar.gz" \
   | tar -xzf -
@@ -283,11 +283,10 @@ version and are released together as a single GitHub Release tagged `vX.Y.Z`.
 
 - **CHANGELOG:** [`CHANGELOG.md`](CHANGELOG.md) — updated automatically by release-plz
 - **GitHub Releases:** [Releases page](https://github.com/tarotene/telepath/releases)
-- **crates.io:** `publish = false` everywhere until the API stabilizes
+- **crates.io:** [`telepath-wire`](https://crates.io/crates/telepath-wire), [`telepath-macros`](https://crates.io/crates/telepath-macros), [`telepath-server`](https://crates.io/crates/telepath-server), [`telepath-client`](https://crates.io/crates/telepath-client), [`telepath`](https://crates.io/crates/telepath) — published since v0.2.0; example crates are not published
 
 Releases are driven by Conventional Commits on `main` — no manual tagging required.
-For the full developer flow (including the required `just bump-excluded` step on the
-release PR), see [AGENTS.md § How releases work](AGENTS.md#how-releases-work).
+For the full developer flow see [AGENTS.md § How releases work](AGENTS.md#how-releases-work).
 
 ## Supported Rust Version
 
