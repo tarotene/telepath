@@ -13,6 +13,25 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
+## [0.2.2]([`0.2.2`](https://github.com/tarotene/telepath/compare/0.2.1..0.2.2)) — 2026-05-31
+
+### Added
+
+- **telemetry**: DWT-based framing/throughput instrumentation ([#178](https://github.com/tarotene/telepath/pull/178))
+
+
+### Other
+
+- **server,example**: Fix rzCOBS upstream framing drift in READMEs ([#213](https://github.com/tarotene/telepath/pull/213))
+
+- **readme**: Link quickstart to root README, remove host-pty-smoke duplication ([#138](https://github.com/tarotene/telepath/pull/138))
+
+- **toolchain**: Declare MSRV 1.88 across workspace and excluded crates ([#105](https://github.com/tarotene/telepath/pull/105))
+
+- **post-#92**: Add tools/telepath README and sweep stale references ([#95](https://github.com/tarotene/telepath/pull/95))
+
+- Remove in-process loopback; symmetric build-time transport selection ([#66](https://github.com/tarotene/telepath/pull/66))
+
 ## [0.2.1]([`0.2.1`](https://github.com/tarotene/telepath/compare/0.2.0..0.2.1)) — 2026-05-30
 
 ### Added
