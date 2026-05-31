@@ -5,7 +5,7 @@ RPC **server** library for embedded targets (`no_std`, no alloc).
 Target-side Telepath RPC server. Runs on the MCU in `#![no_std]` mode.
 
 Receives COBS-framed postcard requests from the host, dispatches them to
-registered command handlers, and sends COBS-framed postcard responses back.
+registered command handlers, and sends rzCOBS-framed postcard responses back.
 
 ## Architecture
 
@@ -16,8 +16,8 @@ flowchart LR
     CD -->|raw bytes| PD["postcard::from_bytes"]
     PD -->|typed args| D[dispatch]
     D -->|result| PS["postcard::to_slice"]
-    PS -->|raw bytes| CE[cobs_encode]
-    CE -->|COBS frame| T
+    PS -->|raw bytes| CE[rzcobs_encode]
+    CE -->|rzCOBS frame| T
 ```
 
 ## Key API
@@ -113,8 +113,4 @@ rustup target add thumbv7em-none-eabi
 cargo build -p telepath-server --target thumbv7em-none-eabi
 ```
 
-## Limitations
-
-- Upstream (target → host) framing uses COBS in this MVP. rzCOBS is planned
-  for Stage C (see [#76](https://github.com/tarotene/telepath/issues/76)).
 
