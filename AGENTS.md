@@ -260,6 +260,7 @@ qualifying commits on `main`, the release-plz workflow failed — see `docs/rele
 - Channel: `stable` (pinned in `rust-toolchain.toml`)
 - MSRV: `1.88` (declared via `rust-version` in all `Cargo.toml` files and `constraints.rust` in `renovate.json` — note: Renovate's `semver` versioning rejects ranges, so use a single `X.Y.Z` literal, e.g. `1.88.0`)
 - When bumping MSRV, update `rust-version` in all manifests **and** `constraints.rust` in `renovate.json` (`X.Y.Z` literal, NOT a range) in the same PR.
+  Renovate will NOT auto-propose this change (the `renovate-config`/`rust` packageRule sets `enabled: false` — see § Dependency Management); the update MUST be made manually as part of the `feat(toolchain)!` commit.
 - Additional target: `thumbv7em-none-eabi`
 - Recommended tools: `just`, `probe-rs`, `cargo-expand` (for macro debugging), `cocogitto` (commit-msg validation)
 
@@ -381,6 +382,11 @@ over silently skipping valid checks).
 - Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, etc.) carry the `needs-smoke-test` label.
   Run `just firmware-ping` on a connected nRF52840-DK and record the result in the PR before merging.
 - `dtolnay/rust-toolchain@stable` is excluded from Renovate (channel reference, not a version tag).
+- `constraints.rust` (`1.88.0`) is the MSRV pin; a `renovate-config`/`rust` packageRule sets `enabled: false`
+  so Renovate cannot self-bump it via the docker datasource (the misleading "rust Docker tag" update seen
+  in the Dependency Dashboard). Without this rule the value drifts silently — see git history #151/#169/#190
+  (three renovate[bot] bumps), reverted by #217. MSRV changes are deliberate `feat(toolchain)!` edits only
+  (see § Toolchain for the full update checklist).
 - Dependency Dashboard Issue lists all suppressed updates for visibility.
 
 ## Git Hooks

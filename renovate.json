@@ -122,6 +122,12 @@
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["dtolnay/rust-toolchain"],
       "enabled": false
+    },
+    {
+      "description": "Do not let Renovate auto-bump its own constraints.rust literal — it is the MSRV pin (1.88) and must change only via a deliberate feat(toolchain)! MSRV bump (see § MSRV policy). Renovate resolves it via the docker datasource ('rust' image), which is unrelated to this repo's build (no Dockerfile exists) and would silently raise the MSRV-compat assumption if merged.",
+      "matchManagers": ["renovate-config"],
+      "matchDepNames": ["rust"],
+      "enabled": false
     }
   ]
 }
