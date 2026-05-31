@@ -44,7 +44,7 @@ runs:
         version: 1.0
 
     - name: Install just
-      uses: taiki-e/install-action@0fd46367812ee04360509b4169d9f659d6892bb2 # v2
+      uses: taiki-e/install-action@3d832235cb306500b868c2632a137d48634568cd # v2
       with:
         tool: just
 
