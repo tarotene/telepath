@@ -13,33 +13,28 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
-## [0.2.2]([`0.2.2`](https://github.com/tarotene/telepath/compare/0.2.1..0.2.2)) — 2026-05-31
+
+## [0.2.2](https://github.com/tarotene/telepath/compare/v0.2.1..v0.2.2) — 2026-05-31
+
+### Fixed
+
+- **ci,docs**: Align renovate MSRV constraint and fix stale README release claims ([#217](https://github.com/tarotene/telepath/pull/217))
+- **ci**: Use cargo update --precise to avoid registry dep churn in bump-excluded ([#204](https://github.com/tarotene/telepath/pull/204))
+
+## [0.2.1](https://github.com/tarotene/telepath/compare/v0.2.0..v0.2.1) — 2026-05-30
 
 ### Added
 
-- **telemetry**: DWT-based framing/throughput instrumentation ([#178](https://github.com/tarotene/telepath/pull/178))
-
-
-### Other
-
-- **server,example**: Fix rzCOBS upstream framing drift in READMEs ([#213](https://github.com/tarotene/telepath/pull/213))
-
-- **readme**: Link quickstart to root README, remove host-pty-smoke duplication ([#138](https://github.com/tarotene/telepath/pull/138))
-
-- **toolchain**: Declare MSRV 1.88 across workspace and excluded crates ([#105](https://github.com/tarotene/telepath/pull/105))
-
-- **post-#92**: Add tools/telepath README and sweep stale references ([#95](https://github.com/tarotene/telepath/pull/95))
-
-- Remove in-process loopback; symmetric build-time transport selection ([#66](https://github.com/tarotene/telepath/pull/66))
-
-## [0.2.1]([`0.2.1`](https://github.com/tarotene/telepath/compare/0.2.0..0.2.1)) — 2026-05-30
-
-### Added
-
+- **client**: Detect ambiguous cmd_id_by_name lookup ([#194](https://github.com/tarotene/telepath/pull/194))
 - **macros,server**: Emit ResponseStatus::AppError for Result<T, AppErrorPayload> returns ([#193](https://github.com/tarotene/telepath/pull/193))
 
+### Fixed
 
-## [0.2.0] — 2026-05-30
+- **release**: Drop macOS Intel from binaries matrix + unify release name to v{{version}} ([#188](https://github.com/tarotene/telepath/pull/188))
+- **ci**: Commit bump-excluded via GitHub API for verified signature ([#199](https://github.com/tarotene/telepath/pull/199))
+- **ci**: Regenerate excluded-crate lockfiles in bump-excluded ([#201](https://github.com/tarotene/telepath/pull/201))
+
+## [0.2.0](https://github.com/tarotene/telepath/compare/v0.1.0..v0.2.0) — 2026-05-29
 
 ### Breaking Changes
 
@@ -50,7 +45,7 @@ Telepath uses **unified versioning** across all five workspace members
 
 - **client**: Typed `call::<Args, Ret>` wrapper (Stage C1) ([#174](https://github.com/tarotene/telepath/pull/174))
 - **telemetry**: DWT-based framing/throughput instrumentation ([#178](https://github.com/tarotene/telepath/pull/178))
-- **release**: Pre-built binary distribution pipeline for 5 platforms ([#184](https://github.com/tarotene/telepath/pull/184))
+- **release**: Pre-built binary distribution pipeline for 4 platforms ([#184](https://github.com/tarotene/telepath/pull/184))
 
 ### Other
 
