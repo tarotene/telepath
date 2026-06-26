@@ -51,7 +51,7 @@ Both methods are non-blocking and return the number of bytes transferred.
 pub struct CommandMetadata {
     pub name: &'static str,
     pub id: u16,
-    pub invoke: ShimFn,         // fn(&[u8], &mut [u8], &ResourceRegistry) -> Result<usize, DispatchError>
+    pub invoke: ShimFn,         // fn(&[u8], &mut [u8], &ResourceRegistry) -> Result<DispatchOutcome, DispatchError>
     pub args_schema: SchemaFn,  // fn(&mut [u8]) -> Result<usize, ()>
     pub ret_schema: SchemaFn,   // fn(&mut [u8]) -> Result<usize, ()>
     pub arg_names: &'static str, // comma-separated, e.g. "a,b"
