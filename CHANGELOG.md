@@ -13,6 +13,12 @@ Telepath uses **unified versioning** across all five workspace members
 <!-- release-plz-start -->
 
 ## [Unreleased]
+## [0.2.3](https://github.com/tarotene/telepath/compare/v0.2.2..v0.2.3) — 2026-06-26
+
+### Fixed
+
+- **server,docs**: Correct ShimFn return type in README ([#228](https://github.com/tarotene/telepath/pull/228))
+
 
 ## [0.2.2](https://github.com/tarotene/telepath/compare/v0.2.1..v0.2.2) — 2026-05-31
 

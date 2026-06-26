@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "nrf52840-ping"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -744,7 +744,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-macros"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -754,7 +754,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-server"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cortex-m",
  "linkme",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-wire"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cobs 0.5.1",
  "postcard",
