@@ -2242,7 +2242,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "telepath"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-client"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "cobs 0.5.1",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-macros"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-server"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "linkme",
  "postcard",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "telepath-wire"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cobs 0.5.1",
  "postcard",
