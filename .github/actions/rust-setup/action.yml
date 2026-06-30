@@ -38,13 +38,13 @@ runs:
 
     - name: Install libudev-dev (serialport)
       if: inputs.install-libudev == 'true'
-      uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+      uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
       with:
         packages: libudev-dev pkg-config
         version: 1.0
 
     - name: Install just
-      uses: taiki-e/install-action@682e7d9e49c5e653d371fc6adbda67653461378a # v2
+      uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
       with:
         tool: just
 
