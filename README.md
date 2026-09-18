@@ -1,6 +1,6 @@
 # Telepath
 
-**Write `#[command] fn`, get a discoverable RPC server — anywhere a byte-stream goes.**
+**Embedded RPC for Rust: write #[command] on the target and get a discoverable RPC server callable from a host shell or AI agent over any byte-stream transport.**
 
 Telepath lets you expose any MCU-side logic over the wire so you can call it
 interactively from a host shell or an AI agent — giving you real hardware feel while
@@ -23,6 +23,31 @@ fn ping() -> u32 { 0xDEAD_BEEF }
 ```
 
 That one attribute registers `ping` in the command table, generates its wire shim, and embeds its postcard schema — no further wiring needed.
+
+## Scope
+
+In:
+- The `#[command]` macro and the server/client/wire crates
+- The unified `telepath` CLI (`shell` REPL + `mcp` server, auto-generated tool descriptors)
+- Transport backends (UART/RTT/USB-CDC/BLE/PTY)
+- On-wire schema discovery (CDP)
+
+Out:
+- Board support and specific firmware application logic beyond reference examples
+- RTOS/scheduler integration
+- Repository governance templates (the responsibility of a separate Rust repository governance skill, such as the one used by `dotfiles`)
+
+## Issue litmus
+
+判定問: Does it change what a `#[command]` author writes, or how a host discovers/calls commands over a transport?
+
+採用例:
+- feat(client): reconnect with backoff on serial transport
+- feat(mcp): surface command doc-comments as MCP tool descriptions
+
+棄却例:
+- feat(server): built-in task scheduler for firmware apps
+- feat(examples): add STM32H7 board support crate
 
 ## Architecture
 
