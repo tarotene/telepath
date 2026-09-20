@@ -24,32 +24,16 @@ fn ping() -> u32 { 0xDEAD_BEEF }
 
 That one attribute registers `ping` in the command table, generates its wire shim, and embeds its postcard schema — no further wiring needed.
 
-## Scope
+## Background
 
-In:
-- The `#[command]` macro and the server/client/wire crates
-- The unified `telepath` CLI (`shell` REPL + `mcp` server, auto-generated tool descriptors)
-- Transport backends (UART/RTT/USB-CDC/BLE/PTY)
-- On-wire schema discovery (CDP)
+Telepath's wire design follows two established protocol models rather than
+inventing new ones: packet framing follows the ONC RPC (RFC 5531) CALL/REPLY
+split, and its discovery command ID reuses the CoAP (RFC 7252) Empty/NULL
+convention. Schema-on-the-wire discovery exists specifically so a host —
+human or AI agent — never needs a hand-written or out-of-band description of
+what a target firmware build can do.
 
-Out:
-- Board support and specific firmware application logic beyond reference examples
-- RTOS/scheduler integration
-- Repository governance templates (the responsibility of a separate Rust repository governance skill, such as the one used by `dotfiles`)
-
-## Issue litmus
-
-判定問: Does it change what a `#[command]` author writes, or how a host discovers/calls commands over a transport?
-
-採用例:
-- feat(client): reconnect with backoff on serial transport
-- feat(mcp): surface command doc-comments as MCP tool descriptions
-
-棄却例:
-- feat(server): built-in task scheduler for firmware apps
-- feat(examples): add STM32H7 board support crate
-
-## Architecture
+### Architecture
 
 ```mermaid
 sequenceDiagram
@@ -69,7 +53,7 @@ sequenceDiagram
     H->>H: Decode payload → present to caller
 ```
 
-### Workspace structure
+#### Workspace structure
 
 Telepath is a five-crate workspace (`telepath-wire`, `telepath-macros`,
 `telepath-server`, `telepath-client`, `examples/host-pty-server`) plus two
@@ -77,7 +61,7 @@ workspace-excluded crates (`tools/telepath`, `examples/nrf52840-ping`).
 See [AGENTS.md § Workspace Overview](AGENTS.md#workspace-overview) for the
 full table with target triples and Cargo feature flags.
 
-### Framing
+#### Framing
 
 | Direction | Method | Rationale |
 |-----------|--------|-----------|
@@ -86,19 +70,19 @@ full table with target triples and Cargo feature flags.
 
 Both directions use `0x00` as the frame delimiter.
 
-### Packet model
+#### Packet model
 
 Two packet types only (`Request` / `Response`), following the ONC RPC RFC 5531
 CALL/REPLY model. Errors live in `ResponseStatus`, not as separate packet types.
 CmdID `0x0000` is reserved for the Command Discovery Protocol (CDP).
 
-## Agent-ready by design
+### Agent-ready by design
 
 Telepath's wire protocol is designed so that a host can enumerate commands and their
 full type signatures at runtime — the foundation needed to drive a Telepath server
 from an AI agent without hand-written tool descriptors.
 
-### Schemas on the wire
+#### Schemas on the wire
 
 - `DiscoveryEntry.args_schema` / `ret_schema` carry real `postcard-schema` bytes
   (`NamedType` serialised with postcard) over the wire.
@@ -106,7 +90,7 @@ from an AI agent without hand-written tool descriptors.
   `SchemaCache`, keyed by command ID.
 - `examples/host-pty-server` exercises this end-to-end over a real PTY transport — no hardware required.
 
-### MCP tool auto-generation
+#### MCP tool auto-generation
 
 The `telepath mcp` subcommand (`tools/telepath`) auto-generates MCP tool descriptors from live
 `#[command]` metadata — zero hand-written tool definitions required:
@@ -135,28 +119,9 @@ See [`docs/mcp-integration.md`](docs/mcp-integration.md) and
 [`tools/telepath/README.md`](tools/telepath/README.md)
 for setup instructions, including using it from Claude Code.
 
-## Quickstart
+## Install
 
-The fastest way to see Telepath in action requires no hardware.
-
-```bash
-git clone https://github.com/tarotene/telepath.git
-cd telepath
-just host-pty-smoke
-```
-
-Expected output:
-
-```
-ping -> 0xDEADBEEF
-```
-
-`host-pty-smoke` starts `examples/host-pty-server` (a `TelepathServer` over a PTY
-master), then drives it from `telepath shell --transport serial` via the slave end.
-The full wire path (postcard serialization + COBS framing) runs identically to real
-hardware. Switching to an MCU is purely a transport swap.
-
-## Prerequisites
+### Prerequisites
 
 | Tool | Purpose |
 |------|---------|
@@ -168,8 +133,6 @@ hardware. Switching to an MCU is purely a transport swap.
 
 > **MSRV:** See [Supported Rust Version](#supported-rust-version) below for the
 > declared Minimum Supported Rust Version and policy.
-
-## Install
 
 The unified CLI ships three install paths:
 
@@ -199,7 +162,97 @@ Pre-built binaries ship with default features (`shell + mcp + rtt`). The `serial
 transport requires libudev on Linux and is available only via source build:
 `cargo install telepath --features serial`.
 
-## Git hooks setup
+## Usage
+
+### Quickstart
+
+The fastest way to see Telepath in action requires no hardware.
+
+```bash
+git clone https://github.com/tarotene/telepath.git
+cd telepath
+just host-pty-smoke
+```
+
+Expected output:
+
+```
+ping -> 0xDEADBEEF
+```
+
+`host-pty-smoke` starts `examples/host-pty-server` (a `TelepathServer` over a PTY
+master), then drives it from `telepath shell --transport serial` via the slave end.
+The full wire path (postcard serialization + COBS framing) runs identically to real
+hardware. Switching to an MCU is purely a transport swap.
+
+### Using telepath as a library
+
+#### Server side (target)
+
+Annotate functions with `#[command]` and pass them to `TelepathServer::new` in a `poll()` loop:
+
+```rust
+use telepath_server::{command, TelepathServer};
+
+#[command]
+fn ping() -> u32 { 0xDEAD_BEEF }
+
+let mut server = TelepathServer::<MyTransport, 512>::new(transport, telepath_server::commands());
+loop { server.poll(); }
+```
+
+See [telepath-server § Usage](telepath-server/README.md#usage) for the full recipe including
+`#[resource]` injection and the postcard direct-dependency requirement.
+
+#### Host side
+
+```toml
+[dependencies]
+telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main", features = ["rtt"] }
+```
+
+```rust
+use telepath_client::TelepathClient;
+
+// transport: anything implementing `std::io::Read + std::io::Write`
+let mut client = TelepathClient::new(transport);
+
+// Discover commands registered on the target, then issue a typed call.
+client.discover()?;
+let ping_id = client.cmd_id_by_name("ping").expect("ping not registered");
+let val: u32 = client.call::<(), u32>(ping_id, &())?;
+println!("ping -> 0x{:08X}", val);
+```
+
+### Real hardware: nRF52840-DK
+
+See [`examples/nrf52840-ping/README.md`](examples/nrf52840-ping/README.md) for the
+full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
+
+```bash
+# Flash firmware (downloads and exits; probe is released)
+cd examples/nrf52840-ping && cargo run --release
+
+# Ping over RTT (RPC traffic on channel 1)
+cd tools/telepath && cargo run -- shell --exec ping
+```
+
+## Scope
+
+In:
+- The `#[command]` macro and the server/client/wire crates
+- The unified `telepath` CLI (`shell` REPL + `mcp` server, auto-generated tool descriptors)
+- Transport backends (UART/RTT/USB-CDC/BLE/PTY)
+- On-wire schema discovery (CDP)
+
+Out:
+- Board support and specific firmware application logic beyond reference examples
+- RTOS/scheduler integration
+- Repository governance templates (the responsibility of a separate Rust repository governance skill, such as the one used by `dotfiles`)
+
+## Development
+
+### Git hooks setup
 
 The repository ships hooks under `.githooks/` that enforce quality gates at
 commit and push time. They are **not active by default** — Git reads hooks from
@@ -220,7 +273,7 @@ so `pre-push` runs the slower static analysis and test suite. The full CI gate
 (`just ci`) additionally runs the PTY-based `host-pty-server` smoke (`host-pty-smoke`) and the `telepath` CLI tests
 (`mcp-test`), and is intentionally left to CI — see [CI / Quality gates](#ci--quality-gates). `commit-msg` fires before `pre-commit` and validates only the message format via cocogitto — instant feedback with no build step.
 
-### Troubleshooting
+#### Troubleshooting
 
 **Hook does not run.** Check `git config core.hooksPath`. If it prints a path
 other than `.githooks` (e.g. `~/.config/git/hooks` set globally), the
@@ -234,7 +287,7 @@ package manager.
 **Bypass in an emergency.** Pass `--no-verify` to skip hooks:
 `git commit --no-verify`. The CI gate still applies on every PR.
 
-## Build
+### Build
 
 The full list of build and test commands — host workspace, firmware example,
 the workspace-excluded `tools/telepath` CLI, format/clippy gates, and the
@@ -242,66 +295,14 @@ the workspace-excluded `tools/telepath` CLI, format/clippy gates, and the
 [AGENTS.md § Build Commands](AGENTS.md#build-commands).
 For first-time setup, run through [Quickstart](#quickstart) above first.
 
-## Real hardware: nRF52840-DK
-
-See [`examples/nrf52840-ping/README.md`](examples/nrf52840-ping/README.md) for the
-full hardware walk-through (udev rules, APPROTECT unlock, RTT channel layout).
-
-```bash
-# Flash firmware (downloads and exits; probe is released)
-cd examples/nrf52840-ping && cargo run --release
-
-# Ping over RTT (RPC traffic on channel 1)
-cd tools/telepath && cargo run -- shell --exec ping
-```
-
-## Using telepath as a library
-
-### Server side (target)
-
-Annotate functions with `#[command]` and pass them to `TelepathServer::new` in a `poll()` loop:
-
-```rust
-use telepath_server::{command, TelepathServer};
-
-#[command]
-fn ping() -> u32 { 0xDEAD_BEEF }
-
-let mut server = TelepathServer::<MyTransport, 512>::new(transport, telepath_server::commands());
-loop { server.poll(); }
-```
-
-See [telepath-server § Usage](telepath-server/README.md#usage) for the full recipe including
-`#[resource]` injection and the postcard direct-dependency requirement.
-
-### Host side
-
-```toml
-[dependencies]
-telepath-client = { git = "https://github.com/tarotene/telepath", branch = "main", features = ["rtt"] }
-```
-
-```rust
-use telepath_client::TelepathClient;
-
-// transport: anything implementing `std::io::Read + std::io::Write`
-let mut client = TelepathClient::new(transport);
-
-// Discover commands registered on the target, then issue a typed call.
-client.discover()?;
-let ping_id = client.cmd_id_by_name("ping").expect("ping not registered");
-let val: u32 = client.call::<(), u32>(ping_id, &())?;
-println!("ping -> 0x{:08X}", val);
-```
-
-## CI / Quality gates
+### CI / Quality gates
 
 Run `just ci` locally before opening a PR — it covers format check, clippy, tests, the PTY smoke, and the CLI tests.
 Full gate details and individual commands live in [AGENTS.md § Build Commands](AGENTS.md#build-commands) and [AGENTS.md § Required CI gates](AGENTS.md#required-ci-gates).
 
 See [CHANGELOG.md](./CHANGELOG.md) for the project history.
 
-## Releases
+### Releases
 
 Telepath uses unified versioning: all workspace members share the same `vX.Y.Z`
 version and are released together as a single GitHub Release tagged `vX.Y.Z`.
@@ -313,7 +314,7 @@ version and are released together as a single GitHub Release tagged `vX.Y.Z`.
 Releases are driven by Conventional Commits on `main` — no manual tagging required.
 For the full developer flow see [AGENTS.md § How releases work](AGENTS.md#how-releases-work).
 
-## Supported Rust Version
+### Supported Rust Version
 
 Telepath declares a Minimum Supported Rust Version (MSRV) of **1.88**.
 This applies to all workspace members and the excluded crates
@@ -324,7 +325,7 @@ A bump to the MSRV is treated as a `MINOR` change under SemVer for pre-1.0
 releases. See [AGENTS.md § Toolchain](AGENTS.md#toolchain) for the
 full MSRV policy including manifest updates and commit convention.
 
-## Dependency updates
+### Dependency updates
 
 [Renovate](https://docs.renovatebot.com/) opens dependency-bump PRs every Monday morning (JST).
 All Renovate PRs require human review; auto-merge is disabled.
