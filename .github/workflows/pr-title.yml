@@ -1,0 +1,61 @@
+name: PR Title
+
+# Validates PR titles against the Conventional Commits contract that
+# tarotene/dotfiles' ADR-0031 establishes: this repository uses squash-merge
+# (enforced by the Workflow Ruleset), and on squash-merge GitHub uses the PR
+# title as the commit message on the default branch — enforcing the PR
+# title therefore enforces the entire commit history convention without
+# per-commit pre-push hooks.
+#
+# The grammar itself lives in exactly one place — scripts/pr-title-check in
+# tarotene/dotfiles — called here via a reusable workflow so this repository
+# never carries its own copy of the type list / regex. See
+# docs/claude/pr-title-contract.md in tarotene/dotfiles for the full design.
+#
+# GitHub names a reusable-workflow (workflow_call) job's check run
+# "<caller job's name> / <called job's name>" — the workflow-level `name:`
+# above plays no part in that concatenation (confirmed against the Actions
+# API response of tarotene/telepath#243, 2026-09-26: with no job `name:`,
+# the reported context was "check / PR title", not "PR Title / PR title").
+# An earlier "<caller workflow's name> / <called job's name>" theory was
+# wrong and caused #337's rollout to seed a required-status-check context
+# ("PR Title / PR title") that this job — before it had a `name:` of its
+# own — could never satisfy. Pinning `name: PR Title` on the `check` job
+# below makes the reported context always the fixed string
+# "PR Title / PR title" that quality.json requires, so no manual
+# confirmation against the Checks tab on the first PR is needed anymore.
+# `tarotene/dotfiles/.github/workflows/pr-title.yml`'s own last step
+# (`scripts/pr-title-context-check`) re-verifies this against the live
+# branch ruleset on every run, so a future mismatch fails loudly instead of
+# leaving the required check permanently "Expected".
+#
+# As a side effect: since this check only fires on pull_request events, it
+# will never be reported for direct pushes to main — those are
+# blocked by the Quality Ruleset's required_status_checks instead (context
+# never reported → push rejected). This effectively enforces a PR-only
+# workflow.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check:
+    name: PR Title
+    permissions:
+      # The called workflow's own job needs `contents: write` (to read this
+      # repository's merge settings — see its own comment) and
+      # `actions: read` (to read its own run's jobs, for the required-check
+      # context self-check). A workflow_call job's granted permissions can
+      # only be maintained or narrowed on the way down the call chain, never
+      # widened past what the caller's token has — so both scopes must be
+      # declared explicitly here rather than left to this repository's
+      # default Actions workflow permissions. A repository whose default is
+      # read-only makes the call fail outright with `startup_failure`
+      # (confirmed against tarotene/bleep#33, 2026-09-26); a repository
+      # whose default happens to be read/write only worked by accident.
+      contents: write
+      actions: read
+    uses: tarotene/dotfiles/.github/workflows/pr-title.yml@main
+    with:
+      title: ${{ github.event.pull_request.title }}
