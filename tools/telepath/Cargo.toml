@@ -44,7 +44,7 @@ thiserror       = "2"
 rustyline = { version = "17", optional = true }
 
 # Optional: mcp
-rmcp               = { version = "1", features = ["server", "transport-io", "macros"], optional = true }
+rmcp               = { version = "2", features = ["server", "transport-io", "macros"], optional = true }
 tokio              = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"], optional = true }
 tracing            = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
@@ -55,7 +55,7 @@ probe-rs = { version = "0.31", optional = true }
 [dev-dependencies]
 telepath-server = { path = "../../telepath-server", version = "0.2" }
 tokio           = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "time", "io-util"] }
-rmcp            = { version = "1", features = ["client", "transport-child-process"] }
+rmcp            = { version = "2", features = ["client", "transport-child-process"] }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
