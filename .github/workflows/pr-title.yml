@@ -56,6 +56,6 @@ jobs:
       # whose default happens to be read/write only worked by accident.
       contents: write
       actions: read
-    uses: tarotene/dotfiles/.github/workflows/pr-title.yml@main
+    uses: tarotene/dotfiles/.github/workflows/pr-title.yml@ff8b1ed1bbedb7f2f1632067b953c0b65a044c08 # main
     with:
       title: ${{ github.event.pull_request.title }}
