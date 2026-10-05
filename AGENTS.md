@@ -291,15 +291,18 @@ When multiple rulesets target the same branch, GitHub enforces the **most restri
 combination.  The three-way split ensures that `Security` and `Quality` remain absolute
 regardless of `Workflow` configuration.
 
-The following jobs are registered as **required status checks** in the `Quality` Ruleset:
+The `Quality` Ruleset requires two status checks (ADR-591, tarotene/dotfiles):
+`CI passed` (the aggregate job in `ci.yml`, which `needs:` every other PR-gate
+job) and `PR title`. The individual jobs below are no longer required
+individually; they gate merging through `CI passed`.
 
-| Job name | Category | Required |
+| Job name | Category | Gated via `CI passed` |
 |----------|----------|----------|
 | `Format check` | Style gate | YES |
 | `Host (clippy + test + smoke)` | Correctness + Smoke | YES |
 | `MSRV (1.88)` | Policy gate | YES |
 | `Firmware (cross-compile nRF52840-DK)` | Cross-compile correctness | YES |
-| `Tools (telepath CLI clippy + tests)` | Correctness (tools/telepath) | YES (added PR #110) |
+| `Tools (telepath CLI clippy + tests)` | Correctness (tools/telepath) | YES |
 | `Release binaries (4 targets)` | Release artifact pipeline | NO (release-only trigger; cannot gate PRs) |
 
 **Decision criteria for promoting a job to Required:**
@@ -324,17 +327,20 @@ When adding new tooling to CI workflows, choose the delivery mechanism in this o
 
 ### CI workflow file layout
 
-CI uses **five PR-gate workflows**, **three release/maintenance workflows**, and **one composite action**:
+CI uses **one PR-gate workflow** (`ci.yml`) plus `pr-title.yml`, **three release/maintenance workflows**, and **one composite action**:
 
 #### PR-gate workflows (required status checks)
 
-| File | Required check name | Trigger scope |
-|------|---------------------|---------------|
-| `.github/workflows/fmt.yml` | `Format check` | Any `.rs`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `.github/workflows/host.yml` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `.github/workflows/tools.yml` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `.github/workflows/msrv.yml` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `.github/workflows/firmware.yml` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
+`.github/workflows/ci.yml` holds every PR-gate job; `ci-passed` (`CI passed`) aggregates them via `needs:`
+and MUST be updated whenever a job is added or removed. `.github/workflows/pr-title.yml` reports `PR title`.
+
+| Job id | Job name | Trigger scope |
+|--------|----------|---------------|
+| `fmt` | `Format check` | Any `.rs`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `host` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `tools` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `msrv` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
+| `firmware` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
 
 #### Release and maintenance workflows (not PR-gate checks)
 
