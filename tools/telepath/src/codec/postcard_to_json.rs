@@ -122,7 +122,7 @@ fn decode_value<'a>(
                     Ok((val, rest))
                 }
                 b => Err(ConvertError::Postcard(format!(
-                    "invalid option tag {b:#02x} at {path}"
+                    "invalid option tag {b:#x} at {path}"
                 ))),
             }
         }
