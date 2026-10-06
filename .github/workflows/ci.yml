@@ -1,0 +1,374 @@
+name: CI
+
+# ADR-591 (tarotene/dotfiles, docs/adr/591-ci-workflow-naming.md): all PR-gate
+# jobs live in this single file, and only the `ci-passed` aggregate job (which
+# `needs:` every other job) is a required status check. Individual jobs are
+# not required, so a rename, matrix expansion, or path-skip can no longer
+# cause a required-context mismatch.
+#
+# When a job other than `ci-passed` is added or removed, `ci-passed.needs`
+# MUST be kept in sync (checked mechanically by tarotene/dotfiles'
+# `workflow-naming-check`).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  fmt:
+    name: Format check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      # Skip if no Rust source or fmt-related config changed.
+      # The job always runs so the required status check is always reported.
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          # New branch or unavailable base: safe-by-default → run
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          # Use merge-base so that commits merged into main after this PR branched off
+          # do not contribute to the diff (prevents false positives on docs-only PRs).
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
+          # Empty diff (no changes / re-push): safe-by-default → run
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # rustfmt is independent of Cargo.toml; only .rs source and config files matter.
+          PATTERNS='^(.*\.rs$|rust-toolchain\.toml$|Justfile$|\.github/(workflows/ci\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No fmt-relevant changes; skipping."
+          fi
+
+      - name: Install Rust stable toolchain
+        if: steps.guard.outputs.run == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install just
+        if: steps.guard.outputs.run == 'true'
+        uses: taiki-e/install-action@682e7d9e49c5e653d371fc6adbda67653461378a # v2
+        with:
+          tool: just
+
+      - name: Check formatting
+        if: steps.guard.outputs.run == 'true'
+        run: just fmt-check
+
+  host:
+    name: Host (clippy + test + smoke)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Workspace crates + host-pty-server + root manifests + workflow config.
+          # Cargo.{toml,lock} is anchored to repo root; crate-level manifests are
+          # captured by their directory prefix.
+          PATTERNS='^(telepath-(wire|server|client|macros)/|examples/host-pty-server/|Cargo\.(toml|lock)$|Justfile$|rust-toolchain\.toml$|\.github/(workflows/ci\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No host-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          components: clippy
+          cache-key: host-stable
+          install-libudev: 'true'
+
+      - name: Assert no Cargo manifest warnings
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          out=$(cargo metadata --locked --format-version=1 2>&1 >/dev/null || true)
+          if echo "$out" | grep -qE "^warning:"; then
+            echo "$out" | grep -E "^warning:"
+            echo "::error::Cargo manifest emitted warnings (will become hard errors in a future Cargo release)."
+            exit 1
+          fi
+
+      - name: Clippy (workspace)
+        if: steps.guard.outputs.run == 'true'
+        run: just clippy-workspace
+
+      - name: Run tests
+        if: steps.guard.outputs.run == 'true'
+        run: just test
+
+      - name: Smoke test host-pty-server
+        if: steps.guard.outputs.run == 'true'
+        run: just host-pty-smoke
+
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: "1.88.0"
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # MSRV covers all manifest groups; root Cargo.{toml,lock} anchored to repo root.
+          PATTERNS='^(telepath-(wire|server|client|macros)/|examples/(host-pty-server|nrf52840-ping)/|tools/telepath/|Cargo\.(toml|lock)$|Justfile$|rust-toolchain\.toml$|\.github/(workflows/ci\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No MSRV-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment (MSRV 1.88)
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: '1.88.0'
+          targets: thumbv7em-none-eabi
+          cache-key: msrv-1-88
+          install-libudev: 'true'
+
+      - name: Verify MSRV builds (workspace + cli + firmware)
+        if: steps.guard.outputs.run == 'true'
+        run: just check-all
+
+  firmware:
+    name: Firmware (cross-compile nRF52840-DK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Firmware deps: wire + server + macros (no client — client is host-side only).
+          # Root Cargo.{toml,lock} intentionally excluded: examples/nrf52840-ping is a
+          # separate workspace (excluded from root) and is unaffected by root manifest changes.
+          # Its own Cargo.{toml,lock} are captured by the examples/nrf52840-ping/ prefix.
+          PATTERNS='^(telepath-(wire|server|macros)/|examples/nrf52840-ping/|rust-toolchain\.toml$|\.github/(workflows/ci\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No firmware-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment (embedded target)
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          targets: thumbv7em-none-eabi
+          cache-key: firmware-nrf52840
+          cache-workspaces: examples/nrf52840-ping
+
+      - name: Build firmware (release)
+        if: steps.guard.outputs.run == 'true'
+        working-directory: examples/nrf52840-ping
+        run: cargo build --release
+
+  tools:
+    name: Tools (telepath CLI clippy + tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "$BASE" --depth=1 2>/dev/null || true
+          MERGE_BASE="$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$MERGE_BASE" ]]; then
+            echo "::warning::merge-base unavailable; defaulting to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MERGE_BASE" "$HEAD" 2>/dev/null || echo '')"
+          if [[ -z "$CHANGED" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # tools/telepath + upstream deps (wire, client, macros) + root manifests.
+          # Root Cargo.lock included: workspace dep resolution changes can affect CLI builds.
+          PATTERNS='^(telepath-(wire|client|macros)/|tools/telepath/|Cargo\.(toml|lock)$|Justfile$|rust-toolchain\.toml$|\.github/(workflows/ci\.yml|actions/rust-setup/))'
+          if echo "$CHANGED" | grep -qE "$PATTERNS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tools-relevant changes; skipping."
+          fi
+
+      - name: Setup Rust environment
+        if: steps.guard.outputs.run == 'true'
+        uses: ./.github/actions/rust-setup
+        with:
+          components: clippy
+          cache-key: tools-telepath
+          cache-workspaces: tools/telepath
+          install-libudev: 'true'
+
+      - name: Clippy (tools/telepath — all feature combos)
+        if: steps.guard.outputs.run == 'true'
+        run: just clippy-tools
+
+      - name: Test telepath tool (default + mcp,serial)
+        if: steps.guard.outputs.run == 'true'
+        run: just mcp-test
+
+  # Aggregate required check (ADR-591). Keep `needs:` in sync with the jobs above.
+  ci-passed:
+    name: CI passed
+    runs-on: ubuntu-latest
+    needs: [fmt, host, msrv, firmware, tools]
+    if: always()
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
