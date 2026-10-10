@@ -52,6 +52,6 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: tarotene/dotfiles/.github/actions/pr-title@main
+      - uses: tarotene/dotfiles/.github/actions/pr-title@90f5c290ff1fab8a5932a09a4fa2f1fb8a04ef2d # main
         with:
           title: ${{ github.event.pull_request.title }}
