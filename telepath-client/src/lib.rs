@@ -240,7 +240,7 @@ pub struct HostMetricsSnapshot {
 // TelepathClient
 // ---------------------------------------------------------------------------
 
-/// RPC client that communicates with a [`telepath_server::TelepathServer`].
+/// RPC client that communicates with a `telepath_server::TelepathServer`.
 ///
 /// `T` must implement `std::io::Read + std::io::Write` (e.g. a serialport or
 /// a probe-rs RTT adapter).

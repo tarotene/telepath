@@ -71,7 +71,7 @@ fn seen_cmd_ids() -> &'static Mutex<HashMap<u16, String>> {
 ///    `id` is derived deterministically from the function's signature via
 ///    `derive_cmd_id` at build time.
 /// 5. **`#[linkme] static __TELEPATH_REG_<NAME>`** — registers the metadata in
-///    [`telepath_server::TELEPATH_COMMANDS`] at link time.
+///    `telepath_server::TELEPATH_COMMANDS` at link time.
 ///
 /// The original function body is preserved unchanged so it remains directly callable.
 ///
