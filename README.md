@@ -92,32 +92,15 @@ from an AI agent without hand-written tool descriptors.
 
 #### MCP tool auto-generation
 
-The `telepath mcp` subcommand (`tools/telepath`) auto-generates MCP tool descriptors from live
-`#[command]` metadata — zero hand-written tool definitions required:
+The `telepath mcp` subcommand auto-generates MCP tool descriptors from live
+`#[command]` metadata — zero hand-written tool definitions required. It
+discovers every command and its postcard schema at runtime, maps each schema
+to a JSON Schema for the tool's input, and bridges MCP tool calls to RPC calls
+by converting JSON arguments to postcard and the response back to JSON.
 
-1. `client.discover()` fetches all commands; each `SchemaEntry` holds
-   `args_schema` / `ret_schema` as postcard-encoded `OwnedNamedType` bytes.
-2. `SchemaEntry::decoded_args_schema()` / `decoded_ret_schema()` decode
-   those bytes into `postcard_schema::schema::owned::OwnedNamedType`.
-3. `schema_to_json::named_type_to_json_schema()` maps `OwnedNamedType`
-   to a JSON Schema value suitable as the MCP `inputSchema`.
-4. `bridge::invoke()` converts MCP tool call arguments (JSON) to postcard,
-   calls `client.call_raw()`, and converts the response back to JSON.
-
-```text
-// discover → MCP tool (actual API)
-let _n = client.discover()?;
-for entry in client.schema_cache().iter() {
-    let args_schema = entry.decoded_args_schema()?;
-    let json_schema = named_type_to_json_schema(&args_schema);
-    // rmcp::Tool auto-registered with json_schema as inputSchema
-}
-// MCP tool call → bridge::invoke → call_raw → JSON response
-```
-
-See [`docs/mcp-integration.md`](docs/mcp-integration.md) and
-[`tools/telepath/README.md`](tools/telepath/README.md)
-for setup instructions, including using it from Claude Code.
+See the [MCP integration guide](docs/mcp-integration.md) for the pipeline, the
+schema mapping, and running it, and the
+[`telepath` CLI README](tools/telepath/README.md) for the subcommand's usage.
 
 ## Install
 

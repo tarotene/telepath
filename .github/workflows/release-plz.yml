@@ -1,3 +1,20 @@
+# Release automation driven by release-plz (docs/releasing.md has the runbook).
+#
+# Triggers: push to `main`, and `workflow_dispatch` to retrigger.
+#
+# Jobs:
+#   - release-plz-pr: opens/updates the `chore: release vX.Y.Z` PR (workspace
+#     version bump, CHANGELOG entry, `release` label) and then bumps the
+#     workspace-excluded crates onto the same PR branch.
+#   - release-plz-release: after the release PR merges, publishes to crates.io
+#     (Trusted Publishing / OIDC) and creates a draft GitHub Release.
+#   - release-binaries: calls release-binaries.yml to attach prebuilt binaries
+#     and publish the draft.
+#
+# Only the `telepath-wire` release is created as a GitHub Release (unified
+# versioning); no per-crate Releases. Humans never tag or release by hand.
+# GitHub-object-creating steps use a GitHub App token, not GITHUB_TOKEN, so
+# that required checks run on release PRs (see docs/releasing.md).
 name: Release-plz
 
 on:
