@@ -311,7 +311,9 @@ full MSRV policy including manifest updates and commit convention.
 ### Dependency updates
 
 [Renovate](https://docs.renovatebot.com/) opens dependency-bump PRs every Monday morning (JST).
-All Renovate PRs require human review; auto-merge is disabled.
+Per the account-wide policy preset that `renovate.json` extends, non-major updates
+(except 0.x minor) auto-merge once the required checks pass; major and 0.x minor
+updates stay human-reviewed PRs.
 Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, …) carry the
 `needs-smoke-test` label and require an on-device `just firmware-ping` run on
 nRF52840-DK before merging.
