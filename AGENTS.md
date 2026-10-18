@@ -13,37 +13,30 @@
 | `telepath-client` | Host-side RPC client library; `rtt` and `serial` Cargo features select the transport | native (`std`) |
 | `examples/host-pty-server` | Host-side server deployment over a PTY pair (hardware-free regression) | native (`std`) |
 | `examples/nrf52840-ping` | Reference server deployment on nRF52840-DK | `thumbv7em-none-eabi` |
-| `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); `default = ["shell", "mcp", "rtt"]`, `serial` opt-in | native (`std`) |
+| `tools/telepath` | Unified CLI: `telepath shell` (interactive REPL) and `telepath mcp` (MCP server); feature flags are listed in the crate README | native (`std`) |
 
 ## Documentation Source of Truth
 
 This repository uses a layered documentation model. Each topic has a single
 canonical home (Source of Truth, SoT); all other documents link to it instead
-of duplicating content. Audit cycles (latest: 2026-05, #127) verify compliance.
+of duplicating content. When you find the same content in two places, keep the
+SoT copy and replace the other with a link.
 
 **Layering rules:**
-- `AGENTS.md` = SoT for build commands, workspace structure, CI gates,
+- `AGENTS.md` = SoT for build commands, workspace structure, CI gate rules,
   MSRV policy, git hooks, and workflow rules
 - Crate-level `README.md` = SoT for that crate's API surface, usage examples,
-  and Limitations
+  feature flags, and Limitations
 - Root `README.md` = user-facing narrative; quickstart lives here, other
   topics link to AGENTS or crate READMEs
+- `docs/` = SoT for deep operating documents (release runbook, MCP
+  integration details)
+- The workflow and composite-action files carry their own purpose and trigger
+  description in their header comments; AGENTS.md states only the rules, never
+  an inventory of jobs or workflows
 
-**Topic → SoT mapping:**
-
-| Topic | SoT | Other locations |
-|-------|-----|-----------------|
-| Build commands | AGENTS.md § Build Commands | README.md quickstart |
-| Workspace structure | AGENTS.md § Workspace Overview | README.md (summary + link) |
-| `#[command]` signature contract | `telepath-macros/README.md` § Signature contract | AGENTS.md (summary), `telepath-server/README.md` (link) |
-| `#[resource]` injection pattern | `examples/nrf52840-ping/README.md` § Resource injection | AGENTS.md (prose only, no code) |
-| Server-side usage | `telepath-server/README.md` § Usage | README.md (teaser + link) |
-| Quickstart / host-pty-smoke | README.md § Quickstart | `tools/telepath/README.md` (link), `examples/host-pty-server/README.md` (link) |
-| Git hooks | AGENTS.md § Git Hooks | README.md (single command + link) |
-| MSRV policy | AGENTS.md § MSRV policy | README.md (defers to AGENTS) |
-| CI gates | AGENTS.md § Required CI gates | — |
-| Release flow | AGENTS.md § How releases work | README.md (summary + link), `docs/releasing.md` (recovery/override) |
-| Release recovery / version override | `docs/releasing.md` | AGENTS.md (reference only) |
+The sections below that depend on one of these homes link to it at the point
+of use.
 
 **Limitations sections**: each crate README's `## Limitations` MUST reference
 an open issue and MUST be removed in the same PR that implements the feature
@@ -115,7 +108,7 @@ just ci
 ### `tools/telepath`
 - MUST be built separately; it is excluded from the workspace (`exclude = [...]` in root `Cargo.toml`).
 - MUST NOT be built with `cargo build -p telepath` from the workspace root (not a workspace member).
-- Pure conversion modules (`codec/schema_to_json`, `codec/json_to_postcard`, `codec/postcard_to_json`) MUST remain side-effect free and sync; async lives only in `mcp/server.rs`.
+- The `codec` module (schema and JSON/postcard conversions) MUST remain side-effect free and sync; async lives only in the `mcp` module.
 - All MCP subcommand logging MUST go to `stderr`; `stdout` is reserved for the MCP JSON-RPC stream.
 - Server MUST be flashed (and probe released) before invoking the shell subcommand with RTT transport.
 
@@ -180,72 +173,33 @@ global statics directly.  New code SHOULD prefer `#[resource]`.
   Enforced locally by the `commit-msg` hook via cocogitto (`cog verify`).
 - Feature branches MUST be created before any code change.
 - PRs MUST reference the corresponding GitHub Issue.
-- `examples/nrf52840-ping/` changes SHOULD be a separate commit from workspace changes.
-- PRs that touch any of the following SHOULD be smoke-tested with `just firmware-ping`
+- Changes to the firmware example SHOULD be a separate commit from workspace changes.
+- PRs that touch any crate in § Workspace Overview except the hardware-free
+  `host-pty-server` example SHOULD be smoke-tested with `just firmware-ping`
   against a connected nRF52840-DK before requesting review, and the result recorded in
-  the PR description's Test plan section:
-  - `telepath-wire/`, `telepath-macros/`, `telepath-server/`, `telepath-client/`
-  - `tools/telepath/`
-  - `examples/nrf52840-ping/`
-
-  This catches FW/host wire-format skew that `just ci` alone cannot detect without hardware.
+  the PR description's Test plan section. This catches FW/host wire-format skew that
+  `just ci` alone cannot detect without hardware.
 
 ### How releases work
 
 **Humans MUST NOT create git tags or GitHub Releases manually.**
-Everything is driven by release-plz via GitHub Actions (`.github/workflows/release-plz.yml`).
+Everything is driven by release-plz via GitHub Actions; the jobs and what each
+one does are described in the header comment of the release-plz workflow.
 
 #### Normal release cycle
 
 1. Merge any PR whose commits include `feat:`, `fix:`, `perf:`, or `refactor:` prefixes.
-2. The `release-plz-pr` job opens a `chore: release vX.Y.Z` PR automatically with:
-   - Workspace `Cargo.toml` version bump
-   - `CHANGELOG.md` entry
-   - `release` label
-3. The `release-plz-pr` job automatically bumps `tools/telepath` and
-   `examples/nrf52840-ping` to the new version and pushes a commit
-   (`chore(release): bump excluded crates to X.Y.Z`) onto the release PR branch.
-   **No manual action is required.** (See step 3 in
-   [`docs/releasing.md § Excluded crates`](docs/releasing.md#excluded-crates-bump-excluded-requirement)
-   for recovery if the automatic step fails.)
-4. Review and merge the release PR.
-5. The `release-plz-release` job creates a **draft** GitHub Release tagged `vX.Y.Z`,
-   covering all five workspace members (unified versioning).
-6. The `release-binaries` job (triggered by `release-plz-release`) builds prebuilt
-   binaries for 4 targets, attaches them to the draft release, then publishes it via
-   `gh release edit --draft=false`.  The immutable lock is applied only after all
-   assets are attached.  If this job fails, the release stays as a draft and can be
-   retried: `gh workflow run release-binaries.yml -f tag=vX.Y.Z`.
+2. release-plz opens a `chore: release vX.Y.Z` PR automatically (version bump,
+   changelog entry, `release` label) and bumps the workspace-excluded crates onto
+   the same PR branch. **No manual action is required.**
+3. Review and merge the release PR.
+4. release-plz creates a **draft** GitHub Release for the unified workspace
+   version; the binaries workflow attaches the prebuilt binaries and then
+   publishes it. The release stays a draft if that step fails.
 
-#### What release-plz does NOT do
-
-- Create per-crate GitHub Releases (only `telepath-wire` is the canonical release owner)
-- Run on PRs — only on pushes to `main`
-
-> **Authentication**: Publishing uses Trusted Publishing (OIDC) — no `CARGO_REGISTRY_TOKEN`
-> secret is required. `id-token: write` is set on the `release-plz-release` job so GitHub
-> Actions can exchange a short-lived OIDC token with crates.io. When adding a new publishable
-> crate, you must perform a manual bootstrap: `cargo publish` the first version with a
-> short-lived API token (scopes: `publish-new`, ~7-day expiry), then add a Trusted Publishing
-> entry for the new crate at `https://crates.io/crates/<name>/settings`, then revoke the token.
-> From the second release onward, the release-plz workflow handles publishing via OIDC.
-> See [`docs/releasing.md § Trusted Publishing`](docs/releasing.md#trusted-publishing).
-
-> **GitHub App token**: The `release-plz-pr` and `release-plz-release` jobs use a
-> GitHub App installation token (via `actions/create-github-app-token`) rather than
-> `GITHUB_TOKEN` for all GitHub-object-creating steps. This allows release PRs and
-> GitHub Releases to trigger downstream workflow runs (required status checks) —
-> `GITHUB_TOKEN`-originated events are silently suppressed by GitHub's anti-recursion
-> guard. The `release-binaries` job is called directly via `workflow_call` from
-> `release-plz-release`, so it does not rely on a `release: published` event trigger
-> and is therefore unaffected by the anti-recursion guard. The token is generated from
-> secrets `RELEASE_PLZ_APP_ID` and `RELEASE_PLZ_APP_PRIVATE_KEY`.
-> See [`docs/releasing.md § Setup: GitHub App token`](docs/releasing.md#setup-github-app-token)
-> for App creation and secret configuration.
-
-#### Debugging / recovery
-
-See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, and recovery procedures.
+Recovery, retrigger, version override, GitHub App token setup, and Trusted
+Publishing (including the one-time manual bootstrap MUST for a new publishable
+crate) are in [`docs/releasing.md`](docs/releasing.md).
 
 #### Release scheduling model (hybrid)
 
@@ -258,9 +212,9 @@ See [`docs/releasing.md`](docs/releasing.md) for retrigger, version override, an
 **Wire-protocol breaking changes** (e.g. rzCOBS framing) require firmware and host to update
 simultaneously; never release them in isolation.
 
-A `release-nudge` workflow (`.github/workflows/release-nudge.yml`) posts a weekly comment on
-any Release PR that has been open for more than 7 days. If no Release PR exists despite
-qualifying commits on `main`, the release-plz workflow failed — see `docs/releasing.md § Retriggering`.
+A scheduled workflow posts a weekly comment on any Release PR that has been open for more
+than 7 days. If no Release PR exists despite qualifying commits on `main`, the release-plz
+workflow failed — see the retriggering section of the release runbook.
 
 ## Toolchain
 
@@ -280,39 +234,28 @@ commit convention `feat(toolchain)!: bump MSRV to 1.XX`.
 ### Required CI gates
 
 The repository uses **three layered Rulesets** targeting `~DEFAULT_BRANCH` (`main`):
-
-| Ruleset | id | Rules | bypass actors |
-|---------|-----|-------|---------------|
-| `Security` | `17066999` | `deletion`, `non_fast_forward` | none (absolute) |
-| `Quality` | `17067250` | `required_status_checks`, `required_signatures`, `required_linear_history` | none (absolute) |
-| `Workflow` | `13908758` | `pull_request` (squash-only, thread resolution; no review required), `copilot_code_review` | none |
-
+`Security` (deletion and force-push protection), `Quality` (required status checks,
+signed commits, linear history), and `Workflow` (squash-only PRs with thread
+resolution, Copilot code review). `Security` and `Quality` have no bypass actors.
 When multiple rulesets target the same branch, GitHub enforces the **most restrictive**
-combination.  The three-way split ensures that `Security` and `Quality` remain absolute
+combination; the split ensures that `Security` and `Quality` remain absolute
 regardless of `Workflow` configuration.
 
-The `Quality` Ruleset requires two status checks (ADR-591, tarotene/dotfiles):
-`CI passed` (the aggregate job in `ci.yml`, which `needs:` every other PR-gate
-job) and `PR title`. The individual jobs below are no longer required
-individually; they gate merging through `CI passed`.
+The rulesets are declared in `.github/rulesets/*.json`; that declaration, not this
+document, is the list of rules and required status checks. Ruleset updates MUST be
+applied through the API (look up the live ids with `gh api repos/tarotene/telepath/rulesets`)
+so changes are auditable.
 
-| Job name | Category | Gated via `CI passed` |
-|----------|----------|----------|
-| `Format check` | Style gate | YES |
-| `Host (clippy + test + smoke)` | Correctness + Smoke | YES |
-| `MSRV (1.88)` | Policy gate | YES |
-| `Firmware (cross-compile nRF52840-DK)` | Cross-compile correctness | YES |
-| `Tools (telepath CLI clippy + tests)` | Correctness (tools/telepath) | YES |
-| `Release binaries (4 targets)` | Release artifact pipeline | NO (release-only trigger; cannot gate PRs) |
+Only two status checks are required (ADR-591, tarotene/dotfiles): `CI passed` (the
+aggregate job in `ci.yml`, which `needs:` every other PR-gate job) and `PR title`.
+The individual jobs are not required individually; they gate merging through
+`CI passed`.
 
 **Decision criteria for promoting a job to Required:**
 - Correctness / Style / Policy gates → SHOULD be required
 - Hardware-dependent jobs (e.g. `firmware-ping`) → NOT required without a self-hosted runner
 - Experimental or known-flaky jobs → NOT required until stable across ≥5 consecutive PRs
-- Ruleset updates MUST be applied via API so changes are auditable:
-  - `Security` (`id=17066999`): `gh api -X PUT repos/.../rulesets/17066999`
-  - `Quality`  (`id=17067250`): `gh api -X PUT repos/.../rulesets/17067250`
-  - `Workflow` (`id=13908758`): `gh api -X PUT repos/.../rulesets/13908758`
+- Release-only jobs cannot gate PRs and are NOT required
 
 ### CI tool installation policy
 
@@ -327,32 +270,15 @@ When adding new tooling to CI workflows, choose the delivery mechanism in this o
 
 ### CI workflow file layout
 
-CI uses **one PR-gate workflow** (`ci.yml`) plus `pr-title.yml`, **three release/maintenance workflows**, and **one composite action**:
+All PR-gate jobs live in the single CI workflow; its header comment explains the
+aggregate-job model. `ci-passed` MUST be updated (`needs:`) whenever a job is added
+or removed. The PR-title check is a separate workflow. The release and maintenance
+workflows are not PR gates; each carries its purpose and triggers in its own header
+comment.
 
-#### PR-gate workflows (required status checks)
-
-`.github/workflows/ci.yml` holds every PR-gate job; `ci-passed` (`CI passed`) aggregates them via `needs:`
-and MUST be updated whenever a job is added or removed. `.github/workflows/pr-title.yml` reports `PR title`.
-
-| Job id | Job name | Trigger scope |
-|--------|----------|---------------|
-| `fmt` | `Format check` | Any `.rs`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `host` | `Host (clippy + test + smoke)` | `telepath-{wire,server,client,macros}/`, `examples/host-pty-server/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `tools` | `Tools (telepath CLI clippy + tests)` | `telepath-{wire,client,macros}/`, `tools/telepath/`, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `msrv` | `MSRV (1.88)` | All crate dirs, root `Cargo.{toml,lock}`, `Justfile`, `rust-toolchain.toml`, workflow/action self |
-| `firmware` | `Firmware (cross-compile nRF52840-DK)` | `telepath-{wire,server,macros}/`, `examples/nrf52840-ping/`, `rust-toolchain.toml`, workflow/action self (root `Cargo.*` excluded — separate workspace) |
-
-#### Release and maintenance workflows (not PR-gate checks)
-
-| File | Purpose | Trigger |
-|------|---------|---------|
-| `.github/workflows/release-binaries.yml` | Build pre-built binaries for 4 targets, attach to draft release, publish | `workflow_call` (from `release-plz.yml`); `workflow_dispatch` with optional `tag` input for backfill / dry-run |
-| `.github/workflows/release-plz.yml` | Open release PRs and publish to crates.io | Push to `main`; `workflow_dispatch` to retrigger |
-| `.github/workflows/release-nudge.yml` | Post weekly reminder on stale release PRs | Weekly schedule |
-
-Common setup (toolchain, libudev, just, rust-cache) lives in
-`.github/actions/rust-setup/action.yml` (composite action). Modify it to apply
-changes uniformly across all workflows.
+Common setup (toolchain, libudev, just, rust-cache) lives in the `rust-setup`
+composite action under `.github/actions/`. Modify it to apply changes uniformly
+across all workflows.
 
 ### Path-filtering and job skip strategy
 
@@ -374,33 +300,35 @@ over silently skipping valid checks).
 
 ## Lockfile Policy
 
-- `Cargo.lock` is committed for all manifest groups: workspace root, `tools/telepath`, and `examples/nrf52840-ping`.
-- Rationale: (1) current Cargo FAQ defaults to committing; (2) `tools/telepath` and `nrf52840-ping` are
-  binary crates where reproducible builds matter; (3) firmware requires deterministic binaries.
-- Downstream consumers of the library crates (`telepath-wire`, `telepath-client`, etc.) do **not** use
-  this lockfile for dependency resolution — that is standard Cargo behaviour.
-- `tools/telepath/Cargo.toml` and `examples/nrf52840-ping/Cargo.toml` carry an empty `[workspace]` table
-  to make them self-contained workspaces, stopping Cargo's upward traversal at their own manifest.
+- `Cargo.lock` is committed for every manifest group: the workspace root and each
+  workspace-excluded crate.
+- Rationale: (1) current Cargo FAQ defaults to committing; (2) the CLI and the firmware
+  example are binary crates where reproducible builds matter; (3) firmware requires
+  deterministic binaries.
+- Downstream consumers of the library crates do **not** use this lockfile for dependency
+  resolution — that is standard Cargo behaviour.
+- Workspace-excluded crates carry an empty `[workspace]` table to make them
+  self-contained workspaces, stopping Cargo's upward traversal at their own manifest.
 
 ## Dependency Management
 
-- Renovate (`renovate.json`) opens dependency-bump PRs every Monday 06:00 JST. Monthly lockfile maintenance PR on the first of the month.
-- All Renovate PRs require human review; automerge is disabled.
-- `rangeStrategy: "auto"` (= `update-lockfile`) keeps `Cargo.toml` semver ranges stable; only `Cargo.lock` is bumped.
-- `probe-rs` is intentionally pinned to `0.31.x` in `telepath-client/Cargo.toml` and `tools/telepath/Cargo.toml`.
-  Patch updates are PR'd as a synchronized group. Major/minor bumps require Dependency Dashboard approval.
-  To lift the pin, remove the `dependencyDashboardApproval: true` packageRule for probe-rs in
-  `renovate.json` and update both `telepath-client/Cargo.toml` and `tools/telepath/Cargo.toml` to allow
-  the desired version range.
+- Renovate's `renovate.json` is the source of truth for update schedule, grouping, labels,
+  and per-package rules; each `packageRule` carries a `description` explaining why it exists.
+  Do not restate its values here.
+- Whether a Renovate PR may be merged without human review is decided by that
+  configuration (and the preset it extends), not by this document.
+- `rangeStrategy: "auto"` (= `update-lockfile`) keeps manifest semver ranges stable; only the lockfile is bumped.
+- `probe-rs` is intentionally pinned to the `0.31.x` line. To lift the pin, remove its
+  `dependencyDashboardApproval` packageRule in `renovate.json` and widen the version
+  requirement in every manifest that depends on it.
 - Embedded HAL updates (`embassy-*`, `nrf-pac`, `cortex-m-rt`, etc.) carry the `needs-smoke-test` label.
   Run `just firmware-ping` on a connected nRF52840-DK and record the result in the PR before merging.
-- `dtolnay/rust-toolchain@stable` is excluded from Renovate (channel reference, not a version tag).
-- `constraints.rust` (`1.88.0`) is the MSRV pin; a `renovate-config`/`rust` packageRule sets `enabled: false`
-  so Renovate cannot self-bump it via the docker datasource (the misleading "rust Docker tag" update seen
-  in the Dependency Dashboard). Without this rule the value drifts silently — see git history #151/#169/#190
-  (three renovate[bot] bumps), reverted by #217. MSRV changes are deliberate `feat(toolchain)!` edits only
-  (see § Toolchain for the full update checklist).
-- Dependency Dashboard Issue lists all suppressed updates for visibility.
+- The `rust-toolchain` action's `@stable` ref is excluded from Renovate (channel reference, not a version tag).
+- `constraints.rust` is the MSRV pin. Renovate MUST NOT bump it: a packageRule disables
+  that update because Renovate would otherwise resolve it through an unrelated Docker
+  datasource and the value would drift silently. MSRV changes are deliberate
+  `feat(toolchain)!` edits only (see § Toolchain for the full update checklist).
+- The Dependency Dashboard Issue lists all suppressed updates for visibility.
 
 ## Git Hooks
 

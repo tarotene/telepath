@@ -3,8 +3,10 @@
 Telepath releases are automated via release-plz. This document covers
 non-standard scenarios: retriggering, version overrides, and recovery.
 
-For the normal release cycle, see
-[AGENTS.md § How releases work](../AGENTS.md#how-releases-work).
+For the rules of the normal release cycle, see
+[AGENTS.md § How releases work](../AGENTS.md#how-releases-work). The jobs of
+`.github/workflows/release-plz.yml` and what each one does are described in
+that file's header comment.
 
 ## Draft → publish pipeline
 
@@ -59,8 +61,10 @@ The `release-plz.yml` workflow uses a **GitHub App installation token** instead 
 `GITHUB_TOKEN` for all steps that create GitHub objects (release PRs and GitHub Releases).
 This is required because GitHub's anti-recursion guard suppresses `pull_request` and
 `release: published` events that originate from `GITHUB_TOKEN`-authenticated API calls,
-which would prevent required CI status checks from running on release PRs and prevent
-`release-binaries.yml` from firing.
+which would prevent required CI status checks from running on release PRs. (The
+`release-binaries` job is called directly via `workflow_call` from
+`release-plz-release`, so it does not rely on a `release: published` event and is
+unaffected by the guard.)
 
 ### Required repository secrets
 
@@ -68,8 +72,8 @@ Add the following secrets to the repository (`Settings → Secrets and variables
 
 | Secret name | Value |
 |---|---|
-| `RELEASE_PLZ_APP_ID` | The numeric App ID shown on the GitHub App's settings page |
-| `RELEASE_PLZ_APP_PRIVATE_KEY` | The PEM-encoded private key generated on the App's settings page |
+| `RELEASER_APP_CLIENT_ID` | The Client ID shown on the GitHub App's settings page |
+| `RELEASER_APP_PRIVATE_KEY` | The PEM-encoded private key generated on the App's settings page |
 
 ### GitHub App permission requirements
 
@@ -90,7 +94,7 @@ to apply the `release` label (Issues API), and to create GitHub Releases.
 2. Set the required permissions listed above. Disable all others and disable the webhook.
 3. Install the App on the `tarotene/telepath` repository only (not "all repositories").
 4. Generate a private key on the App settings page.
-5. Copy the numeric **App ID** and the **PEM private key** into the repository secrets
+5. Copy the **Client ID** and the **PEM private key** into the repository secrets
    listed above.
 
 ## Retriggering the release workflow
@@ -198,6 +202,21 @@ the release workflow, a Trusted Publishing entry must exist on crates.io:
 
 See [release-plz quickstart § Trusted Publishing](https://release-plz.dev/docs/github/quickstart)
 and the [crates.io Trusted Publishing docs](https://crates.io/docs/trusted-publishing).
+
+### Adding a new publishable crate
+
+crates.io cannot publish a crate's *first* version through Trusted Publishing,
+so a new publishable crate needs a one-time manual bootstrap:
+
+1. `cargo publish` the first version with a short-lived API token (scopes:
+   `publish-new` only, about 7 days expiry).
+2. Add a Trusted Publishing entry for the crate at
+   `https://crates.io/crates/<name>/settings` (same owner, repository, and
+   workflow filename as the existing crates).
+3. Revoke the token.
+
+From the second release onward, the release-plz workflow publishes through
+OIDC. The v0.2.0 bootstrap below is the worked example.
 
 ### Initial bootstrap (historical — v0.2.0 only)
 

@@ -9,6 +9,11 @@ name: CI
 # When a job other than `ci-passed` is added or removed, `ci-passed.needs`
 # MUST be kept in sync (checked mechanically by tarotene/dotfiles'
 # `workflow-naming-check`).
+#
+# Each job starts with a `Detect relevant changes` guard whose PATTERNS is the
+# source of truth for what triggers that job; a job whose guard finds nothing
+# relevant skips its steps and still reports success. The required status
+# checks are declared in .github/rulesets/quality.json.
 
 on:
   push:

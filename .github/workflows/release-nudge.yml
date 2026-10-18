@@ -1,3 +1,6 @@
+# Weekly reminder: comments on any open `release`-labelled PR older than
+# 7 days. If no release PR exists despite releasable commits on `main`, the
+# release-plz workflow failed instead (see docs/releasing.md, "Retriggering").
 name: Release Nudge
 
 on:
