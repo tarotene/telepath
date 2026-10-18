@@ -39,7 +39,7 @@ pub const CMD_ID_DISCOVERY: u16 = 0x0000;
 /// Reserved command ID for the framing/throughput metrics snapshot.
 ///
 /// Sending a `Request` with this ID causes the target to reply with the current
-/// [`MetricsSnapshot`] and atomically reset all counters. Only present when the
+/// `MetricsSnapshot` and atomically reset all counters. Only present when the
 /// target is built with the `profile` feature; without it the command simply
 /// does not exist and the host receives `SystemError`.
 pub const CMD_ID_METRICS: u16 = 0xFFFE;
@@ -130,7 +130,7 @@ pub struct Response<'a> {
 /// these entries in response to a CDP request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveryEntry<'a> {
-    /// 16-bit command ID derived by [`telepath_wire::cmd_id::derive_cmd_id`].
+    /// 16-bit command ID derived by [`derive_cmd_id`](crate::cmd_id::derive_cmd_id).
     pub id: u16,
     /// Rust function name of the registered command.
     #[serde(borrow)]

@@ -367,11 +367,23 @@ jobs:
         if: steps.guard.outputs.run == 'true'
         run: just mcp-test
 
+  # API docs must build with `-D warnings` and pass doctests (ADR-640,
+  # tarotene/dotfiles). The strictness lives in the composite action, so this
+  # job carries no local copy of the rustdoc flags.
+  docs:
+    name: API docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: tarotene/dotfiles/.github/actions/docs-rust@main
+        with:
+          upload: 'false'
+
   # Aggregate required check (ADR-591). Keep `needs:` in sync with the jobs above.
   ci-passed:
     name: CI passed
     runs-on: ubuntu-latest
-    needs: [fmt, host, msrv, firmware, tools]
+    needs: [fmt, host, msrv, firmware, tools, docs]
     if: always()
     steps:
       - name: Fail if any required job failed or was cancelled
