@@ -150,6 +150,10 @@ jobs:
       - uses: ./.github/actions/rust-setup
         with:
           cache-key: release-plz-pr
+          # cargo-semver-checks builds the docs of every crate, which compiles
+          # serialport's libudev-sys. Without these packages the job fails on
+          # every push that changes dependencies.
+          install-libudev: 'true'
 
       - id: release-plz
         uses: release-plz/action@8921286633dfa0c4020f7f30bd1c14fe19cbb10e # v0.5
