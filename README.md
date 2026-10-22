@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="docs/assets/readme-banner.png"
+       alt="Cartoon illustration of telepathy, the namesake of this remote-call library, by Irasutoya"
+       width="240">
+</p>
+
 # Telepath
 
 **Embedded RPC for Rust: write #[command] on the target and get a discoverable RPC server callable from a host shell or AI agent over any byte-stream transport.**
@@ -326,3 +332,9 @@ Licensed under either of
 - [Apache License, Version 2.0](LICENSE-APACHE)
 
 at your option.
+
+The banner illustration ([`docs/assets/readme-banner.png`](docs/assets/readme-banner.png))
+is by [Irasutoya](https://www.irasutoya.com/)
+([source page](https://www.irasutoya.com/2016/07/blog-post_378.html)) and is
+**not** covered by this repository's license; it is used under the
+[Irasutoya terms of use](https://www.irasutoya.com/p/terms.html).
