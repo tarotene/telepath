@@ -374,7 +374,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd93fd2c1b27acd030440c9dbd9d14c1122aad622374fe05a670b67a4bc034be"
 dependencies = [
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "thiserror",
 ]
 
@@ -982,9 +982,9 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
+checksum = "411fdef4df93751117bd9ef8caa0e7f99c65dafec5bd84313eb8e2fdd75e32f2"
 dependencies = [
  "hash32 0.3.1",
  "serde_core",
@@ -1690,9 +1690,9 @@ dependencies = [
 
 [[package]]
 name = "postcard"
-version = "1.1.3"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"
+checksum = "5431b3dcfdf6d1985c87d11f267a171c0dec0a8cd544c6727b747d36365f1fca"
 dependencies = [
  "cobs 0.3.0",
  "embedded-io 0.4.0",
@@ -1714,11 +1714,11 @@ dependencies = [
 
 [[package]]
 name = "postcard-schema"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9475666d89f42231a0a57da32d5f6ca7f9b5cd4c335ea1fe8f3278215b7a21ff"
+checksum = "2408087cb64d6c79af5674063d6ab4308cf11ca26d5c151ea3602cb36beec5a2"
 dependencies = [
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "postcard-derive",
  "serde",
 ]
@@ -2348,7 +2348,7 @@ version = "0.2.3"
 dependencies = [
  "anyhow",
  "clap",
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "postcard",
  "postcard-schema",
  "probe-rs",
